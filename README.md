@@ -14,7 +14,7 @@
 |---|---|---|
 | 김도연(팀장) | [GitHub ID](https://github.com/) | Desktop Runtime / Cross-platform |
 | 김도현 | [GitHub ID](https://github.com/) | Data Ingestion / Local Storage |
-| 박도현 | [GitHub ID](https://github.com/) | Context Intelligence / Recommendation |
+| 박도현 | [dotori235](https://github.com/) | Context Intelligence / Recommendation |
 
 ---
 
