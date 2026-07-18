@@ -1,0 +1,16 @@
+{
+  "id": "raw-school-email-001",
+  "sourceId": "school-email-main",
+  "sourceType": "school-email",
+  "externalId": "<ai-hackathon-1542@school.example>",
+  "uri": "email://school-email-main/ai-hackathon-1542",
+  "title": "[학생지원팀] 대학생 AI 해커톤 참가자 모집",
+  "content": "학교 홈페이지에 게시된 AI 해커톤 안내입니다. 신청 마감은 2026년 7월 25일 18시입니다.",
+  "contentHash": "fixture-school-email-001",
+  "observedAt": "2026-07-18T09:10:00+09:00",
+  "metadata": {
+    "messageId": "<ai-hackathon-1542@school.example>",
+    "from": "student-support@school.example",
+    "official": true
+  }
+}
