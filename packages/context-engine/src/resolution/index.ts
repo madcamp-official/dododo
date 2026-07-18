@@ -9,7 +9,7 @@ import { classifyConfidenceGate, contextKindForFact } from "../classification/in
 import type { ContextChangeEvent } from "../store/types.ts";
 import { resolveConflict } from "./conflict.ts";
 import { buildEvidence } from "./evidence.ts";
-import { computeMergeScore, type MergeScoreBreakdown } from "./mergeScore.ts";
+import { computeMergeScore, pickSubjectSignal, type MergeScoreBreakdown } from "./mergeScore.ts";
 
 export * from "./conflict.ts";
 export * from "./evidence.ts";
@@ -277,7 +277,7 @@ function buildContextItem(
     deadline,
     startAt,
     requirements: fact.kind === "requirement" ? [fact.value] : [],
-    tags: [],
+    tags: deriveTags(kind, rawItem),
     priority: 0,
     confidence: fact.confidence,
     evidenceIds: evidence !== undefined ? [evidence.id] : [],
@@ -305,6 +305,16 @@ function classificationMetadata(rawItem: RawItem | undefined): Record<string, un
   if (typeof rawItem.metadata.course === "string") metadata.course = rawItem.metadata.course;
   if (typeof rawItem.metadata.category === "string") metadata.category = rawItem.metadata.category;
   return metadata;
+}
+
+// recommendation/priority.ts의 중요도 계산이 profile.interests/activityTypes와 겹치는지
+// 볼 수 있도록, kind와 RawItem의 course/category 신호를 태그로 옮겨 둔다. 지금은 이
+// 두 신호뿐이라 소박하지만, Stage 6에서 화면 Activity 연결 등으로 풍부해질 수 있다.
+function deriveTags(kind: ContextItem["kind"], rawItem: RawItem | undefined): string[] {
+  const tags: string[] = [kind];
+  const subject = rawItem === undefined ? undefined : pickSubjectSignal(rawItem.metadata);
+  if (subject !== undefined) tags.push(subject);
+  return tags;
 }
 
 // Opportunity(신청 마감)와 Task(제출 마감) 둘 다 의미 있는 deadline을 가진다
