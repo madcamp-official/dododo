@@ -59,6 +59,7 @@ export class SchoolSiteCollector extends BaseCollector {
 
 export * from "./parser.ts";
 export * from "./types.ts";
+export * from "./http-loader.ts";
 
 function stableRawItemId(sourceId: string, externalId: string): string {
   const digest = createHash("sha256")
