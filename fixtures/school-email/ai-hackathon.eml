@@ -1,0 +1,23 @@
+Message-ID: <ai-hackathon-1542@school.example>
+Date: Sat, 18 Jul 2026 09:10:00 +0900
+From: Student Support <student-support@school.example>
+To: student@school.example
+Subject: =?UTF-8?B?W+2VmeyDneyngOybkO2MgF0g64yA7ZWZ7IOdIEFJIO2VtOy7pO2GpCDssLjqsIDsnpAg66qo7KeR?=
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="dododo-boundary"
+
+--dododo-boundary
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+학교 홈페이지에 게시된 AI 해커톤 안내입니다.
+신청 마감은 2026년 7월 25일 18시입니다.
+
+--dododo-boundary
+Content-Type: application/pdf; name="guide.pdf"
+Content-Disposition: attachment; filename="guide.pdf"
+Content-Transfer-Encoding: base64
+Content-ID: <guide-1542@school.example>
+
+UERGIEZpeHR1cmU=
+--dododo-boundary--

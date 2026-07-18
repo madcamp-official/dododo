@@ -1,0 +1,15 @@
+Message-ID: <html-announcement@cs.school.example>
+Date: Sat, 18 Jul 2026 10:00:00 +0900
+From: CS Office <office@cs.school.example>
+To: student@school.example
+Subject: HTML 수업 안내
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<html>
+  <body>
+    <h1>운영체제 수업 안내</h1>
+    <p>다음 수업은 <strong>7월 20일</strong>에 진행합니다.</p>
+  </body>
+</html>
