@@ -6,17 +6,20 @@ import { FixtureCollector } from "../packages/collectors/src/index.ts";
 import {
   classifyConfidenceGate,
   computeMergeScore,
+  computePriority,
   contextKindForFact,
   ContextPipeline,
   DeterministicContextResolver,
+  generateActionAndReason,
   InterimContextStore,
   LLMFactExtractor,
+  RuleBasedRecommendationEngine,
 } from "../packages/context-engine/src/index.ts";
 import type { LLMJSONRequest, LLMProvider } from "../packages/context-engine/src/index.ts";
 import { calculateBinaryMetrics } from "../packages/evaluation/src/index.ts";
 import { AllowlistPrivacyGateway } from "../packages/privacy/src/index.ts";
 import { InMemoryContextRepository } from "../packages/storage/src/index.ts";
-import type { Fact, RawItem } from "../packages/shared/src/index.ts";
+import type { ContextItem, Fact, RawItem, UserProfile } from "../packages/shared/src/index.ts";
 
 test("CLI help exposes the core MVP commands", () => {
   const help = renderHelp();
@@ -628,4 +631,165 @@ test("40~69점 애매한 병합 후보는 자동 병합도 별도 생성도 아�
   assert.equal(typeof pending?.metadata.pendingMergeScore, "number");
   assert.ok((pending?.metadata.pendingMergeScore as number) >= 40);
   assert.ok((pending?.metadata.pendingMergeScore as number) < 70);
+});
+
+function emptyProfile(): UserProfile {
+  return {
+    school: "", major: "", year: "",
+    interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [],
+  };
+}
+
+function baseItem(overrides: Partial<ContextItem> = {}): ContextItem {
+  return {
+    id: "ctx-base",
+    kind: "task",
+    title: "테스트 항목",
+    status: "new",
+    requirements: [],
+    tags: ["task"],
+    priority: 0,
+    confidence: 0.9,
+    evidenceIds: ["ev-1"],
+    metadata: {},
+    createdAt: "2026-07-18T00:00:00+09:00",
+    updatedAt: "2026-07-18T00:00:00+09:00",
+    ...overrides,
+  };
+}
+
+test("computePriority는 이미 지난 마감(overdue)도 40점에서 캡한다", () => {
+  const now = new Date("2026-07-20T00:00:00+09:00");
+  const overdueItem = baseItem({ deadline: "2026-07-01T00:00:00+09:00" });
+  const justNowItem = baseItem({ deadline: "2026-07-20T00:00:00+09:00" });
+
+  const overdue = computePriority(overdueItem, [], { now, profile: emptyProfile(), recentRecommendations: [] });
+  const justNow = computePriority(justNowItem, [], { now, profile: emptyProfile(), recentRecommendations: [] });
+
+  assert.equal(overdue.deadlineUrgency, 40);
+  assert.equal(justNow.deadlineUrgency, 40);
+});
+
+test("computePriority는 done·cancelled·dismissed·snooze 상태를 항상 제외한다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const ctx = { now, profile: emptyProfile(), recentRecommendations: [] };
+
+  for (const status of ["done", "cancelled", "dismissed", "expired"] as const) {
+    const breakdown = computePriority(baseItem({ status }), [], ctx);
+    assert.equal(breakdown.excluded, true, `${status}는 제외되어야 한다`);
+    assert.equal(breakdown.total, -Infinity);
+  }
+
+  const snoozed = baseItem({ metadata: { snoozedUntil: "2026-07-19T00:00:00+09:00" } });
+  const snoozedBreakdown = computePriority(snoozed, [], ctx);
+  assert.equal(snoozedBreakdown.excluded, true);
+
+  const expiredSnooze = baseItem({ metadata: { snoozedUntil: "2026-07-17T00:00:00+09:00" } });
+  const expiredSnoozeBreakdown = computePriority(expiredSnooze, [], ctx);
+  assert.equal(expiredSnoozeBreakdown.excluded, false, "Snooze 시각이 지났으면 다시 노출되어야 한다");
+});
+
+test("computePriority는 미완료 요구사항 점수를 15점에서 캡한다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const manyRequirements = baseItem({ requirements: ["a", "b", "c", "d", "e"] });
+
+  const breakdown = computePriority(manyRequirements, [], { now, profile: emptyProfile(), recentRecommendations: [] });
+  assert.equal(breakdown.unmetRequirements, 15);
+});
+
+test("computePriority는 30분 이내 재추천을 제외하고, 30분~2시간은 패널티를 선형으로 줄인다", () => {
+  const now = new Date("2026-07-18T12:00:00+09:00");
+  const item = baseItem({ id: "ctx-repeat" });
+  const profile = emptyProfile();
+
+  const recentWithin30 = [{
+    id: "rec-1", contextItemId: "ctx-repeat", action: "a", reason: "r",
+    score: 50, evidenceIds: [], createdAt: "2026-07-18T11:45:00+09:00",
+  }];
+  const within30 = computePriority(item, [], { now, profile, recentRecommendations: recentWithin30 });
+  assert.equal(within30.excluded, true);
+
+  const recentAt60min = [{
+    ...recentWithin30[0]!, createdAt: "2026-07-18T11:00:00+09:00",
+  }];
+  const at60min = computePriority(item, [], { now, profile, recentRecommendations: recentAt60min });
+  assert.equal(at60min.excluded, false);
+  assert.ok(at60min.recentNotificationPenalty > 0 && at60min.recentNotificationPenalty < 20);
+
+  const recentOver2h = [{
+    ...recentWithin30[0]!, createdAt: "2026-07-18T09:00:00+09:00",
+  }];
+  const over2h = computePriority(item, [], { now, profile, recentRecommendations: recentOver2h });
+  assert.equal(over2h.recentNotificationPenalty, 0);
+});
+
+test("RuleBasedRecommendationEngine은 마감이 임박하고 요구사항이 남은 Task를 여유 있는 Opportunity보다 먼저 추천한다", async () => {
+  const now = new Date("2026-07-18T09:00:00+09:00");
+  const urgentTask = baseItem({
+    id: "ctx-os-3",
+    kind: "task",
+    title: "운영체제 과제 3 보고서 작성",
+    deadline: "2026-07-19T18:00:00+09:00",
+    requirements: ["보고서", "소스코드"],
+  });
+  const relaxedOpportunity = baseItem({
+    id: "ctx-hackathon",
+    kind: "opportunity",
+    title: "AI 해커톤 참가 신청서 초안",
+    tags: ["opportunity"],
+    deadline: "2026-07-25T18:00:00+09:00",
+  });
+
+  const engine = new RuleBasedRecommendationEngine();
+  const recommendations = await engine.recommend([urgentTask, relaxedOpportunity], emptyProfile(), now);
+
+  assert.equal(recommendations.length, 2);
+  assert.equal(recommendations[0]?.contextItemId, "ctx-os-3");
+  assert.equal(recommendations[1]?.contextItemId, "ctx-hackathon");
+  assert.ok((recommendations[0]?.score ?? 0) > (recommendations[1]?.score ?? 0));
+});
+
+test("RuleBasedRecommendationEngine은 history Provider로 30분 내 재추천을 실제로 억제한다", async () => {
+  const now = new Date("2026-07-18T12:00:00+09:00");
+  const item = baseItem({ id: "ctx-suppressed" });
+  const history = new InterimContextStore();
+  await history.saveRecommendations([{
+    id: "rec-prev", contextItemId: "ctx-suppressed", action: "a", reason: "r",
+    score: 50, evidenceIds: [], createdAt: "2026-07-18T11:50:00+09:00",
+  }]);
+
+  const engine = new RuleBasedRecommendationEngine({ history });
+  const recommendations = await engine.recommend([item], emptyProfile(), now);
+
+  assert.deepEqual(recommendations, []);
+});
+
+test("generateActionAndReason은 LLM이 유효한 응답을 주면 그대로 쓴다", async () => {
+  const provider: LLMProvider = {
+    async completeJSON(request) {
+      const value = { action: "18시 전까지 보고서를 작성하세요.", reason: "마감이 내일입니다." };
+      if (!request.validate(value)) throw new Error("unexpected");
+      return value;
+    },
+  };
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const breakdown = computePriority(baseItem(), [], { now, profile: emptyProfile(), recentRecommendations: [] });
+
+  const phrasing = await generateActionAndReason(baseItem(), breakdown, provider);
+  assert.equal(phrasing.action, "18시 전까지 보고서를 작성하세요.");
+});
+
+test("generateActionAndReason은 Provider 실패 시 결정론적 템플릿으로 폴백한다", async () => {
+  const provider: LLMProvider = {
+    async completeJSON() {
+      throw new Error("LLM 서버 다운");
+    },
+  };
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const item = baseItem({ title: "운영체제 과제 3", deadline: "2026-07-19T18:00:00+09:00" });
+  const breakdown = computePriority(item, [], { now, profile: emptyProfile(), recentRecommendations: [] });
+
+  const phrasing = await generateActionAndReason(item, breakdown, provider);
+  assert.equal(phrasing.action, "운영체제 과제 3을(를) 확인하세요.");
+  assert.equal(phrasing.reason, "마감: 2026-07-19T18:00:00+09:00");
 });
