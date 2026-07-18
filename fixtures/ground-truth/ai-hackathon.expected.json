@@ -1,0 +1,14 @@
+{
+  "id": "ai-hackathon-merge",
+  "description": "학교 공지와 학교 이메일에 게시된 동일 공모전 안내가 하나의 Opportunity로 병합되어야 한다.",
+  "inputRawItemIds": ["raw-school-site-001", "raw-school-email-001"],
+  "expectedContextItems": [
+    {
+      "title": "대학생 AI 해커톤",
+      "kind": "opportunity",
+      "deadline": "2026-07-25T18:00:00+09:00",
+      "evidenceCount": 2
+    }
+  ],
+  "expectedMerges": [["raw-school-site-001", "raw-school-email-001"]]
+}

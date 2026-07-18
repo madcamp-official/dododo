@@ -1,3 +1,5 @@
+export * from "./groundTruth.ts";
+
 export interface BinaryMetrics {
   precision: number;
   recall: number;
