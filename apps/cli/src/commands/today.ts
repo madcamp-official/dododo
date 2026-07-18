@@ -1,6 +1,6 @@
 import { emptyProfile, type CliContainer } from "../runtime/container.ts";
 
-export async function renderToday(container: CliContainer): Promise<string> {
+export async function renderToday(container: CliContainer, now: Date = new Date()): Promise<string> {
   const tasks = await container.repository.listContextItems("task");
   const events = await container.repository.listContextItems("event");
   const items = [...tasks, ...events];
@@ -14,7 +14,7 @@ export async function renderToday(container: CliContainer): Promise<string> {
   }
 
   const profile = (await container.profileRepository.get()) ?? emptyProfile();
-  const recommendations = await container.recommendationEngine.recommend(items, profile, new Date());
+  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
   const itemsById = new Map(items.map((item) => [item.id, item]));
 
   const lines = ["Today", ""];

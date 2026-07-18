@@ -1,6 +1,6 @@
 import type { CliContainer } from "../runtime/container.ts";
 
-export async function runSync(container: CliContainer): Promise<string> {
+export async function runSync(container: CliContainer, now: Date = new Date()): Promise<string> {
   const lines = ["dododo sync", ""];
 
   if (container.collectors.length === 0) {
@@ -10,7 +10,7 @@ export async function runSync(container: CliContainer): Promise<string> {
 
   for (const collector of container.collectors) {
     const result = await container.pipeline.sync(collector);
-    container.syncStatus.record(result);
+    container.syncStatus.record(result, now);
 
     const errorSuffix = result.errors.length > 0 ? ` · 오류: ${result.errors.join(", ")}` : "";
     lines.push(

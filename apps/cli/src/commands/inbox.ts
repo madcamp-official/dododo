@@ -1,6 +1,6 @@
 import { emptyProfile, type CliContainer } from "../runtime/container.ts";
 
-export async function renderInbox(container: CliContainer): Promise<string> {
+export async function renderInbox(container: CliContainer, now: Date = new Date()): Promise<string> {
   const items = await container.repository.listContextItems("opportunity");
 
   if (items.length === 0) {
@@ -12,7 +12,7 @@ export async function renderInbox(container: CliContainer): Promise<string> {
   }
 
   const profile = (await container.profileRepository.get()) ?? emptyProfile();
-  const recommendations = await container.recommendationEngine.recommend(items, profile, new Date());
+  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
   const itemsById = new Map(items.map((item) => [item.id, item]));
 
   const lines = ["Opportunity Inbox", ""];
