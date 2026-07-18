@@ -27,7 +27,8 @@ flowchart LR
     RECOMMEND --> CLI
     RECOMMEND --> NOTIFY["OS Notification"]
 
-    SCHOOL["학교 공지"] --> COLLECT
+    SCHOOL["학교 사이트"] --> COLLECT
+    EMAIL["학교 이메일"] --> COLLECT
     LMS["LMS·Fixture"] --> COLLECT
     FILE["파일"] --> COLLECT
     CAL["Calendar"] --> COLLECT
@@ -82,7 +83,7 @@ Collector는 원문과 출처 메타데이터를 RawItem으로 만든다. 이 �
 
 ### 변경 감지
 
-URL, LMS 항목 ID, 캘린더 UID, 파일 경로와 Content Hash를 이용해 신규·수정·중복을 구분한다.
+URL, 이메일 Message-ID, LMS 항목 ID, 캘린더 UID, 파일 경로와 Content Hash를 이용해 신규·수정·중복을 구분한다. 학교 사이트·이메일·LMS가 같은 내용을 전달하면 출처는 여러 개로 보존하되 ContextItem은 하나로 병합한다.
 
 ### 정보 추출
 
@@ -115,6 +116,7 @@ dododo/
 │   │   └── policies/
 │   ├── collectors/
 │   │   ├── school-notice/
+│   │   ├── school-email/
 │   │   ├── lms/
 │   │   ├── files/
 │   │   ├── calendar/
@@ -150,11 +152,34 @@ dododo/
 
 ### Data Ingestion & Storage
 
-- 학교 공지와 LMS Collector
+- 학교 사이트, 학교 이메일과 LMS Collector
+- 이메일 Message-ID·Thread-ID·발신자·수신 시각 보존
 - 파일과 Calendar Parser
 - Hash 기반 변경 감지
 - SQLite와 변경 이력
 - Source 장애 격리
+
+## 7. 학교 이메일 수집 경계
+
+```text
+허용된 학교 이메일 계정·메일함
+→ 읽기 전용 Email Collector
+→ 발신자·Message-ID·본문·첨부 메타데이터 추출
+→ 중복과 허용 범위 확인
+→ Privacy Gateway
+→ Fact와 ContextItem 생성
+```
+
+MVP는 `.eml`·텍스트 Fixture를 기본 입력으로 지원한다. 실제 계정 연결은 학교 시스템에 맞춰 IMAP 또는 Gmail·Microsoft 계열 API 중 하나만 선택한다.
+
+Email Collector는 다음 원칙을 지킨다.
+
+- 사용자가 허용한 계정·메일함·학교 도메인만 조회한다.
+- 읽기 전용으로 동작한다.
+- 비밀번호 원문을 DB나 로그에 저장하지 않는다.
+- 본문과 첨부파일을 무제한으로 외부 LLM에 전송하지 않는다.
+- Message-ID를 보존해 반복 동기화 중복을 방지한다.
+- 학교 사이트나 LMS와 같은 안내는 하나의 ContextItem으로 병합한다.
 
 ### Context Intelligence & Recommendation
 
@@ -164,4 +189,3 @@ dododo/
 - 화면 Activity 연결과 조언
 - 대화 의도와 확인 정책
 - Ground Truth와 Benchmark
-

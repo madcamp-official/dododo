@@ -604,7 +604,7 @@ dododo/
 
 ## 참고 자료
 
-- [프로젝트 기획 문서](docs/)
-- [시스템 아키텍처 문서](docs/architecture.md)
-- [데이터 모델 문서](docs/data-model.md)
-- [실험 및 평가 결과](docs/evaluation.md)
+- [프로젝트 기획안](docs/product-plan.md)
+- [MVP 범위](docs/mvp-scope.md)
+- [대표 사용 시나리오](docs/user-scenarios.md)
+- [시스템 구조](docs/architecture.md)
