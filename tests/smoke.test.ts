@@ -11,12 +11,13 @@ import {
   DeterministicContextResolver,
   InterimContextStore,
   LLMFactExtractor,
+  resolveConflict,
 } from "../packages/context-engine/src/index.ts";
 import type { LLMJSONRequest, LLMProvider } from "../packages/context-engine/src/index.ts";
 import { calculateBinaryMetrics } from "../packages/evaluation/src/index.ts";
 import { AllowlistPrivacyGateway } from "../packages/privacy/src/index.ts";
 import { InMemoryContextRepository } from "../packages/storage/src/index.ts";
-import type { Fact, RawItem } from "../packages/shared/src/index.ts";
+import type { Evidence, Fact, RawItem } from "../packages/shared/src/index.ts";
 
 test("CLI help exposes the core MVP commands", () => {
   const help = renderHelp();
@@ -692,4 +693,121 @@ test("같은 RawItem에서 나온 여러 Fact가 병합될 때도 먼저 만든 
     "같은 rawItem이라 두 Evidence의 권위·관찰 시각이 동률이므로 먼저 만든 값을 유지해야 한다",
   );
   assert.equal(tasks[0]?.evidenceIds.length, 2);
+});
+
+// PR #13 리뷰(김도연님) 회귀 테스트 1: resolveConflict의 동률 비교는 observedAt
+// 문자열이 아니라 실제 시각(Date.parse)으로 해야 한다. UTC offset이 다르면 문자열
+// 순서와 실제 시간 순서가 어긋나기 때문이다.
+test("resolveConflict는 권위가 같을 때 UTC offset이 달라도 실제로 최신인 Evidence를 고른다", () => {
+  const older: Evidence = {
+    id: "ev-older",
+    rawItemId: "r1",
+    sourceType: "school-site",
+    location: "u1",
+    quote: "q",
+    observedAt: "2026-07-18T10:00:00+09:00", // 실제로는 01:00Z
+    authority: "official",
+  };
+  const newer: Evidence = {
+    id: "ev-newer",
+    rawItemId: "r2",
+    sourceType: "calendar",
+    location: "u2",
+    quote: "q",
+    observedAt: "2026-07-18T02:00:00+00:00", // 실제로는 02:00Z — older보다 1시간 최신
+    authority: "official",
+  };
+
+  // 문자열 비교였다면 "10:00..." >= "02:00..."이라 older를 골라 틀렸을 케이스.
+  assert.equal(resolveConflict(older, newer).id, "ev-newer");
+  assert.equal(resolveConflict(newer, older).id, "ev-newer");
+});
+
+test("resolveConflict는 파싱 불가능한 observedAt보다 유효한 시각을 가진 Evidence를 우선한다", () => {
+  const valid: Evidence = {
+    id: "ev-valid", rawItemId: "r1", sourceType: "lms", location: "u", quote: "q",
+    observedAt: "2026-07-18T09:00:00+09:00", authority: "user",
+  };
+  const invalid: Evidence = {
+    id: "ev-invalid", rawItemId: "r2", sourceType: "lms", location: "u", quote: "q",
+    observedAt: "not-a-real-date", authority: "user",
+  };
+
+  assert.equal(resolveConflict(valid, invalid).id, "ev-valid");
+  assert.equal(resolveConflict(invalid, valid).id, "ev-valid");
+});
+
+// PR #13 리뷰(김도연님) 회귀 테스트 2: 카드에 마감과 무관한 고권위 Evidence가 있어도,
+// 마감 갱신은 "마감을 실제로 뒷받침하는 근거"끼리만 비교해야 한다. 무관한 공식 근거가
+// 낮은 권위의 정당한 최신 마감 변경을 영구히 막으면 안 된다.
+test("마감과 무관한 고권위 Evidence가 낮은 권위의 최신 마감 변경을 차단하지 않는다", async () => {
+  const repository = new InMemoryContextRepository();
+  const pipeline = new ContextPipeline({
+    repository,
+    privacyGateway: new AllowlistPrivacyGateway(["screen", "lms"]),
+    factExtractor: {
+      async extract(rawItem) {
+        if (rawItem.id === "raw-screen-1") {
+          // 낮은 권위(observation) 출처가 최초 마감(7/21)을 관찰
+          return [{
+            id: "fact-screen-1", rawItemId: rawItem.id, kind: "task",
+            subject: "운영체제 기말 과제", value: "제출",
+            eventTime: "2026-07-21T18:00:00+09:00", confidence: 0.9, evidenceText: rawItem.content,
+          }];
+        }
+        if (rawItem.id === "raw-lms-req") {
+          // 공식(official) 출처지만 마감이 아니라 요구사항만 뒷받침. eventTime을 기존 마감과
+          // 동일하게 줘서 병합 점수는 확보하되 마감값 자체는 바뀌지 않게 한다.
+          return [{
+            id: "fact-lms-req", rawItemId: rawItem.id, kind: "requirement",
+            subject: "운영체제 기말 과제", value: "보고서 PDF 제출",
+            eventTime: "2026-07-21T18:00:00+09:00", confidence: 0.9, evidenceText: rawItem.content,
+          }];
+        }
+        // 다시 낮은 권위(observation) 출처가 더 최신에 마감 연장(7/23)을 관찰
+        return [{
+          id: "fact-screen-2", rawItemId: rawItem.id, kind: "task",
+          subject: "운영체제 기말 과제", value: "제출",
+          eventTime: "2026-07-23T18:00:00+09:00", confidence: 0.9, evidenceText: rawItem.content,
+        }];
+      },
+    },
+    contextResolver: new DeterministicContextResolver(),
+  });
+
+  // sync 1: 낮은 권위가 마감 7/21을 세팅 (deadlineEvidenceId = observation 근거)
+  await pipeline.sync(new FixtureCollector("screen", "screen", [{
+    id: "raw-screen-1", sourceId: "screen", sourceType: "screen",
+    uri: "screen://1", title: "운영체제 기말 과제", content: "기말 과제 마감 7월 21일",
+    contentHash: "h-s1", observedAt: "2026-07-18T09:00:00+09:00",
+    metadata: { course: "운영체제" },
+  }]));
+
+  // sync 2: 공식 근거가 요구사항만 추가(마감은 동일값이라 안 바뀜). 카드에 고권위 근거가 섞인다.
+  await pipeline.sync(new FixtureCollector("lms-main", "lms", [{
+    id: "raw-lms-req", sourceId: "lms-main", sourceType: "lms",
+    uri: "https://lms.example/os/final", title: "운영체제 기말 과제", content: "보고서 PDF 제출 필수",
+    contentHash: "h-req", observedAt: "2026-07-19T09:00:00+09:00",
+    metadata: { course: "운영체제", official: true },
+  }]));
+
+  const afterOfficial = await repository.listContextItems("task");
+  assert.equal(afterOfficial.length, 1, "세 Fact가 하나의 Task로 병합돼야 한다");
+  assert.equal(afterOfficial[0]?.deadline, "2026-07-21T18:00:00+09:00");
+
+  // sync 3: 낮은 권위지만 더 최신 관찰이 마감을 7/23으로 연장. 무관한 공식 근거에 막히면 안 된다.
+  await pipeline.sync(new FixtureCollector("screen", "screen", [{
+    id: "raw-screen-2", sourceId: "screen", sourceType: "screen",
+    uri: "screen://2", title: "운영체제 기말 과제", content: "마감이 7월 23일로 연장됨",
+    contentHash: "h-s2", observedAt: "2026-07-20T09:00:00+09:00",
+    metadata: { course: "운영체제" },
+  }]));
+
+  const finalTasks = await repository.listContextItems("task");
+  assert.equal(finalTasks.length, 1);
+  assert.equal(
+    finalTasks[0]?.deadline,
+    "2026-07-23T18:00:00+09:00",
+    "마감을 뒷받침하는 근거끼리(observation vs observation, 최신 우선) 비교해 갱신돼야 한다",
+  );
 });

@@ -15,11 +15,25 @@ const AUTHORITY_RANK: Record<Evidence["authority"], number> = {
 
 // 두 Evidence가 같은 필드에 대해 서로 다른 값을 뒷받침할 때 어느 쪽을 믿을지 정한다.
 // 권위가 높은 쪽이 우선하고, 권위가 같으면 더 최근에 관찰된 쪽이 우선한다.
+// 동률 비교는 observedAt 문자열이 아니라 Date.parse()로 얻은 실제 시각(ms)으로 한다 —
+// UTC offset이 다른 Source(예: Calendar는 보통 Z, 이메일 헤더는 제각각)가 섞이면
+// 문자열 순서와 실제 시간 순서가 달라져 오래된 근거를 최신으로 오판할 수 있기 때문이다.
+// 파싱 불가능한 observedAt은 신뢰할 시각 정보가 없는 것으로 보고, 유효한 시각을 가진
+// 쪽을 우선한다. 둘 다 파싱 불가면 기존 승자(a)를 그대로 유지한다(보수적 기본값).
 export function resolveConflict(a: Evidence, b: Evidence): Evidence {
   const rankA = AUTHORITY_RANK[a.authority];
   const rankB = AUTHORITY_RANK[b.authority];
   if (rankA !== rankB) return rankA > rankB ? a : b;
-  return a.observedAt >= b.observedAt ? a : b;
+
+  const msA = Date.parse(a.observedAt);
+  const msB = Date.parse(b.observedAt);
+  const validA = !Number.isNaN(msA);
+  const validB = !Number.isNaN(msB);
+
+  if (validA && validB) return msA >= msB ? a : b;
+  if (validA) return a;
+  if (validB) return b;
+  return a;
 }
 
 export function strongestEvidence(evidence: Evidence[]): Evidence | undefined {

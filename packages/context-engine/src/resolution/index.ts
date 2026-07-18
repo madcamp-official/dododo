@@ -200,8 +200,13 @@ function mergeFactIntoItem(
   return updated;
 }
 
-// 기존 필드 값을 뒷받침하는 가장 권위 있는 Evidence와 새 Evidence를 비교해, 새
-// Evidence가 이기는 경우에만 필드를 갱신하고 이전 값을 이력에 남긴다.
+// 현재 필드값(deadline/startAt)을 실제로 뒷받침하는 Evidence 하나와 새 Evidence를
+// 비교해, 새 Evidence가 이기는 경우에만 필드를 갱신하고 이전 값을 이력에 남긴다.
+// "그 필드를 뒷받침하는 근거"는 metadata에 필드별로 추적한다(fieldEvidenceIdKey) —
+// 카드 전체 evidenceIds 중 가장 권위 높은 것과 비교하면, 제목·요구사항만 뒷받침하는
+// 고권위 근거가 마감 갱신을 영구히 막는 문제가 생긴다(김도연님 #13 리뷰 지적 2).
+// 필드 근거 추적 정보가 없으면(예: 추적 이전에 만들어진 값) 차단할 근거가 없으므로
+// 갱신을 허용한다.
 function applyConflictAwareField(
   item: ContextItem,
   field: "deadline" | "startAt",
@@ -214,12 +219,23 @@ function applyConflictAwareField(
   const previousValue = item[field];
   if (previousValue === newValue) return;
 
-  if (previousValue !== undefined && evidenceForItem.length > 0) {
-    const currentBest = evidenceForItem.reduce((best, candidate) => resolveConflict(best, candidate));
-    if (resolveConflict(currentBest, newEvidence) !== newEvidence) return;
+  const evidenceIdKey = fieldEvidenceIdKey(field);
+
+  if (previousValue !== undefined) {
+    const currentEvidenceId = item.metadata[evidenceIdKey];
+    const currentFieldEvidence = typeof currentEvidenceId === "string"
+      ? evidenceForItem.find((candidate) => candidate.id === currentEvidenceId)
+      : undefined;
+    if (
+      currentFieldEvidence !== undefined
+      && resolveConflict(currentFieldEvidence, newEvidence) !== newEvidence
+    ) {
+      return;
+    }
   }
 
   item[field] = newValue;
+  item.metadata[evidenceIdKey] = newEvidence.id;
   history.push({
     id: `hist-${newEvidence.id}-${field}`,
     contextItemId: item.id,
@@ -230,6 +246,10 @@ function applyConflictAwareField(
     evidenceId: newEvidence.id,
     changedAt: now,
   });
+}
+
+function fieldEvidenceIdKey(field: "deadline" | "startAt"): string {
+  return field === "deadline" ? "deadlineEvidenceId" : "startAtEvidenceId";
 }
 
 interface NewItemOptions {
@@ -246,13 +266,16 @@ function buildContextItem(
   now: string,
   options: NewItemOptions,
 ): ContextItem {
+  const deadline = hasDeadline(kind) ? fact.eventTime : undefined;
+  const startAt = kind === "event" ? fact.eventTime : undefined;
+
   return {
     id: `ctx-${fact.id}`,
     kind,
     title: fact.subject,
     status: options.status,
-    deadline: hasDeadline(kind) ? fact.eventTime : undefined,
-    startAt: kind === "event" ? fact.eventTime : undefined,
+    deadline,
+    startAt,
     requirements: fact.kind === "requirement" ? [fact.value] : [],
     tags: [],
     priority: 0,
@@ -261,6 +284,10 @@ function buildContextItem(
     metadata: {
       rawItemId: fact.rawItemId,
       ...classificationMetadata(rawItem),
+      // 생성 시점의 마감·일정 값을 뒷받침하는 근거를 필드별로 기록해 둔다 —
+      // 이후 병합에서 충돌 해결이 "이 필드를 실제로 뒷받침하는 근거"끼리만 비교하게 한다.
+      ...(evidence !== undefined && deadline !== undefined ? { deadlineEvidenceId: evidence.id } : {}),
+      ...(evidence !== undefined && startAt !== undefined ? { startAtEvidenceId: evidence.id } : {}),
       ...(options.pendingMergeWithId !== undefined
         ? { pendingMergeWithId: options.pendingMergeWithId, pendingMergeScore: options.pendingMergeScore }
         : {}),
