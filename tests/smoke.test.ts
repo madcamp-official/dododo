@@ -793,3 +793,67 @@ test("generateActionAndReason은 Provider 실패 시 결정론적 템플릿으�
   assert.equal(phrasing.action, "운영체제 과제 3을(를) 확인하세요.");
   assert.equal(phrasing.reason, "마감: 2026-07-19T18:00:00+09:00");
 });
+
+// PR #13 리뷰(박도현님) 회귀 테스트: 하나의 RawItem에서 Fact가 여러 개 나오면
+// (LLMFactExtractor가 실제로 배열을 반환하므로 흔한 경우), 뒤쪽 Fact가 방금 만든
+// 항목과 자동 병합될 때 그 항목의 Evidence가 권위 비교 대상에서 누락돼 조건 없이
+// 덮어쓰는 버그가 있었다. 수정 전엔 이 테스트가 실패했다(deadline이 두 번째 Fact
+// 값으로 덮어써짐).
+test("같은 RawItem에서 나온 여러 Fact가 병합될 때도 먼저 만든 Evidence를 권위 비교에서 빠뜨리지 않는다", async () => {
+  const repository = new InMemoryContextRepository();
+  const raw: RawItem = {
+    id: "raw-lms-multi",
+    sourceId: "lms-main",
+    sourceType: "lms",
+    externalId: "course-os-assignment-9",
+    uri: "https://lms.example/courses/os/assignments/9",
+    title: "운영체제 과제 9",
+    content: "과제 9 관련 안내",
+    contentHash: "hash-multi-1",
+    observedAt: "2026-07-18T09:00:00+09:00",
+    metadata: { course: "운영체제", official: true },
+  };
+
+  const pipeline = new ContextPipeline({
+    repository,
+    privacyGateway: new AllowlistPrivacyGateway(["lms"]),
+    factExtractor: {
+      async extract(rawItem) {
+        return [
+          {
+            id: "fact-multi-a",
+            rawItemId: rawItem.id,
+            kind: "task",
+            subject: "운영체제 과제 9",
+            value: "제출",
+            eventTime: "2026-07-22T18:00:00+09:00",
+            confidence: 0.9,
+            evidenceText: rawItem.content,
+          },
+          {
+            id: "fact-multi-b",
+            rawItemId: rawItem.id,
+            kind: "task",
+            subject: "운영체제 과제 9",
+            value: "제출",
+            eventTime: "2026-07-23T09:00:00+09:00",
+            confidence: 0.9,
+            evidenceText: rawItem.content,
+          },
+        ];
+      },
+    },
+    contextResolver: new DeterministicContextResolver(),
+  });
+
+  await pipeline.sync(new FixtureCollector("lms-main", "lms", [raw]));
+
+  const tasks = await repository.listContextItems("task");
+  assert.equal(tasks.length, 1, "두 Fact는 같은 항목으로 자동 병합돼야 한다(점수 70점 이상)");
+  assert.equal(
+    tasks[0]?.deadline,
+    "2026-07-22T18:00:00+09:00",
+    "같은 rawItem이라 두 Evidence의 권위·관찰 시각이 동률이므로 먼저 만든 값을 유지해야 한다",
+  );
+  assert.equal(tasks[0]?.evidenceIds.length, 2);
+});
