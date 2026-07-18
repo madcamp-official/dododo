@@ -1,5 +1,7 @@
 import type { Notifier, Recommendation } from "../../shared/src/index.ts";
 
+export * from "./syncStatus.ts";
+
 export class ConsoleNotifier implements Notifier {
   async send(recommendation: Recommendation): Promise<void> {
     console.log(`[notification] ${recommendation.action} — ${recommendation.reason}`);

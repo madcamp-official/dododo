@@ -1,14 +1,43 @@
 import { commandCatalog } from "./commands/catalog.ts";
 import { renderDoctor } from "./commands/doctor.ts";
 import { renderHelp } from "./commands/help.ts";
+import { renderInbox } from "./commands/inbox.ts";
+import { runSetup } from "./commands/setup.ts";
+import { runSync } from "./commands/sync.ts";
+import { renderToday } from "./commands/today.ts";
+import { createCliContainer } from "./runtime/container.ts";
 
 const command = process.argv[2] ?? "help";
 
-if (command === "help" || command === "--help" || command === "-h") {
-  console.log(renderHelp());
-} else if (command === "doctor") {
-  console.log(renderDoctor());
-} else {
+async function main(): Promise<void> {
+  if (command === "help" || command === "--help" || command === "-h") {
+    console.log(renderHelp());
+    return;
+  }
+
+  const container = createCliContainer();
+
+  if (command === "doctor") {
+    console.log(renderDoctor(container));
+    return;
+  }
+  if (command === "setup") {
+    console.log(await runSetup(container));
+    return;
+  }
+  if (command === "sync") {
+    console.log(await runSync(container));
+    return;
+  }
+  if (command === "inbox") {
+    console.log(await renderInbox(container));
+    return;
+  }
+  if (command === "today") {
+    console.log(await renderToday(container));
+    return;
+  }
+
   const definition = commandCatalog.find((candidate) => candidate.name === command);
 
   if (definition === undefined) {
@@ -20,3 +49,5 @@ if (command === "help" || command === "--help" || command === "-h") {
     console.log(`담당 영역: ${definition.owner}`);
   }
 }
+
+await main();
