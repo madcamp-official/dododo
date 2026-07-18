@@ -24,6 +24,11 @@ export interface ContextPipelineDependencies {
   evidenceStore?: InterimContextStore;
 }
 
+interface ResolveResult {
+  createdItems: ContextItem[];
+  updatedItems: ContextItem[];
+}
+
 export class ContextPipeline {
   private readonly dependencies: ContextPipelineDependencies;
   readonly evidenceStore: InterimContextStore;
@@ -41,24 +46,27 @@ export class ContextPipeline {
       const rawItemsById = new Map(rawItems.map((item) => [item.id, item]));
       const existing = await this.dependencies.repository.listContextItems();
       let created = 0;
+      let updated = 0;
 
       for (const rawItem of rawItems) {
         const safeItem = await this.dependencies.privacyGateway.prepare(rawItem);
         const facts = await this.dependencies.factExtractor.extract(safeItem);
         await this.dependencies.repository.saveFacts(facts);
 
-        const resolved = await this.resolve(facts, existing, rawItemsById);
-        await this.dependencies.repository.saveContextItems(resolved);
-        existing.push(...resolved);
-        created += resolved.length;
+        const { createdItems, updatedItems } = await this.resolve(facts, existing, rawItemsById);
+        await this.dependencies.repository.saveContextItems([...createdItems, ...updatedItems]);
+
+        applyToWorkingSet(existing, createdItems, updatedItems);
+        created += createdItems.length;
+        updated += updatedItems.length;
       }
 
       return {
         sourceId: collector.sourceId,
         collected: rawItems.length,
         created,
-        updated: 0,
-        skipped: rawItems.length - created,
+        updated,
+        skipped: Math.max(rawItems.length - created - updated, 0),
         errors: [],
       };
     } catch (error) {
@@ -81,21 +89,39 @@ export class ContextPipeline {
     facts: Fact[],
     existing: ContextItem[],
     rawItemsById: Map<string, RawItem>,
-  ): Promise<ContextItem[]> {
+  ): Promise<ResolveResult> {
     const resolver = this.dependencies.contextResolver;
 
     if (!isEvidenceAware(resolver)) {
-      return resolver.resolve(facts, existing);
+      const items = await resolver.resolve(facts, existing);
+      return { createdItems: items, updatedItems: [] };
     }
 
     const existingEvidenceIds = existing.flatMap((item) => item.evidenceIds);
     const existingEvidence = await this.evidenceStore.listEvidence(existingEvidenceIds);
 
-    const result = await resolver.resolveWithEvidence(facts, existing, {
+    const outcome = await resolver.resolveWithEvidence(facts, existing, {
       rawItemsById,
       existingEvidence,
     });
-    await this.evidenceStore.saveEvidence(result.evidence);
-    return result.items;
+    await this.evidenceStore.saveEvidence(outcome.evidence);
+    await this.evidenceStore.saveContextHistory(outcome.history);
+    return { createdItems: outcome.createdItems, updatedItems: outcome.updatedItems };
+  }
+}
+
+// 같은 sync() 호출 안에서 뒤이은 RawItem의 Fact가 방금 만들거나 갱신한 항목을 다시
+// 병합 후보로 볼 수 있도록, existing 작업 배열을 제자리에서 갱신한다.
+function applyToWorkingSet(
+  existing: ContextItem[],
+  createdItems: ContextItem[],
+  updatedItems: ContextItem[],
+): void {
+  existing.push(...createdItems);
+
+  for (const item of updatedItems) {
+    const index = existing.findIndex((candidate) => candidate.id === item.id);
+    if (index === -1) existing.push(item);
+    else existing[index] = item;
   }
 }
