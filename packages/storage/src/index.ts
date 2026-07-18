@@ -7,6 +7,7 @@ import type {
 
 export * from "./in-memory-raw-item-repository.ts";
 export * from "./raw-item-repository.ts";
+export * from "./raw-item-sync-service.ts";
 
 export class InMemoryContextRepository implements ContextRepository {
   private readonly rawItems = new Map<string, RawItem>();
