@@ -99,7 +99,9 @@ function sameSubjectProjectScore(rawItem: RawItem, existing: ContextItem): numbe
   return 5;
 }
 
-function pickSubjectSignal(metadata: Record<string, unknown>): string | undefined {
+// recommendation/priority.ts의 "오늘 관련 일정" 계산도 같은 course/category 신호로
+// 항목을 서로 연관짓기 때문에 export해서 재사용한다.
+export function pickSubjectSignal(metadata: Record<string, unknown>): string | undefined {
   if (typeof metadata.course === "string") return metadata.course;
   if (typeof metadata.category === "string") return metadata.category;
   return undefined;
