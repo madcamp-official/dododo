@@ -1,4 +1,5 @@
 import { emptyProfile, type CliContainer } from "../runtime/container.ts";
+import { isSnoozed } from "../runtime/snooze.ts";
 
 export async function renderInbox(container: CliContainer, now: Date = new Date()): Promise<string> {
   const items = await container.repository.listContextItems("opportunity");
@@ -18,7 +19,7 @@ export async function renderInbox(container: CliContainer, now: Date = new Date(
   const lines = ["Opportunity Inbox", ""];
   for (const recommendation of recommendations) {
     const item = itemsById.get(recommendation.contextItemId);
-    if (item === undefined) continue;
+    if (item === undefined || isSnoozed(item, now)) continue;
 
     lines.push(`[${item.id}] 관련도 ${Math.round(recommendation.score)}  ${item.title}`);
     if (item.deadline !== undefined) lines.push(`  마감: ${item.deadline}`);

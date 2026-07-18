@@ -10,6 +10,7 @@ export const commandCatalog: CommandDefinition[] = [
   { name: "doctor", description: "환경과 모듈 상태를 확인합니다", owner: "runtime", status: "ready" },
   { name: "setup", description: "사용자 프로필과 Source를 설정합니다", owner: "shared", status: "ready" },
   { name: "sync", description: "등록된 Source를 한 번 동기화합니다", owner: "data", status: "ready" },
+  { name: "task", description: "Task 상세 조회, 완료 처리, Snooze", owner: "runtime", status: "ready" },
   { name: "watch", description: "주기 동기화와 알림을 실행합니다", owner: "runtime", status: "skeleton" },
   { name: "inbox", description: "추천 Opportunity를 표시합니다", owner: "intelligence", status: "ready" },
   { name: "today", description: "오늘의 Task와 Event를 표시합니다", owner: "intelligence", status: "ready" },

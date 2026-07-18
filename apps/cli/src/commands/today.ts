@@ -1,4 +1,5 @@
 import { emptyProfile, type CliContainer } from "../runtime/container.ts";
+import { isSnoozed } from "../runtime/snooze.ts";
 
 export async function renderToday(container: CliContainer, now: Date = new Date()): Promise<string> {
   const tasks = await container.repository.listContextItems("task");
@@ -21,7 +22,7 @@ export async function renderToday(container: CliContainer, now: Date = new Date(
   let index = 1;
   for (const recommendation of recommendations) {
     const item = itemsById.get(recommendation.contextItemId);
-    if (item === undefined) continue;
+    if (item === undefined || isSnoozed(item, now)) continue;
 
     lines.push(`${index}. [${Math.round(recommendation.score)}] ${item.title}`);
     lines.push(`   ${recommendation.reason}`);

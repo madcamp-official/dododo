@@ -4,6 +4,7 @@ import { renderHelp } from "./commands/help.ts";
 import { renderInbox } from "./commands/inbox.ts";
 import { runSetup } from "./commands/setup.ts";
 import { runSync } from "./commands/sync.ts";
+import { runTask } from "./commands/task.ts";
 import { renderToday } from "./commands/today.ts";
 import { createCliContainer } from "./runtime/container.ts";
 
@@ -35,6 +36,10 @@ async function main(): Promise<void> {
   }
   if (command === "today") {
     console.log(await renderToday(container));
+    return;
+  }
+  if (command === "task") {
+    console.log(await runTask(container, process.argv.slice(3)));
     return;
   }
 
