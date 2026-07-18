@@ -4,6 +4,8 @@ import test from "node:test";
 import { renderHelp } from "../apps/cli/src/commands/help.ts";
 import { FixtureCollector } from "../packages/collectors/src/index.ts";
 import {
+  classifyConfidenceGate,
+  contextKindForFact,
   ContextPipeline,
   DeterministicContextResolver,
   InterimContextStore,
@@ -13,7 +15,7 @@ import type { LLMJSONRequest, LLMProvider } from "../packages/context-engine/src
 import { calculateBinaryMetrics } from "../packages/evaluation/src/index.ts";
 import { AllowlistPrivacyGateway } from "../packages/privacy/src/index.ts";
 import { InMemoryContextRepository } from "../packages/storage/src/index.ts";
-import type { RawItem } from "../packages/shared/src/index.ts";
+import type { Fact, RawItem } from "../packages/shared/src/index.ts";
 
 test("CLI help exposes the core MVP commands", () => {
   const help = renderHelp();
@@ -209,4 +211,157 @@ test("LLMFactExtractor는 Schema를 통과하지 못한 응답이면 빈 배열�
   const facts = await extractor.extract(sampleRawItem);
 
   assert.deepEqual(facts, []);
+});
+
+test("파이프라인을 거치면 DeterministicContextResolver가 ContextItem에 Evidence를 채운다", async () => {
+  const repository = new InMemoryContextRepository();
+  const collector = new FixtureCollector("lms-main", "lms", [{
+    id: "raw-lms-001",
+    sourceId: "lms-main",
+    sourceType: "lms",
+    uri: "https://lms.example/courses/os/assignments/3",
+    title: "운영체제 과제 3",
+    content: "과제 3은 2026년 7월 22일 23시 59분까지 제출합니다.",
+    contentHash: "hash-lms-1",
+    observedAt: "2026-07-18T09:20:00+09:00",
+    metadata: { course: "운영체제", official: true },
+  }]);
+  const pipeline = new ContextPipeline({
+    repository,
+    privacyGateway: new AllowlistPrivacyGateway(["lms"]),
+    factExtractor: {
+      async extract(rawItem) {
+        return [{
+          id: "fact-os-3",
+          rawItemId: rawItem.id,
+          kind: "task",
+          subject: "운영체제 과제 3",
+          value: "제출",
+          eventTime: "2026-07-22T23:59:00+09:00",
+          confidence: 0.9,
+          evidenceText: "2026년 7월 22일 23시 59분까지 제출합니다.",
+        }];
+      },
+    },
+    contextResolver: new DeterministicContextResolver(),
+  });
+
+  await pipeline.sync(collector);
+
+  const items = await repository.listContextItems("task");
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.evidenceIds.length, 1);
+  assert.equal(items[0]?.status, "new");
+
+  const evidence = await pipeline.evidenceStore.listEvidence(items[0]?.evidenceIds ?? []);
+  assert.equal(evidence.length, 1);
+  assert.equal(evidence[0]?.authority, "official");
+  assert.equal(evidence[0]?.quote, "2026년 7월 22일 23시 59분까지 제출합니다.");
+});
+
+test("narrow ContextResolver mock을 넣어도 파이프라인이 정상 동작한다", async () => {
+  const repository = new InMemoryContextRepository();
+  const collector = new FixtureCollector("school-site", "school-site", [{
+    id: "raw-narrow-1",
+    sourceId: "school-site",
+    sourceType: "school-site",
+    uri: "fixture://notice/2",
+    title: "임시 공지",
+    content: "테스트",
+    contentHash: "hash-narrow-1",
+    observedAt: "2026-07-18T09:00:00+09:00",
+    metadata: {},
+  }]);
+  const pipeline = new ContextPipeline({
+    repository,
+    privacyGateway: new AllowlistPrivacyGateway(["school-site"]),
+    factExtractor: {
+      async extract(rawItem) {
+        return [{
+          id: "fact-narrow-1",
+          rawItemId: rawItem.id,
+          kind: "note",
+          subject: "임시 공지",
+          value: "테스트",
+          confidence: 0.9,
+          evidenceText: rawItem.content,
+        }];
+      },
+    },
+    // resolveWithEvidence가 없는 narrow ContextResolver — isEvidenceAware가 false를
+    // 반환해 파이프라인이 좁은 resolve()로 폴백해야 한다.
+    contextResolver: {
+      async resolve(facts) {
+        return facts.map((fact) => ({
+          id: `ctx-${fact.id}`,
+          kind: "note",
+          title: fact.subject,
+          status: "new",
+          requirements: [],
+          tags: [],
+          priority: 0,
+          confidence: fact.confidence,
+          evidenceIds: [],
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }));
+      },
+    },
+  });
+
+  const result = await pipeline.sync(collector);
+
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.created, 1);
+});
+
+const baseFact: Fact = {
+  id: "f-base",
+  rawItemId: "r-base",
+  kind: "task",
+  subject: "제목",
+  value: "값",
+  confidence: 0.9,
+  evidenceText: "근거",
+};
+
+test("classifyConfidenceGate는 낮은 확신도를 candidate로 둔다", () => {
+  const fact: Fact = { ...baseFact, confidence: 0.5 };
+  assert.equal(classifyConfidenceGate(fact), "candidate");
+});
+
+test("classifyConfidenceGate는 시각 표현이 없는 마감을 candidate로 둔다", () => {
+  const fact: Fact = {
+    ...baseFact,
+    kind: "deadline",
+    eventTime: "2026-07-25T00:00:00+09:00",
+    confidence: 0.9,
+  };
+  assert.equal(classifyConfidenceGate(fact), "candidate");
+});
+
+test("classifyConfidenceGate는 확신도와 명확한 시각이 있으면 new로 확정한다", () => {
+  const fact: Fact = {
+    ...baseFact,
+    kind: "deadline",
+    eventTime: "2026-07-25T18:00:00+09:00",
+    confidence: 0.9,
+  };
+  assert.equal(classifyConfidenceGate(fact), "new");
+});
+
+test("contextKindForFact는 metadata.category가 competition이면 opportunity로 강제한다", () => {
+  const fact: Fact = { ...baseFact, kind: "task" };
+  const rawItem: RawItem = {
+    id: "r-base",
+    sourceId: "s1",
+    sourceType: "school-site",
+    uri: "u",
+    content: "c",
+    contentHash: "h",
+    observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { category: "competition" },
+  };
+  assert.equal(contextKindForFact(fact, rawItem), "opportunity");
 });
