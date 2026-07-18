@@ -7,6 +7,7 @@ import {
   ContextPipeline,
   DeterministicContextResolver,
 } from "../packages/context-engine/src/index.ts";
+import { InterimContextStore } from "../packages/context-engine/src/index.ts";
 import { calculateBinaryMetrics } from "../packages/evaluation/src/index.ts";
 import { AllowlistPrivacyGateway } from "../packages/privacy/src/index.ts";
 import { InMemoryContextRepository } from "../packages/storage/src/index.ts";
@@ -69,4 +70,44 @@ test("fixture data can pass through the module contracts", async () => {
   assert.equal(result.errors.length, 0);
   assert.equal(result.created, 1);
   assert.equal((await repository.listContextItems("opportunity")).length, 1);
+});
+
+test("InterimContextStore round-trips evidence, history and recommendations", async () => {
+  const store = new InterimContextStore();
+
+  await store.saveEvidence([{
+    id: "ev-1",
+    rawItemId: "raw-1",
+    sourceType: "school-site",
+    location: "fixture://notice/1",
+    quote: "신청 마감은 7월 25일입니다.",
+    observedAt: "2026-07-18T09:00:00+09:00",
+    authority: "official",
+  }]);
+  assert.equal((await store.listEvidence(["ev-1", "missing"])).length, 1);
+
+  await store.saveContextHistory([{
+    id: "hist-1",
+    contextItemId: "ctx-1",
+    changeType: "field_updated",
+    field: "deadline",
+    previousValue: "2026-07-21T18:00:00+09:00",
+    newValue: "2026-07-23T18:00:00+09:00",
+    evidenceId: "ev-1",
+    changedAt: "2026-07-18T10:00:00+09:00",
+  }]);
+  assert.equal((await store.listContextHistory("ctx-1")).length, 1);
+  assert.equal((await store.listContextHistory("ctx-unknown")).length, 0);
+
+  await store.saveRecommendations([{
+    id: "rec-1",
+    contextItemId: "ctx-1",
+    action: "제출 준비를 시작하세요.",
+    reason: "마감이 가까움",
+    score: 80,
+    evidenceIds: ["ev-1"],
+    createdAt: "2026-07-18T10:00:00+09:00",
+  }]);
+  assert.equal((await store.listRecommendations("ctx-1")).length, 1);
+  assert.equal((await store.listRecommendations()).length, 1);
 });
