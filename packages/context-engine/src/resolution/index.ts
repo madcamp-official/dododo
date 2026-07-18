@@ -76,18 +76,29 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     // 있어야 하므로, existing을 복사해 계속 갱신되는 작업용 맵으로 관리한다.
     const workingItems = new Map(existing.map((item) => [item.id, item]));
 
+    // context.existingEvidence는 이 호출이 시작될 때의 스냅샷이라, 같은 호출 안에서
+    // 새로 만든 Evidence는 반영되지 않는다. 하나의 RawItem에서 Fact가 여러 개 나오면
+    // (LLMFactExtractor가 실제로 그렇게 반환할 수 있다) 뒤쪽 Fact가 방금 만든 항목과
+    // 병합될 때 그 항목의 Evidence를 찾지 못해 권위 비교를 건너뛰고 무조건 덮어쓰는
+    // 버그가 있었다 — 매번 갱신되는 맵으로 바꿔 같은 batch 안에서 만든 Evidence도
+    // 곧바로 권위 비교 대상이 되게 한다.
+    const evidenceById = new Map(context.existingEvidence.map((item) => [item.id, item]));
+
     for (const fact of facts) {
       const rawItem = context.rawItemsById.get(fact.rawItemId);
       const kind = contextKindForFact(fact, rawItem);
       const evidence = rawItem === undefined ? undefined : buildEvidence(fact, rawItem);
-      if (evidence !== undefined) newEvidence.push(evidence);
+      if (evidence !== undefined) {
+        newEvidence.push(evidence);
+        evidenceById.set(evidence.id, evidence);
+      }
 
       const best = rawItem === undefined
         ? undefined
-        : findBestMatch(fact, rawItem, kind, workingItems, context.existingEvidence);
+        : findBestMatch(fact, rawItem, kind, workingItems, [...evidenceById.values()]);
 
       if (best !== undefined && best.breakdown.total >= AUTO_MERGE_THRESHOLD) {
-        const evidenceForItem = context.existingEvidence.filter((item) =>
+        const evidenceForItem = [...evidenceById.values()].filter((item) =>
           best.item.evidenceIds.includes(item.id)
         );
         const merged = mergeFactIntoItem(best.item, fact, kind, evidence, evidenceForItem, now, history);
