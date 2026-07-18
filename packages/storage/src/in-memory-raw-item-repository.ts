@@ -60,7 +60,7 @@ export class InMemoryRawItemRepository implements RawItemRepository {
   private findExisting(item: RawItem): RawItem | undefined {
     if (item.externalId !== undefined) {
       const id = this.idByExternalKey.get(identityKey(item.sourceId, item.externalId));
-      if (id !== undefined) return this.itemsById.get(id);
+      return id === undefined ? undefined : this.itemsById.get(id);
     }
 
     const id = this.idByUriKey.get(identityKey(item.sourceId, item.uri));
@@ -70,20 +70,22 @@ export class InMemoryRawItemRepository implements RawItemRepository {
   private store(item: RawItem): void {
     const storedItem = structuredClone(item);
     this.itemsById.set(storedItem.id, storedItem);
-    this.idByUriKey.set(identityKey(storedItem.sourceId, storedItem.uri), storedItem.id);
 
     if (storedItem.externalId !== undefined) {
       this.idByExternalKey.set(
         identityKey(storedItem.sourceId, storedItem.externalId),
         storedItem.id,
       );
+    } else {
+      this.idByUriKey.set(identityKey(storedItem.sourceId, storedItem.uri), storedItem.id);
     }
   }
 
   private removeIndexes(item: RawItem): void {
-    this.idByUriKey.delete(identityKey(item.sourceId, item.uri));
     if (item.externalId !== undefined) {
       this.idByExternalKey.delete(identityKey(item.sourceId, item.externalId));
+    } else {
+      this.idByUriKey.delete(identityKey(item.sourceId, item.uri));
     }
   }
 }

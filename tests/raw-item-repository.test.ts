@@ -70,6 +70,43 @@ test("같은 externalId라도 sourceId가 다르면 별도 항목으로 저장�
   assert.equal(second.status, "created");
 });
 
+test("같은 Source와 URI라도 externalId가 다르면 별도 항목으로 저장한다", async () => {
+  const repository = new InMemoryRawItemRepository();
+  const sharedUri = "https://school.example/notices";
+
+  const first = rawItem({
+    id: "raw-notice-1",
+    sourceId: "school-site-main",
+    sourceType: "school-site",
+    externalId: "notice-1",
+    uri: sharedUri,
+  });
+  const second = rawItem({
+    id: "raw-notice-2",
+    sourceId: "school-site-main",
+    sourceType: "school-site",
+    externalId: "notice-2",
+    uri: sharedUri,
+    content: "두 번째 공지",
+    contentHash: "hash-notice-2",
+  });
+
+  const firstResult = await repository.save(first);
+  const secondResult = await repository.save(second);
+
+  assert.equal(firstResult.status, "created");
+  assert.equal(secondResult.status, "created");
+  assert.equal(
+    (await repository.findByExternalId(first.sourceId, "notice-1"))?.id,
+    first.id,
+  );
+  assert.equal(
+    (await repository.findByExternalId(second.sourceId, "notice-2"))?.id,
+    second.id,
+  );
+  assert.equal((await repository.findById(first.id))?.content, first.content);
+});
+
 test("externalId가 없으면 sourceId와 uri로 중복을 판정한다", async () => {
   const repository = new InMemoryRawItemRepository();
   const item = rawItem({ externalId: undefined });
