@@ -2,7 +2,9 @@
 
 > KAIST 몰입캠프 공통과제 III — Option 1. Build the Core (3인 1팀)
 
-**한 줄 소개:** 사용자가 지정한 웹사이트·폴더·캘린더·화면 활동을 로컬에서 수집해 하나의 Task Context로 통합하고, 근거를 표시하며 다음 행동을 추천하는 Windows/macOS 설치형 개인 컨텍스트 비서.
+**한 줄 소개:** 학교 사이트·학교 이메일·LMS·파일·캘린더·화면 활동을 로컬 Context로 통합하고, 근거와 함께 다음 행동을 추천하는 대학생용 AI 비서.
+
+> 현재 단계는 핵심 파이프라인을 검증하는 Node.js 기반 CLI MVP다. GUI 데스크톱 앱과 설치 패키지는 이후 단계에서 같은 Core를 재사용해 구현한다.
 
 **슬로건:** 흩어진 정보를, 하나의 최신 Task Context로.
 
@@ -14,7 +16,7 @@
 |---|---|---|
 | 김도연(팀장) | [doyeonid](https://github.com/doyeonid) | Data Ingestion & Local Storage |
 | 김도현 | [GitHub ID](https://github.com/) | Context Intelligence & Recommendation |
-| 박도현 | [dotori235](https://github.com/dotori235) | Desktop Platform & Activity Runtime |
+| 박도현 | [dotori235](https://github.com/dotori235) | Runtime & CLI |
 
 ---
 
@@ -132,13 +134,13 @@ RawItem
 
 ## 기술 스택
 
-### Desktop
+### CLI Runtime
 
 | 기술 | 용도 |
 |---|---|
-| Electron | Windows·macOS 데스크톱 런타임, `desktopCapturer` 기반 화면·윈도우 캡처, 시스템 알림 |
-| TypeScript | Main/Renderer/Preload 공통 언어 |
-| Electron Forge | Windows Installer / macOS App 패키징 |
+| Node.js 22.18 이상 | TypeScript 직접 실행과 CLI Runtime |
+| TypeScript | CLI·Collector·Context Engine 공통 언어 |
+| Node Test Runner | 외부 의존성 없는 기본 Smoke Test |
 
 ### Context Engine
 
@@ -164,11 +166,10 @@ RawItem
 
 ### 요구 환경
 
-- Node.js: `[버전]`
-- npm 또는 pnpm: `[버전]`
-- Windows: `11`
-- macOS: `14 이상`
-- 외부 LLM API Key: `[Provider]`
+- Node.js: `22.18 이상`
+- npm: Node.js에 포함된 버전
+- Windows 또는 macOS
+- 로컬 Ollama 또는 외부 LLM Provider 1개(실제 Fact 추출 구현 시)
 
 ### 설치 및 실행
 
@@ -177,21 +178,18 @@ RawItem
 git clone [REPOSITORY_URL]
 cd dododo
 
-# 2. 의존성 설치
-[INSTALL_COMMAND]
-
-# 3. 환경 변수 설정
+# 2. 환경 변수 설정
 cp .env.example .env
-# LLM API Key 등 필요한 환경 변수를 입력한다.
+# 사용할 LLM과 로컬 DB 설정을 확인한다.
 
-# 4. 개발 모드 실행
-[DEV_COMMAND]
+# 3. CLI 명령 확인
+npm start -- help
+
+# 4. 현재 스켈레톤 상태 확인
+npm start -- doctor
 
 # 5. 테스트
-[TEST_COMMAND]
-
-# 6. 운영체제별 패키징 (Electron Forge)
-[PACKAGE_COMMAND]
+npm run check
 ```
 
 ### 설치 파일
@@ -489,42 +487,23 @@ Priority =
 ```txt
 dododo/
 ├── apps/
-│   └── desktop/
-│       ├── main/              # 파일 감시, 사이트 동기화, 화면 캡처, 알림, SQLite, LLM 호출
-│       ├── renderer/           # 최소 UI
-│       └── preload/
-│
+│   └── cli/src/               # CLI 진입점과 명령
 ├── packages/
-│   ├── shared/
-│   │   ├── schemas/            # JSON Schema
-│   │   └── types/              # RawItem, Fact, Task, Recommendation
-│   │
-│   ├── collectors/
-│   │   ├── files/
-│   │   ├── websites/
-│   │   ├── calendars/
-│   │   └── screen/
-│   │
-│   ├── context-engine/
-│   │   ├── extractor/          # Fact 추출
-│   │   ├── resolver/           # Task 병합
-│   │   ├── conflicts/          # 충돌 해결
-│   │   └── recommender/        # 우선순위·조언 생성
-│   │
-│   ├── storage/                # SQLite Schema, Migration
-│   ├── privacy/                # Privacy Gateway
-│   └── evaluation/             # Benchmark
-│
-├── fixtures/
-│   ├── documents/
-│   ├── notices/
-│   ├── calendars/
-│   └── ground-truth/
-│
-├── docs/
+│   ├── shared/src/            # 공통 Domain과 계약
+│   ├── collectors/src/        # 학교 사이트·이메일·LMS·파일·화면
+│   ├── context-engine/src/    # 추출·분류·병합·추천 Pipeline
+│   ├── storage/src/           # Repository 구현
+│   ├── profile/src/
+│   ├── scheduler/src/
+│   ├── privacy/src/
+│   └── evaluation/src/
+├── fixtures/                  # Source별 데모·평가 입력
+├── docs/                      # 기획·범위·시나리오·구조
 ├── tests/
-└── README.md
+└── package.json
 ```
+
+세부 모듈 계약은 [시스템 구조](docs/architecture.md), 일별 구현 계획과 경로별 담당은 [MVP 범위](docs/mvp-scope.md)를 참고한다.
 
 ---
 

@@ -5,7 +5,7 @@
 - CLI는 사용자 입출력만 담당한다.
 - 수집기, Context Engine, 저장소는 CLI와 독립적으로 실행할 수 있어야 한다.
 - `watch` 프로세스와 단발성 CLI 명령은 같은 코어 모듈을 사용한다.
-- 외부 LLM 호출 전에는 Privacy Gateway를 통과한다.
+- 로컬·외부 여부와 관계없이 LLM Provider 호출 전에는 Privacy Gateway를 통과한다.
 - 각 단계의 입력과 출력을 로컬에 기록해 문제를 추적할 수 있게 한다.
 - 수집기 하나가 실패해도 다른 수집기와 CLI 조회는 계속 작동한다.
 
@@ -101,48 +101,65 @@ Fact의 성격과 출처를 이용해 Opportunity, Task, Event, Note, Activity�
 
 일반 코드가 후보와 점수를 계산하고, LLM은 필요할 때 설명과 문장을 생성한다.
 
-## 5. 권장 저장소 구조
+## 5. 현재 저장소 구조
 
 ```text
 dododo/
 ├── apps/
 │   └── cli/
-│       ├── commands/             # setup, sync, watch, today, ask 등
-│       ├── output/               # 표와 상세 출력
-│       └── prompts/              # y/N/edit 확인 입력
+│       └── src/
+│           ├── commands/         # 명령 카탈로그, help, doctor
+│           └── index.ts          # CLI 진입점
 ├── packages/
 │   ├── shared/
-│   │   ├── schemas/
-│   │   └── policies/
+│   │   └── src/                  # 공통 Domain과 인터페이스
 │   ├── collectors/
-│   │   ├── school-notice/
-│   │   ├── school-email/
-│   │   ├── lms/
-│   │   ├── files/
-│   │   ├── calendar/
-│   │   └── screen/
+│   │   └── src/
+│   │       ├── school-site/
+│   │       ├── school-email/
+│   │       ├── lms/
+│   │       ├── files/
+│   │       ├── calendar/
+│   │       └── screen/
 │   ├── context-engine/
-│   │   ├── extraction/
-│   │   ├── classification/
-│   │   ├── resolution/
-│   │   ├── conflicts/
-│   │   ├── relevance/
-│   │   ├── priority/
-│   │   ├── advisor/
-│   │   └── conversation/
-│   ├── profile/
-│   ├── scheduler/
-│   ├── storage/
-│   ├── privacy/
-│   └── evaluation/
-├── fixtures/
+│   │   └── src/
+│   │       ├── extraction/
+│   │       ├── classification/
+│   │       ├── resolution/
+│   │       ├── recommendation/
+│   │       └── pipeline.ts
+│   ├── storage/src/              # In-memory 구현, SQLite 예정
+│   ├── profile/src/
+│   ├── scheduler/src/
+│   ├── privacy/src/
+│   └── evaluation/src/
+├── fixtures/                     # Source별 데모·평가 입력
+│   ├── school-site/
+│   ├── school-email/
+│   ├── lms/
+│   └── screen/
 ├── docs/
-└── tests/
+├── tests/
+├── package.json
+└── .env.example
 ```
 
-## 6. 팀 경계
+## 6. 모듈 계약
 
-### Desktop Runtime & CLI
+| 생산자 | 계약 | 소비자 |
+|---|---|---|
+| Collector | `sync(): Promise<RawItem[]>` | Context Pipeline |
+| Privacy Gateway | `prepare(rawItem): Promise<RawItem>` | Fact Extractor |
+| Fact Extractor | `extract(rawItem): Promise<Fact[]>` | Context Resolver |
+| Context Resolver | `resolve(facts, existing): Promise<ContextItem[]>` | Repository |
+| Repository | 저장·조회 인터페이스 | CLI, Pipeline, Recommender |
+| Recommendation Engine | `recommend(items, profile, now)` | CLI, Scheduler |
+
+모든 모듈은 `packages/shared/src`의 계약만 공유한다. Collector가 SQLite에 직접 쓰거나 CLI가 LLM Provider를 직접 호출하지 않는다.
+
+## 7. 팀 경계
+
+### Runtime & CLI
 
 - CLI 명령과 출력
 - Watch Process
@@ -159,7 +176,18 @@ dododo/
 - SQLite와 변경 이력
 - Source 장애 격리
 
-## 7. 학교 이메일 수집 경계
+### Context Intelligence & Recommendation
+
+- Fact와 ContextItem 정의
+- LLM 추출 정책
+- 관련도·우선순위·병합·충돌 정책
+- 화면 Activity 연결과 조언
+- 대화 의도와 확인 정책
+- Ground Truth와 Benchmark
+
+세부 일정과 경로별 소유권은 [MVP 범위](mvp-scope.md)의 구현 계획을 따른다.
+
+## 8. 학교 이메일 수집 경계
 
 ```text
 허용된 학교 이메일 계정·메일함
@@ -181,11 +209,31 @@ Email Collector는 다음 원칙을 지킨다.
 - Message-ID를 보존해 반복 동기화 중복을 방지한다.
 - 학교 사이트나 LMS와 같은 안내는 하나의 ContextItem으로 병합한다.
 
-### Context Intelligence & Recommendation
+## 9. 현재 스켈레톤 상태
 
-- Fact와 ContextItem 정의
-- LLM 추출 정책
-- 관련도·우선순위·병합·충돌 정책
-- 화면 Activity 연결과 조언
-- 대화 의도와 확인 정책
-- Ground Truth와 Benchmark
+바로 실행 가능한 부분:
+
+```text
+npm start -- help
+npm start -- doctor
+npm run check
+```
+
+- `help`: 전체 MVP 명령과 담당 영역 표시
+- `doctor`: Runtime, 저장소와 LLM 연결 상태 표시
+- 공통 Domain과 모듈 인터페이스
+- In-memory Repository
+- Fixture Collector와 Source별 Collector 자리
+- 최소 Context Pipeline과 규칙 기반 Resolver·Recommendation 자리
+- 학교 사이트·이메일·LMS·화면 Fixture
+- Smoke Test
+- TypeScript Strict Type Check
+
+아직 구현해야 하는 부분:
+
+- 실제 SQLite Repository
+- 실제 학교 사이트·이메일·LMS Collector
+- LLM Provider와 구조화 Fact 추출
+- 완전한 병합·충돌·우선순위 정책
+- CLI 명령의 Application Service 연결
+- 화면 캡처와 OS 알림
