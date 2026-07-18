@@ -6,11 +6,14 @@ import { FixtureCollector } from "../packages/collectors/src/index.ts";
 import {
   ContextPipeline,
   DeterministicContextResolver,
+  InterimContextStore,
+  LLMFactExtractor,
 } from "../packages/context-engine/src/index.ts";
-import { InterimContextStore } from "../packages/context-engine/src/index.ts";
+import type { LLMJSONRequest, LLMProvider } from "../packages/context-engine/src/index.ts";
 import { calculateBinaryMetrics } from "../packages/evaluation/src/index.ts";
 import { AllowlistPrivacyGateway } from "../packages/privacy/src/index.ts";
 import { InMemoryContextRepository } from "../packages/storage/src/index.ts";
+import type { RawItem } from "../packages/shared/src/index.ts";
 
 test("CLI help exposes the core MVP commands", () => {
   const help = renderHelp();
@@ -110,4 +113,100 @@ test("InterimContextStore round-trips evidence, history and recommendations", as
   }]);
   assert.equal((await store.listRecommendations("ctx-1")).length, 1);
   assert.equal((await store.listRecommendations()).length, 1);
+});
+
+class FakeLLMProvider implements LLMProvider {
+  private readonly result: () => Promise<unknown>;
+
+  constructor(result: () => Promise<unknown>) {
+    this.result = result;
+  }
+
+  async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+    const value = await this.result();
+    if (!request.validate(value)) {
+      throw new Error("fake provider response failed validate()");
+    }
+    return value;
+  }
+}
+
+const sampleRawItem: RawItem = {
+  id: "raw-lms-001",
+  sourceId: "lms-main",
+  sourceType: "lms",
+  uri: "https://lms.example/courses/os/assignments/3",
+  title: "운영체제 과제 3",
+  content: "과제 3은 2026년 7월 22일 23시 59분까지 보고서 PDF와 소스코드 ZIP을 제출합니다.",
+  contentHash: "fixture-lms-001",
+  observedAt: "2026-07-18T09:20:00+09:00",
+  metadata: { course: "운영체제", official: true },
+};
+
+test("LLMFactExtractor는 Schema를 통과한 유효한 응답을 Fact로 변환한다", async () => {
+  const provider = new FakeLLMProvider(async () => ({
+    facts: [{
+      kind: "task",
+      subject: "운영체제 과제 3",
+      value: "보고서 PDF와 소스코드 ZIP 제출",
+      eventTime: "2026-07-22T23:59:00+09:00",
+      confidence: 0.92,
+      evidenceText: "2026년 7월 22일 23시 59분까지 보고서 PDF와 소스코드 ZIP을 제출합니다.",
+    }],
+  }));
+  const extractor = new LLMFactExtractor(provider);
+
+  const facts = await extractor.extract(sampleRawItem);
+
+  assert.equal(facts.length, 1);
+  assert.equal(facts[0]?.rawItemId, sampleRawItem.id);
+  assert.equal(facts[0]?.kind, "task");
+  assert.equal(facts[0]?.confidence, 0.92);
+});
+
+test("LLMFactExtractor는 Provider 실패를 삼키고 빈 배열을 반환한다", async () => {
+  const provider = new FakeLLMProvider(async () => {
+    throw new Error("LLM 서버에 연결할 수 없습니다");
+  });
+  const extractor = new LLMFactExtractor(provider);
+
+  const facts = await extractor.extract(sampleRawItem);
+
+  assert.deepEqual(facts, []);
+});
+
+test("LLMFactExtractor는 원문에 없는 evidenceText를 가진 Fact를 버린다", async () => {
+  const provider = new FakeLLMProvider(async () => ({
+    facts: [
+      {
+        kind: "task",
+        subject: "운영체제 과제 3",
+        value: "보고서 PDF와 소스코드 ZIP 제출",
+        confidence: 0.9,
+        evidenceText: "원문에 없는 지어낸 문장입니다.",
+      },
+      {
+        kind: "task",
+        subject: "운영체제 과제 3",
+        value: "보고서 PDF와 소스코드 ZIP 제출",
+        confidence: 0.9,
+        evidenceText: "보고서 PDF와 소스코드 ZIP을 제출합니다.",
+      },
+    ],
+  }));
+  const extractor = new LLMFactExtractor(provider);
+
+  const facts = await extractor.extract(sampleRawItem);
+
+  assert.equal(facts.length, 1);
+  assert.match(facts[0]?.evidenceText ?? "", /보고서 PDF와 소스코드 ZIP을 제출합니다/);
+});
+
+test("LLMFactExtractor는 Schema를 통과하지 못한 응답이면 빈 배열을 반환한다", async () => {
+  const provider = new FakeLLMProvider(async () => ({ facts: "not-an-array" }));
+  const extractor = new LLMFactExtractor(provider);
+
+  const facts = await extractor.extract(sampleRawItem);
+
+  assert.deepEqual(facts, []);
 });
