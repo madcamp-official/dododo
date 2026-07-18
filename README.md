@@ -169,7 +169,7 @@ RawItem
 - Node.js: `22.18 이상`
 - npm: Node.js에 포함된 버전
 - Windows 또는 macOS
-- 로컬 Ollama 또는 외부 LLM Provider 1개(실제 Fact 추출 구현 시)
+- 로컬 Ollama(권장: `gemma3:12b` 텍스트 + `gemma3:4b` Vision, `.env.example` 참고) 또는 외부 LLM Provider 1개(실제 Fact 추출 구현 시)
 
 ### 설치 및 실행
 
