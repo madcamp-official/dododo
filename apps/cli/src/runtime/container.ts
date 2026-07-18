@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,7 +7,7 @@ import {
   DeterministicContextResolver,
   RuleBasedRecommendationEngine,
 } from "../../../../packages/context-engine/src/index.ts";
-import { FixtureCollector } from "../../../../packages/collectors/src/index.ts";
+import { JsonFixtureCollector } from "../../../../packages/collectors/src/index.ts";
 import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
@@ -17,15 +17,20 @@ import type {
   ContextRepository,
   Notifier,
   ProfileRepository,
-  RawItem,
   RecommendationEngine,
+  SourceType,
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
-// Data & Storage 팀 작업이 끝날 때까지 fixtures/*.json을 RawItem으로 읽어 대신한다.
-const FIXTURE_DIRS = ["school-site", "school-email", "lms"];
+// Data & Storage 팀 작업이 끝날 때까지 fixtures/*.json을 대신 사용한다.
+// 파싱·검증은 packages/collectors/src/fixtures(JsonFixtureCollector)에 위임한다 — 여기서 중복 구현하지 않는다.
+const FIXTURE_SOURCES: Array<{ dir: string; sourceId: string; sourceType: SourceType }> = [
+  { dir: "school-site", sourceId: "school-site-main", sourceType: "school-site" },
+  { dir: "school-email", sourceId: "school-email-main", sourceType: "school-email" },
+  { dir: "lms", sourceId: "lms-main", sourceType: "lms" },
+];
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -40,28 +45,24 @@ export interface CliContainer {
 }
 
 function loadFixtureCollectors(): Collector[] {
-  const bySourceId = new Map<string, RawItem[]>();
+  const collectors: Collector[] = [];
 
-  for (const dir of FIXTURE_DIRS) {
-    const dirPath = join(repoRoot, "fixtures", dir);
-    let fileNames: string[];
+  for (const source of FIXTURE_SOURCES) {
+    const dirPath = join(repoRoot, "fixtures", source.dir);
+    let fixturePaths: string[];
     try {
-      fileNames = readdirSync(dirPath).filter((name) => name.endsWith(".json"));
+      fixturePaths = readdirSync(dirPath)
+        .filter((name) => name.endsWith(".json"))
+        .map((name) => join(dirPath, name));
     } catch {
       continue;
     }
+    if (fixturePaths.length === 0) continue;
 
-    for (const fileName of fileNames) {
-      const raw = JSON.parse(readFileSync(join(dirPath, fileName), "utf8")) as RawItem;
-      const items = bySourceId.get(raw.sourceId) ?? [];
-      items.push(raw);
-      bySourceId.set(raw.sourceId, items);
-    }
+    collectors.push(new JsonFixtureCollector(source.sourceId, source.sourceType, fixturePaths));
   }
 
-  return [...bySourceId.entries()].map(
-    ([sourceId, items]) => new FixtureCollector(sourceId, items[0].sourceType, items),
-  );
+  return collectors;
 }
 
 export function createCliContainer(): CliContainer {
