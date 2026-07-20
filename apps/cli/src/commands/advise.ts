@@ -1,6 +1,6 @@
 import type { CliContainer } from "../runtime/container.ts";
 
-const USAGE = "사용법: dododo advise --screen [--live]";
+const USAGE = "사용법: dododo advise --screen [--live] [--focus]";
 
 // user-scenarios.md Scenario 5: 화면 일시 캡처 → 활동 요약 → 관련 Task 탐색 →
 // 조언 또는 거절 렌더링 → 원본 캡처 삭제. screenCollector.sync()를 직접 호출하고
@@ -28,7 +28,8 @@ export async function runAdvise(
   // 삭제한다. 지금은 정적 fixture를 읽을 뿐 실제 캡처 파일이 없어 no-op이다.
 
   const contextItems = await container.repository.listContextItems();
-  const decision = await container.screenAdvicePolicy.evaluate({ activity, contextItems, now });
+  const focusMode = args.includes("--focus");
+  const decision = await container.screenAdvicePolicy.evaluate({ activity, contextItems, now, focusMode });
 
   if (!decision.advise) {
     return ["조언하지 않습니다.", `이유: ${decision.declineReason ?? "알 수 없음"}`].join("\n");

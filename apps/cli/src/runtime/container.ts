@@ -32,7 +32,7 @@ import type {
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
-import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
 import { createLlmProvider } from "./llmProvider.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
@@ -128,15 +128,18 @@ export function createCliContainer(): CliContainer {
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
   // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
   // "Source is not allowed: screen"으로 조용히 막히지 않는다.
+  // 마스킹+Chunk 선택 적용(#21). allowedEmailAddresses는 실제 학교 공식 발신 주소가
+  // 정해지면 채운다(이슈#27 논의 1번, 도메인 전체 허용은 금지 — masking.ts 참고). 지금은
+  // 비워둬서 모든 이메일 주소가 안전하게 마스킹된다(과소 노출 쪽으로 fail). advise의
+  // LlmScreenAdvicePolicy도 이 인스턴스를 그대로 재사용한다(마스킹 정책 이원화 방지).
+  const privacyGateway = new ChunkingPrivacyGateway({
+    allowedSources: [...collectors, screenCollector].map((collector) => collector.sourceType),
+    allowedEmailAddresses: [],
+  });
+
   const pipeline = new ContextPipeline({
     repository,
-    // 마스킹+Chunk 선택 적용(#21). allowedEmailAddresses는 실제 학교 공식 발신
-    // 주소가 정해지면 채운다(이슈#27 논의 1번, 도메인 전체 허용은 금지 — masking.ts 참고).
-    // 지금은 비워둬서 모든 이메일 주소가 안전하게 마스킹된다(과소 노출 쪽으로 fail).
-    privacyGateway: new ChunkingPrivacyGateway({
-      allowedSources: [...collectors, screenCollector].map((collector) => collector.sourceType),
-      allowedEmailAddresses: [],
-    }),
+    privacyGateway,
     // provider가 없으면(.env 미설정) 기존 임시 규칙 추출기를 그대로 쓴다 — 회귀 없음.
     factExtractor: llmProvider !== undefined
       ? new LLMFactExtractor(llmProvider)
@@ -161,7 +164,10 @@ export function createCliContainer(): CliContainer {
     rawItemRepository,
     collectors,
     screenCollector,
-    screenAdvicePolicy: defaultScreenAdvicePolicy,
+    // provider 없으면(.env 미설정) 기존 substring-매칭 placeholder로 폴백 — 회귀 없음.
+    screenAdvicePolicy: llmProvider !== undefined
+      ? new LlmScreenAdvicePolicy(llmProvider, privacyGateway)
+      : defaultScreenAdvicePolicy,
     captureLiveScreen: () => captureActiveScreen(),
     llmProvider,
   };
