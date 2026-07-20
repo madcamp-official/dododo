@@ -59,10 +59,30 @@ test("evaluateExtraction은 누락·과잉·오분류를 구분해 센다", () =
   const result = evaluateExtraction(expected, actual);
   assert.equal(result.truePositive, 0);
   assert.equal(result.falseNegative, 2, "해커톤 누락 + 과제 오분류");
-  assert.equal(result.falsePositive, 1, "동아리 회식 과잉");
+  assert.equal(result.falsePositive, 2, "과제 오분류 + 동아리 회식 과잉");
   assert.ok(result.failures.some((f) => f.type === "missing"));
   assert.ok(result.failures.some((f) => f.type === "wrong_kind"));
   assert.ok(result.failures.some((f) => f.type === "unexpected"));
+});
+
+test("evaluateExtraction은 kind 오분류를 FP와 FN에 모두 반영한다", () => {
+  const expected: ExpectedContextItem[] = [
+    { title: "운영체제 과제", kind: "task", evidenceCount: 1 },
+    { title: "AI 해커톤", kind: "opportunity", evidenceCount: 1 },
+  ];
+  const actual = [
+    contextItem({ title: "운영체제 과제", kind: "event" }),
+    contextItem({ title: "AI 해커톤", kind: "opportunity" }),
+  ];
+
+  const result = evaluateExtraction(expected, actual);
+
+  assert.equal(result.truePositive, 1);
+  assert.equal(result.falsePositive, 1);
+  assert.equal(result.falseNegative, 1);
+  assert.equal(result.metrics.precision, 0.5);
+  assert.equal(result.metrics.recall, 0.5);
+  assert.equal(result.metrics.f1, 0.5);
 });
 
 test("evaluateMergeAccuracy는 기대한 두 출처가 한 항목에 모이면 1.0을 낸다", () => {
