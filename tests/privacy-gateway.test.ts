@@ -1,0 +1,111 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  ChunkingPrivacyGateway,
+  maskSensitiveText,
+  selectRelevantContent,
+} from "../packages/privacy/src/index.ts";
+import type { RawItem } from "../packages/shared/src/index.ts";
+
+function rawItem(overrides: Partial<RawItem> = {}): RawItem {
+  return {
+    id: "raw-1",
+    sourceId: "school-email-main",
+    sourceType: "school-email",
+    uri: "email://school-email-main/1",
+    title: "장학금 안내",
+    content: "안내드립니다.",
+    contentHash: "hash-1",
+    observedAt: "2026-07-18T09:00:00+09:00",
+    metadata: {},
+    ...overrides,
+  };
+}
+
+test("maskSensitiveText는 전화번호·학번·개인 이메일을 가리고 학교 도메인은 보존한다", () => {
+  const text = "문의 010-1234-5678, 학번 20231234, 개인 hong@gmail.com, 공식 support@school.ac.kr";
+  const masked = maskSensitiveText(text, { allowedEmailDomains: ["school.ac.kr"] });
+
+  assert.match(masked, /\[전화번호\]/);
+  assert.match(masked, /\[학번\]/);
+  assert.match(masked, /\[이메일\]/);
+  assert.doesNotMatch(masked, /010-1234-5678/);
+  assert.doesNotMatch(masked, /hong@gmail\.com/);
+  assert.match(masked, /support@school\.ac\.kr/, "학교 공식 도메인 이메일은 보존해야 한다");
+});
+
+test("maskSensitiveText는 마감·요구사항 같은 Task 텍스트를 훼손하지 않는다", () => {
+  const text = "신청 마감은 2026년 7월 25일 18시입니다. 보고서 2건을 제출하세요.";
+  assert.equal(maskSensitiveText(text, {}), text);
+});
+
+test("selectRelevantContent는 짧은 본문을 그대로 둔다", () => {
+  const short = "신청 마감은 7월 25일입니다.";
+  assert.equal(selectRelevantContent(short, { maxChars: 2000 }), short);
+});
+
+test("selectRelevantContent는 긴 본문을 예산 안으로 줄이되 마감 문단은 유지한다", () => {
+  const filler = "일반적인 인사말과 배경 설명입니다. ".repeat(40);
+  const long = [
+    filler,
+    "신청 마감은 2026년 7월 25일 18시이며 제출 요구사항을 확인하세요.",
+    filler,
+  ].join("\n\n");
+
+  const selected = selectRelevantContent(long, { maxChars: 300 });
+
+  assert.ok(selected.length <= 300, "예산 이내여야 한다");
+  assert.match(selected, /2026년 7월 25일/, "마감이 담긴 문단은 유지해야 한다");
+});
+
+test("selectRelevantContent는 신호가 약하면 첫 문단과 제목 포함 문단을 보존한다", () => {
+  const filler = "특별한 신호가 없는 문단입니다. ".repeat(40);
+  const content = [
+    "첫 문단 인사말입니다.",
+    filler,
+    "장학금 안내 세부 문단입니다.",
+    filler,
+  ].join("\n\n");
+
+  const selected = selectRelevantContent(content, { maxChars: 200, title: "장학금 안내" });
+
+  assert.match(selected, /첫 문단 인사말/);
+  assert.match(selected, /장학금 안내 세부 문단/);
+});
+
+test("ChunkingPrivacyGateway는 허용되지 않은 Source를 거부한다", async () => {
+  const gateway = new ChunkingPrivacyGateway({ allowedSources: ["school-email"] });
+  await assert.rejects(
+    () => gateway.prepare(rawItem({ sourceType: "lms" })),
+    /Source is not allowed/,
+  );
+});
+
+test("ChunkingPrivacyGateway는 화면 원본 이미지가 metadata에 있으면 거부한다", async () => {
+  const gateway = new ChunkingPrivacyGateway({ allowedSources: ["screen"] });
+  await assert.rejects(
+    () => gateway.prepare(rawItem({
+      sourceType: "screen",
+      metadata: { screenshotBase64: "iVBORw0KGgo..." },
+    })),
+    /화면 원본 이미지는 외부 전송할 수 없습니다/,
+  );
+});
+
+test("ChunkingPrivacyGateway는 마스킹된 안전한 사본을 반환하고 원본은 건드리지 않는다", async () => {
+  const gateway = new ChunkingPrivacyGateway({
+    allowedSources: ["school-email"],
+    allowedEmailDomains: ["school.ac.kr"],
+  });
+  const original = rawItem({
+    content: "담당자 010-9876-5432에게 신청 마감 2026년 7월 25일까지 제출하세요.",
+  });
+  const before = structuredClone(original);
+
+  const safe = await gateway.prepare(original);
+
+  assert.match(safe.content, /\[전화번호\]/);
+  assert.match(safe.content, /2026년 7월 25일/, "마감 텍스트는 유지");
+  assert.deepEqual(original, before, "원본 RawItem은 변경되면 안 된다");
+});
