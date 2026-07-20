@@ -1,4 +1,5 @@
 import type { ContextItem, Recommendation, UserProfile } from "../../../shared/src/index.ts";
+import { relevanceScore } from "../relevance/index.ts";
 import { pickSubjectSignal } from "../resolution/mergeScore.ts";
 
 const EXCLUDED_STATUSES: ReadonlySet<ContextItem["status"]> = new Set([
@@ -128,13 +129,18 @@ function deadlineUrgencyScore(deadline: string | undefined, now: Date): number {
   return 40 * (1 - clampedHours / 168);
 }
 
-// kind별 기본 중요도에 profile.interests/activityTypes와 태그가 겹치는 만큼 가산한다.
-// tags는 resolution/index.ts가 생성 시점에 kind와 course/category로 채운다.
+// kind별 기본 중요도에 프로필 관련도를 더한다. 관련도 계산은 relevance/index.ts의
+// relevanceScore 하나로 통일한다 — 예전엔 여기(importanceScore)와 relevanceScore가
+// interests/activityTypes 겹침을 각자 계산하는 이중 로직이었고, relevanceScore는
+// 어디서도 호출되지 않는 고아 코드였다(Issue #27 지적).
+// relevanceScore의 자격 위반(학부생에게 대학원생 전용 Opportunity 등)은 중요도를 0으로
+// 떨어뜨려, 부적격 Opportunity가 우선순위 상단에 오르지 않게 한다.
 function importanceScore(item: ContextItem, profile: UserProfile): number {
   const base = KIND_BASE_IMPORTANCE[item.kind] ?? 0;
-  const interestSignals = new Set([...profile.interests, ...profile.activityTypes]);
-  const overlapCount = item.tags.filter((tag) => interestSignals.has(tag)).length;
-  const interestBonus = Math.min(overlapCount * 5, 10);
+  const relevance = relevanceScore(item, profile);
+  if (relevance.eligibilityViolated) return 0;
+
+  const interestBonus = Math.min(relevance.interestOverlap + relevance.activityOverlap, 10);
   return Math.min(base + interestBonus, 20);
 }
 

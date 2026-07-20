@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   adaptScreenFixtureToRawItem,
+  computePriority,
   generateScreenAdvice,
   linkActivityToContext,
   relevanceScore,
@@ -307,3 +308,26 @@ const passthroughPrivacyGateway: PrivacyGateway = {
     return structuredClone(rawItem);
   },
 };
+
+test("computePriority는 관련도 계산에 relevanceScore를 쓴다 — 관심사 겹침 가점", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: ["AI"], activityTypes: [] });
+  const related = osTask({ kind: "opportunity", title: "AI 공모전", tags: ["opportunity", "AI"], deadline: undefined });
+  const unrelated = osTask({ kind: "opportunity", title: "봉사활동", tags: ["opportunity"], deadline: undefined });
+
+  const relatedScore = computePriority(related, [], { now, profile, recentRecommendations: [] });
+  const unrelatedScore = computePriority(unrelated, [], { now, profile, recentRecommendations: [] });
+  assert.ok(relatedScore.importance > unrelatedScore.importance, "관심사와 겹치는 Opportunity의 중요도가 더 높아야 한다");
+});
+
+test("computePriority는 자격 위반 Opportunity의 중요도를 0으로 떨어뜨린다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: ["AI"] });
+  const gradOnly = osTask({
+    kind: "opportunity", title: "대학원생 대상 세미나",
+    requirements: ["대학원생만 지원 가능"], tags: ["opportunity", "AI"], deadline: undefined,
+  });
+
+  const breakdown = computePriority(gradOnly, [], { now, profile, recentRecommendations: [] });
+  assert.equal(breakdown.importance, 0, "부적격 Opportunity는 관심사가 겹쳐도 중요도 0이어야 우선순위 상단에 안 온다");
+});
