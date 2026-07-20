@@ -26,6 +26,7 @@ import type {
   Collector,
   ContextRepository,
   Notifier,
+  PrivacyGateway,
   ProfileRepository,
   RecommendationEngine,
   SourceType,
@@ -75,6 +76,9 @@ export interface CliContainer {
   // .env의 DODODO_LLM_BASE_URL 미설정이면 undefined — advise/ask 등 LLM을 쓰는 명령이
   // 이 값으로 폴백 여부를 직접 판단한다(docs/handoff-cli-llm-wiring.md).
   llmProvider: LLMProvider | undefined;
+  // pipeline이 쓰는 것과 같은 인스턴스. ask 명령이 answerContextQuestion 호출 시
+  // 그대로 넘긴다(마스킹 정책 이원화 방지 — screenAdvicePolicy와 같은 이유).
+  privacyGateway: PrivacyGateway;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -170,6 +174,7 @@ export function createCliContainer(): CliContainer {
       : defaultScreenAdvicePolicy,
     captureLiveScreen: () => captureActiveScreen(),
     llmProvider,
+    privacyGateway,
   };
 }
 

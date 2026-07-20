@@ -1,7 +1,9 @@
+import { runAdd } from "./commands/add.ts";
+import { runAdvise } from "./commands/advise.ts";
+import { runAsk } from "./commands/ask.ts";
 import { commandCatalog } from "./commands/catalog.ts";
 import { renderDoctor } from "./commands/doctor.ts";
 import { renderHelp } from "./commands/help.ts";
-import { runAdvise } from "./commands/advise.ts";
 import { renderInbox } from "./commands/inbox.ts";
 import { runSetup } from "./commands/setup.ts";
 import { runSync } from "./commands/sync.ts";
@@ -55,6 +57,14 @@ async function main(): Promise<void> {
   }
   if (command === "advise") {
     console.log(await runAdvise(container, process.argv.slice(3)));
+    return;
+  }
+  if (command === "ask") {
+    console.log(await runAsk(container, process.argv.slice(3)));
+    return;
+  }
+  if (command === "add") {
+    console.log(await runAdd(container, process.argv.slice(3)));
     return;
   }
 
