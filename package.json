@@ -19,6 +19,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "mailparser": "^3.9.14"
   }
 }
