@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck and tests (Node 22.18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # 일정 파서와 MVP의 기본 시간대 정책을 CI에서도 명시적으로 고정한다.
+      TZ: Asia/Seoul
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run typecheck and tests
+        run: npm run check

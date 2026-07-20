@@ -181,8 +181,10 @@ package.json, tsconfig.json 등 전체 모듈에 영향을 주는 설정
 초기 설치:
 
 ```bash
-npm install
+npm ci
 ```
+
+의존성을 추가하거나 갱신해 `package-lock.json`을 바꿀 때만 `npm install`을 사용한다.
 
 주요 명령:
 
@@ -195,7 +197,16 @@ npm run typecheck
 npm run check
 ```
 
-작업 완료 전 최소한 변경 영역과 관련된 테스트를 실행하고, 최종적으로 `npm run check`를 실행한다. 실행하지 못한 검증이 있으면 완료했다고 표현하지 말고 이유를 남긴다.
+GitHub Actions의 `.github/workflows/ci.yml`은 `main` 대상 PR, `main` 푸시와 수동 실행에서 Node.js `22.18.0`으로 `npm ci`와 `npm run check`를 실행한다. 같은 PR에 새 커밋이 올라오면 이전 실행은 자동 취소한다.
+
+에이전트와 개발자는 다음 검증 분담을 따른다.
+
+- 로컬에서는 변경 영역의 관련 테스트를 우선 실행한다. 예: `node --test tests/evaluation.test.ts`.
+- 정확히 같은 HEAD 커밋의 GitHub CI가 통과했다면 로컬 전체 `npm run check`를 중복 실행하지 않아도 된다.
+- CI Workflow, `package.json`, `package-lock.json`, `tsconfig.json` 또는 공통 계약을 변경했거나 CI 결과를 확인할 수 없으면 로컬에서 `npm run check`를 실행한다.
+- PR은 CI의 `Typecheck and tests (Node 22.18)` Job이 통과하기 전에는 병합 가능한 완료 상태로 판단하지 않는다.
+- 성공한 전체 로그를 대화에 그대로 복사하지 말고 실행 명령, 통과한 테스트 수와 실패 여부만 요약한다.
+- 실행하지 못한 검증이 있으면 완료했다고 표현하지 말고 이유를 남긴다.
 
 ## 완료 정의와 PR 원칙
 
@@ -205,5 +216,6 @@ npm run check
 - Fixture와 실제 Source가 같은 계약을 사용한다.
 - 대표 사용 시나리오가 빈 저장소에서 재현된다.
 - 개인정보 수집 범위를 넓히는 변경은 팀 검토를 거친다.
+- GitHub CI의 전체 Typecheck와 Test가 통과한다.
 - PR은 하나의 명확한 목표에 집중하고, 변경한 소유 영역과 공통 계약 영향을 설명한다.
 - PR 설명에는 실행한 검증 명령과 남은 제한사항을 기록한다.
