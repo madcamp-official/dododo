@@ -58,13 +58,38 @@ export function createSchoolSiteHttpLoader(
       throw responseTooLarge(maxResponseBytes);
     }
 
-    const html = await response.text();
-    if (Buffer.byteLength(html, "utf8") > maxResponseBytes) {
-      throw responseTooLarge(maxResponseBytes);
+    return readResponseBody(response, maxResponseBytes);
+  };
+}
+
+async function readResponseBody(
+  response: Response,
+  maxResponseBytes: number,
+): Promise<string> {
+  if (response.body === null) return "";
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let receivedBytes = 0;
+  let html = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maxResponseBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw responseTooLarge(maxResponseBytes);
+      }
+      html += decoder.decode(value, { stream: true });
     }
 
-    return html;
-  };
+    return html + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function parseHttpUrl(value: string): URL {

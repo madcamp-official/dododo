@@ -87,6 +87,66 @@ test("HTTP Loader는 실제 UTF-8 본문 크기가 제한을 넘으면 거부한
   await assert.rejects(() => loadHtml(), /허용 크기\(5 bytes\)를 초과/);
 });
 
+test("HTTP Loader는 축소된 Content-Length를 신뢰하지 않고 스트리밍 중 제한을 적용한다", async () => {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("12345"));
+      controller.enqueue(new TextEncoder().encode("67890"));
+      controller.enqueue(new TextEncoder().encode("unread"));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const loadHtml = createSchoolSiteHttpLoader({
+    url,
+    maxResponseBytes: 8,
+    fetchImplementation: async () => new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html",
+        "Content-Length": "2",
+      },
+    }),
+  });
+
+  await assert.rejects(() => loadHtml(), /허용 크기\(8 bytes\)를 초과/);
+  assert.equal(cancelled, true);
+});
+
+test("HTTP Loader는 Content-Length 없이도 제한을 적용한다", async () => {
+  const loadHtml = createSchoolSiteHttpLoader({
+    url,
+    maxResponseBytes: 5,
+    fetchImplementation: async () => htmlResponse("123456"),
+  });
+
+  await assert.rejects(() => loadHtml(), /허용 크기\(5 bytes\)를 초과/);
+});
+
+test("HTTP Loader는 UTF-8 문자가 여러 청크로 나뉘어도 정상 디코딩한다", async () => {
+  const encoded = new TextEncoder().encode("한글 HTML");
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoded.slice(0, 1));
+      controller.enqueue(encoded.slice(1, 4));
+      controller.enqueue(encoded.slice(4));
+      controller.close();
+    },
+  });
+  const loadHtml = createSchoolSiteHttpLoader({
+    url,
+    maxResponseBytes: encoded.byteLength,
+    fetchImplementation: async () => new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    }),
+  });
+
+  assert.equal(await loadHtml(), "한글 HTML");
+});
+
 test("HTTP Loader는 네트워크 오류를 URL과 함께 보고한다", async () => {
   const loadHtml = createSchoolSiteHttpLoader({
     url,
