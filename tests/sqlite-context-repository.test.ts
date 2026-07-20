@@ -93,6 +93,27 @@ function analysis(item: RawItem, overrides: Partial<RawItemAnalysisResult> = {})
   };
 }
 
+test("SQLite ContextRepository는 동일한 분석 결과를 멱등하게 다시 저장한다", async () => {
+  const database = openContextDatabase();
+  try {
+    const repository = new SQLiteContextRepository(database);
+    const item = rawItem();
+    const result = analysis(item);
+
+    await repository.saveRawItemAnalysis(result);
+    await repository.saveRawItemAnalysis(result);
+
+    const active = await repository.listFactsByRawItemId(item.id);
+    const all = await repository.listFactsByRawItemId(item.id, { includeInactive: true });
+    assert.deepEqual(active.map((value) => value.id), [fact(item).id]);
+    assert.equal(all.length, 1);
+    assert.equal(all[0]?.status, "active");
+    assert.equal(all[0]?.supersededAt, undefined);
+  } finally {
+    database.close();
+  }
+});
+
 test("SQLite ContextRepository는 전체 분석 결과를 저장하고 다시 조회한다", async () => {
   const database = openContextDatabase();
   try {

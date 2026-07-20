@@ -135,6 +135,26 @@ test("동일 Fixture 재동기화는 Pipeline 재분석과 중복 저장을 건�
   }
 });
 
+test("동일 Fixture를 Pipeline이 직접 재분석해도 Fact 생명주기 오류가 발생하지 않는다", async () => {
+  const database = openContextDatabase();
+  try {
+    const repository = new SQLiteContextRepository(database);
+    const pipeline = createPipeline(repository, new MetadataFactExtractor());
+    const fixedCollector = collector(item());
+
+    const first = await pipeline.sync(fixedCollector);
+    const second = await pipeline.sync(fixedCollector);
+
+    assert.deepEqual(first.errors, []);
+    assert.deepEqual(second.errors, []);
+    const facts = await repository.listFactsByRawItemId("raw-lms-1", { includeInactive: true });
+    assert.equal(facts.length, 1);
+    assert.equal(facts[0]?.status, "active");
+  } finally {
+    database.close();
+  }
+});
+
 test("학교 사이트와 이메일의 동일 공모전은 SQLite Context 하나에 Evidence를 모두 보존한다", async () => {
   const database = openContextDatabase();
   try {

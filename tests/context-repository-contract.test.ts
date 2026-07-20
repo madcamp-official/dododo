@@ -73,6 +73,21 @@ function analysis(overrides: Partial<RawItemAnalysisResult> = {}): RawItemAnalys
   };
 }
 
+test("InMemory ContextRepository는 동일한 분석 결과를 멱등하게 다시 저장한다", async () => {
+  const repository = new InMemoryContextRepository();
+  const result = analysis();
+
+  await repository.saveRawItemAnalysis(result);
+  await repository.saveRawItemAnalysis(result);
+
+  const active = await repository.listFactsByRawItemId(rawItem.id);
+  const all = await repository.listFactsByRawItemId(rawItem.id, { includeInactive: true });
+  assert.deepEqual(active.map((item) => item.id), [fact.id]);
+  assert.equal(all.length, 1);
+  assert.equal(all[0]?.status, "active");
+  assert.equal(all[0]?.supersededAt, undefined);
+});
+
 test("ContextRepository는 Fact를 ID 기준 upsert하고 RawItem 기준으로 조회한다", async () => {
   const repository = new InMemoryContextRepository();
   await repository.saveFacts([fact]);

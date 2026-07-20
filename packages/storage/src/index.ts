@@ -9,6 +9,7 @@ import type {
   Recommendation,
   StoredFact,
 } from "../../shared/src/index.ts";
+import { hasSameActiveFacts } from "./analysis-idempotency.ts";
 
 export * from "./in-memory-raw-item-repository.ts";
 export * from "./raw-item-repository.ts";
@@ -116,8 +117,11 @@ export class InMemoryContextRepository implements ContextRepository {
     const snapshot = this.snapshot();
     try {
       await this.saveRawItems([result.rawItem]);
-      await this.deactivateFactsByRawItemId(result.rawItem.id, result.analyzedAt);
-      await this.saveFacts(result.facts);
+      const activeFacts = await this.listFactsByRawItemId(result.rawItem.id);
+      if (!hasSameActiveFacts(activeFacts, result.facts)) {
+        await this.deactivateFactsByRawItemId(result.rawItem.id, result.analyzedAt);
+        await this.saveFacts(result.facts);
+      }
       await this.saveContextItems(result.contextItems);
       await this.saveEvidence(result.evidence);
       await this.saveContextHistory(result.history);

@@ -15,6 +15,7 @@ import type {
   SourceType,
   StoredFact,
 } from "../../../shared/src/index.ts";
+import { hasSameActiveFacts } from "../analysis-idempotency.ts";
 import { SQLiteRawItemRepository } from "./sqlite-raw-item-repository.ts";
 
 export class SQLiteContextRepository implements ContextRepository {
@@ -234,8 +235,11 @@ export class SQLiteContextRepository implements ContextRepository {
       const savedRawItem = (await this.rawItems.save(result.rawItem)).item;
       const facts = result.facts.map((fact) => canonicalizeRawItemId(fact, result.rawItem.id, savedRawItem.id));
       const evidence = result.evidence.map((item) => canonicalizeRawItemId(item, result.rawItem.id, savedRawItem.id));
-      await this.deactivateFactsByRawItemId(savedRawItem.id, result.analyzedAt);
-      await this.saveFacts(facts);
+      const activeFacts = await this.listFactsByRawItemId(savedRawItem.id);
+      if (!hasSameActiveFacts(activeFacts, facts)) {
+        await this.deactivateFactsByRawItemId(savedRawItem.id, result.analyzedAt);
+        await this.saveFacts(facts);
+      }
       await this.saveContextItems(result.contextItems);
       await this.saveEvidence(evidence);
       await this.saveContextHistory(result.history);
