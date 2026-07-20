@@ -1060,3 +1060,48 @@ test("좁은 resolve() 경로는 주입된 시계를 쓴다(new Date() 직접 �
   assert.equal(items[0]?.createdAt, fixed.toISOString());
   assert.equal(items[0]?.updatedAt, fixed.toISOString());
 });
+
+test("LLMFactExtractor는 metadata.canonicalTitle을 주제 Fact 제목보다 우선한다", async () => {
+  const raw: RawItem = {
+    id: "raw-canon", sourceId: "school-email", sourceType: "school-email", uri: "u",
+    title: "[학생지원팀] AI 해커톤", content: "AI 해커톤 안내",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { canonicalTitle: "대학생 AI 해커톤" },
+  };
+  const provider: LLMProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { facts: [
+        { kind: "opportunity", subject: "[학생지원팀] AI 해커톤", value: "모집", confidence: 0.9, evidenceText: "AI 해커톤 안내" },
+        { kind: "requirement", subject: "보고서 제출", value: "PDF", confidence: 0.9, evidenceText: "AI 해커톤 안내" },
+      ] };
+      if (!request.validate(value)) throw new Error("invalid");
+      return value;
+    },
+  };
+  const facts = await new LLMFactExtractor(provider).extract(raw);
+
+  const opp = facts.find((f) => f.kind === "opportunity");
+  const req = facts.find((f) => f.kind === "requirement");
+  assert.equal(opp?.subject, "대학생 AI 해커톤", "주제 Fact 제목은 canonicalTitle로 통일된다");
+  assert.equal(req?.subject, "보고서 제출", "requirement 같은 세부 Fact는 그대로 둔다");
+});
+
+test("LLMFactExtractor는 metadata.dueAt을 마감성 Fact의 LLM 추출 마감보다 우선한다", async () => {
+  const raw: RawItem = {
+    id: "raw-due", sourceId: "lms", sourceType: "lms", uri: "u",
+    title: "과제 3", content: "과제 마감 관련",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { course: "운영체제", dueAt: "2026-07-23T18:00:00+09:00" },
+  };
+  const provider: LLMProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { facts: [
+        { kind: "task", subject: "과제 3", value: "제출", eventTime: "2026-07-21T18:00:00+09:00", confidence: 0.9, evidenceText: "과제 마감 관련" },
+      ] };
+      if (!request.validate(value)) throw new Error("invalid");
+      return value;
+    },
+  };
+  const facts = await new LLMFactExtractor(provider).extract(raw);
+  assert.equal(facts[0]?.eventTime, "2026-07-23T18:00:00+09:00", "구조화된 dueAt이 LLM이 뽑은 마감보다 우선한다");
+});

@@ -168,15 +168,32 @@ function normalize(text: string): string {
   return text.replaceAll(/\s+/g, "").trim();
 }
 
+// Collector가 이미 구조화된 신호를 metadata에 넣어 준 경우, LLM 추출값보다 우선한다.
+// - canonicalTitle: 같은 공지가 Source마다 제목을 조금씩 다르게 표기해도(예: "[학생지원팀]"
+//   접두사) 정규 제목으로 통일해 병합(resolution/mergeScore의 제목 유사도)이 안정된다.
+//   주제성 Fact(opportunity/task/event)에만 적용하고 requirement/note 같은 세부는 그대로 둔다.
+// - dueAt: LMS처럼 마감을 구조화된 값으로 이미 아는 Source는 LLM이 본문에서 뽑은 마감보다
+//   이 값을 신뢰한다. 마감성 Fact(deadline/task)의 eventTime만 대체하고 event(시험 시각)는
+//   건드리지 않는다.
+const SUBJECT_KINDS: ReadonlySet<FactKind> = new Set(["opportunity", "task", "event"]);
+const DEADLINE_KINDS: ReadonlySet<FactKind> = new Set(["deadline", "task"]);
+
 function toFact(raw: RawFact, rawItem: RawItem, index: number): Fact {
+  const canonicalTitle = stringMetadata(rawItem.metadata.canonicalTitle);
+  const dueAt = stringMetadata(rawItem.metadata.dueAt);
+
   return {
     id: `fact-${rawItem.id}-${rawItem.contentHash}-${index}`,
     rawItemId: rawItem.id,
     kind: raw.kind,
-    subject: raw.subject,
+    subject: canonicalTitle !== undefined && SUBJECT_KINDS.has(raw.kind) ? canonicalTitle : raw.subject,
     value: raw.value,
-    eventTime: raw.eventTime,
+    eventTime: dueAt !== undefined && DEADLINE_KINDS.has(raw.kind) ? dueAt : raw.eventTime,
     confidence: raw.confidence,
     evidenceText: raw.evidenceText,
   };
+}
+
+function stringMetadata(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
