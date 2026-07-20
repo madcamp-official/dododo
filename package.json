@@ -14,10 +14,12 @@
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^22.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "cheerio": "^1.2.0"
+    "cheerio": "^1.2.0",
+    "mailparser": "^3.9.14"
   }
 }
