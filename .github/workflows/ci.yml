@@ -21,6 +21,9 @@ jobs:
     name: Typecheck and tests (Node 22.18)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # 일정 파서와 MVP의 기본 시간대 정책을 CI에서도 명시적으로 고정한다.
+      TZ: Asia/Seoul
 
     steps:
       - name: Checkout repository
