@@ -46,6 +46,29 @@ test("toRawItem은 원본 캡처 없이 활동 요약만 담은 RawItem을 만�
   assert.equal(JSON.stringify(item).includes("base64"), false);
 });
 
+test("toRawItem의 id는 메타데이터가 바뀌어도 안정적이다(observedAt 기반)", () => {
+  const fixture = parseScreenFixture(FIXTURE_JSON, FIXTURE_PATH);
+  const original = toRawItem(fixture, "screen-manual");
+  const confidenceChanged = toRawItem({ ...fixture, confidence: 0.4 }, "screen-manual");
+
+  assert.equal(original.id, confidenceChanged.id);
+});
+
+test("toRawItem의 contentHash는 activity가 같아도 다른 메타데이터가 바뀌면 변한다", () => {
+  const fixture = parseScreenFixture(FIXTURE_JSON, FIXTURE_PATH);
+  const original = toRawItem(fixture, "screen-manual");
+
+  assert.notEqual(original.contentHash, toRawItem({ ...fixture, confidence: 0.4 }, "screen-manual").contentHash);
+  assert.notEqual(
+    original.contentHash,
+    toRawItem({ ...fixture, relatedTaskCandidate: "다른 과목" }, "screen-manual").contentHash,
+  );
+  assert.notEqual(
+    original.contentHash,
+    toRawItem({ ...fixture, applicationHint: "다른 앱" }, "screen-manual").contentHash,
+  );
+});
+
 test("ScreenCollector는 fixture 경로들을 읽어 RawItem으로 변환한다", async () => {
   const collector = new ScreenCollector("screen-manual", [FIXTURE_PATH]);
   const items = await collector.sync();

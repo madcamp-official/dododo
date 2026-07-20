@@ -3,19 +3,22 @@ import type { CliContainer } from "../runtime/container.ts";
 import { runWatchLoop } from "../runtime/watchLoop.ts";
 import type { WatchTickResult } from "../runtime/watchTick.ts";
 
-const USAGE = "사용법: dododo watch [--loop] [--interval <seconds>] [--os-notify]";
+const USAGE = "사용법: dododo watch [--once] [--interval <seconds>] [--os-notify]";
 const DEFAULT_INTERVAL_SECONDS = 300;
-const KNOWN_FLAGS = new Set(["--loop", "--interval", "--os-notify"]);
+const KNOWN_FLAGS = new Set(["--once", "--interval", "--os-notify"]);
 
-// docs/architecture.md: "MVP, 실제 데몬 아님" — 기본은 1회 실행이고, 계속 도는
-// 것은 --loop를 명시했을 때만이다. --loop일 땐 여러 실제 tick에 걸쳐 시간이
-// 흐르므로 매 tick 실제 시각을 써야 한다(주입된 now는 "지금 1회 실행"에만 쓴다).
+// docs/architecture.md·docs/mvp-scope.md: watch 프로세스가 실행되는 동안 계속
+// 주기 동기화한다 — 기본은 지속 실행이고, 1회만 확인하려면 --once를 명시한다
+// (단발성은 이미 `sync` 명령이 있으므로 watch의 기본값까지 1회면 이름과 다른
+// 명령 둘 다와 기대가 어긋난다는 팀 리뷰 지적 반영). 지속 실행일 땐 여러 실제
+// tick에 걸쳐 시간이 흐르므로 매 tick 실제 시각을 써야 한다(주입된 now는
+// --once에만 쓴다).
 export async function runWatch(
   container: CliContainer,
   args: string[],
   now: Date = new Date(),
 ): Promise<string> {
-  const loop = args.includes("--loop");
+  const once = args.includes("--once");
   const intervalArg = findFlagValue(args, "--interval");
 
   let intervalSeconds = DEFAULT_INTERVAL_SECONDS;
@@ -42,23 +45,23 @@ export async function runWatch(
   const onSigint = (): void => controller.abort();
   process.on("SIGINT", onSigint);
 
-  const lines: string[] = [];
+  // tick 요약은 매 tick console.log로 바로 찍는다 — 지속 실행(기본값)에서는 프로세스가
+  // 오래 살아있으므로, 함수가 끝날 때 한 번에 모아 반환하면 SIGINT 전까지 화면에
+  // 아무 진행 상황도 안 보인다. 최종 반환 문자열은 종료 요약 한 줄뿐이다.
   try {
-    const results = await runWatchLoop(effectiveContainer, {
+    const summary = await runWatchLoop(effectiveContainer, {
       intervalMs: intervalSeconds * 1000,
-      maxIterations: loop ? undefined : 1,
+      maxIterations: once ? 1 : undefined,
+      keepResults: once,
       signal: controller.signal,
-      now: loop ? () => new Date() : () => now,
-      onTick: (result, iteration) => lines.push(renderTickLine(result, iteration)),
+      now: once ? () => now : () => new Date(),
+      onTick: (result, iteration) => console.log(renderTickLine(result, iteration)),
     });
 
-    const totalNotified = results.reduce((sum, result) => sum + result.notified.length, 0);
-    lines.push(`Watch 종료: ${results.length}회 실행, 총 ${totalNotified}건 알림`);
+    return `Watch 종료: ${summary.tickCount}회 실행, 총 ${summary.totalNotified}건 알림`;
   } finally {
     process.off("SIGINT", onSigint);
   }
-
-  return lines.join("\n");
 }
 
 function renderTickLine(result: WatchTickResult, iteration: number): string {

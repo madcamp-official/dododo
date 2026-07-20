@@ -16,7 +16,11 @@ import {
 import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
-import { InMemoryContextRepository } from "../../../../packages/storage/src/index.ts";
+import {
+  InMemoryContextRepository,
+  InMemoryRawItemRepository,
+  RawItemSyncService,
+} from "../../../../packages/storage/src/index.ts";
 import type {
   Collector,
   ContextRepository,
@@ -27,6 +31,7 @@ import type {
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
 import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { IncrementalCollector } from "./incrementalCollector.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -102,7 +107,12 @@ export function createCliContainer(): CliContainer {
   const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
-  const collectors = loadFixtureCollectors();
+  // watch가 같은 Collector를 매 tick 다시 부를 때 변경 없는 RawItem까지 재분석하지
+  // 않도록 감싼다(IncrementalCollector 주석 참고). screenCollector는 일부러 안 감싼다 —
+  // advise --screen은 매번 "지금" 활동 스냅샷을 원하지 "지난번과 다를 때만"이 아니다.
+  const rawItemSyncService = new RawItemSyncService(new InMemoryRawItemRepository());
+  const collectors = loadFixtureCollectors()
+    .map((collector) => new IncrementalCollector(collector, rawItemSyncService));
   const screenCollector = loadScreenCollector();
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동

@@ -11,6 +11,16 @@ export interface WatchLoopOptions {
   maxIterations?: number;
   signal?: AbortSignal;
   onTick?: (result: WatchTickResult, iteration: number) => void;
+  // true(기본)면 매 tick 결과를 배열로 모아 반환한다. 무한히(또는 아주 오래) 도는
+  // 실행에선 false로 둬서 메모리가 tick 수에 비례해 계속 자라지 않게 한다(팀 리뷰
+  // 지적) — tickCount/totalNotified 요약은 keepResults와 무관하게 항상 정확하다.
+  keepResults?: boolean;
+}
+
+export interface WatchLoopSummary {
+  results: WatchTickResult[];
+  tickCount: number;
+  totalNotified: number;
 }
 
 async function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -31,24 +41,27 @@ async function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
 export async function runWatchLoop(
   container: CliContainer,
   options: WatchLoopOptions,
-): Promise<WatchTickResult[]> {
+): Promise<WatchLoopSummary> {
   const now = options.now ?? (() => new Date());
   const sleep = options.sleep ?? defaultSleep;
   const maxIterations = options.maxIterations ?? Number.POSITIVE_INFINITY;
+  const keepResults = options.keepResults ?? true;
   const results: WatchTickResult[] = [];
+  let tickCount = 0;
+  let totalNotified = 0;
 
-  let iteration = 0;
   for (;;) {
     const result = await runWatchTick(container, now());
-    results.push(result);
-    iteration += 1;
-    options.onTick?.(result, iteration);
+    tickCount += 1;
+    totalNotified += result.notified.length;
+    if (keepResults) results.push(result);
+    options.onTick?.(result, tickCount);
 
-    if (iteration >= maxIterations || (options.signal?.aborted ?? false)) break;
+    if (tickCount >= maxIterations || (options.signal?.aborted ?? false)) break;
 
     await sleep(options.intervalMs, options.signal);
     if (options.signal?.aborted ?? false) break;
   }
 
-  return results;
+  return { results, tickCount, totalNotified };
 }
