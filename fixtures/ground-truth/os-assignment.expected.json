@@ -1,0 +1,14 @@
+{
+  "id": "os-assignment-single",
+  "description": "LMS 과제 공지 하나가 마감이 있는 Task 하나로 추출되어야 한다.",
+  "inputRawItemIds": ["raw-lms-001"],
+  "expectedContextItems": [
+    {
+      "title": "운영체제 과제 3",
+      "kind": "task",
+      "deadline": "2026-07-22T23:59:00+09:00",
+      "evidenceCount": 1
+    }
+  ],
+  "expectedMerges": []
+}

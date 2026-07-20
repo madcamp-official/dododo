@@ -1,4 +1,6 @@
+export * from "./benchmark.ts";
 export * from "./groundTruth.ts";
+export * from "./mergeAccuracy.ts";
 
 export interface BinaryMetrics {
   precision: number;
