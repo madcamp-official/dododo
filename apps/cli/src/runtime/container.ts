@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ import {
 } from "../../../../packages/context-engine/src/index.ts";
 import {
   captureActiveScreen,
+  createSourceCollectors,
   JsonFixtureCollector,
   ScreenCollector,
   type ScreenCaptureResult,
@@ -20,6 +21,9 @@ import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler
 import {
   InMemoryContextRepository,
   InMemoryRawItemRepository,
+  openContextDatabase,
+  SQLiteContextRepository,
+  SQLiteRawItemRepository,
 } from "../../../../packages/storage/src/index.ts";
 import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
 import type {
@@ -34,9 +38,11 @@ import type {
 } from "../../../../packages/shared/src/index.ts";
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { resolveDbPath } from "./dbConfig.ts";
 import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
 import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
 import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
+import { loadSourceInputConfig } from "./sourceInputConfig.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -84,6 +90,18 @@ export interface CliContainer {
   // doctor가 provider 내부(private baseUrl/model)를 안 건드리고 상태 문구를 만들 수 있게
   // llmProvider와 같은 소스(resolveLlmConfig)에서 뽑은 설정을 그대로 노출한다.
   llmConfig: LlmConfig | undefined;
+  // DODODO_DB_PATH 미설정이면 undefined(InMemory 저장소 사용 중) — doctor가 표시한다.
+  dbPath: string | undefined;
+  // 실제 Source 설정 파일(dododo.sources.json류)을 찾았으면 그 경로, 없으면 undefined
+  // (Fixture Collector로 폴백 중이라는 뜻) — doctor가 표시한다.
+  sourcesConfigPath: string | undefined;
+  // 설정 파일은 있는데 파싱·검증에 실패했을 때의 사유. 이 경우에도 CLI 전체를
+  // 죽이지 않고 Fixture로 폴백하되(AGENTS.md: 한 Source의 실패가 전체를 막지 않음),
+  // doctor가 원인을 보여줘야 조용히 묻히지 않는다.
+  sourcesConfigError: string | undefined;
+  // SQLite를 열었으면 프로세스 종료 전에 파일 잠금을 풀기 위해 명시적으로 닫는다.
+  // InMemory면 아무 것도 하지 않는다. index.ts가 모든 명령 경로에서 호출한다.
+  close: () => void;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -121,19 +139,53 @@ function loadScreenCollector(): Collector {
   return new ScreenCollector("screen-manual", fixturePaths);
 }
 
-export function createCliContainer(): CliContainer {
-  const repository = new InMemoryContextRepository();
+export function createCliContainer(env: NodeJS.ProcessEnv = process.env): CliContainer {
+  // DODODO_DB_PATH 미설정이면(.env 기본 상태) 기존 InMemory 그대로 — 회귀 없음.
+  // 설정돼 있으면 같은 SQLite 커넥션을 ContextRepository·RawItemRepository 양쪽에
+  // 공유한다 — 커넥션이 갈리면 saveRawItemAnalysis의 canonical RawItem ID 보정이
+  // 서로 다른 raw_items 테이블 뷰를 보게 돼 깨진다(PR #32 계약 전제).
+  const dbPath = resolveDbPath(env);
+  let repository: ContextRepository;
+  let rawItemRepository: RawItemRepository;
+  let close: () => void;
+  if (dbPath === undefined) {
+    repository = new InMemoryContextRepository();
+    rawItemRepository = new InMemoryRawItemRepository();
+    close = () => {};
+  } else {
+    mkdirSync(dirname(dbPath), { recursive: true });
+    const database = openContextDatabase(dbPath);
+    repository = new SQLiteContextRepository(database);
+    rawItemRepository = new SQLiteRawItemRepository(database);
+    close = () => database.close();
+  }
+
   const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
-  // sync/watch가 syncIncrementally로 이 저장소를 써서 변경 없는 RawItem은 재분석을
-  // 건너뛴다. screenCollector는 여기 관여하지 않는다 — advise --screen은 매번
-  // "지금" 활동 스냅샷을 원하지 "지난번과 다를 때만"이 아니다.
-  const rawItemRepository = new InMemoryRawItemRepository();
-  const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
   const llmConfig = resolveLlmConfig();
   const llmProvider = createLlmProvider();
+
+  // Source 설정 파일(dododo.sources.json류)이 있으면 실제 Collector를, 없으면 기존
+  // Fixture Collector를 쓴다(DODODO_DB_PATH와 같은 "설정 없으면 데모 모드" 패턴).
+  // 파일이 있는데 파싱·검증에 실패하면 CLI 전체를 죽이지 않고 Fixture로 폴백한다 —
+  // 대신 doctor가 사유를 보여줄 수 있게 sourcesConfigError에 남긴다.
+  let collectors: Collector[];
+  let sourcesConfigPath: string | undefined;
+  let sourcesConfigError: string | undefined;
+  try {
+    const loaded = loadSourceInputConfig(env);
+    if (loaded === undefined) {
+      collectors = loadFixtureCollectors();
+    } else {
+      collectors = createSourceCollectors(loaded.config);
+      sourcesConfigPath = loaded.path;
+    }
+  } catch (error) {
+    collectors = loadFixtureCollectors();
+    sourcesConfigError = error instanceof Error ? error.message : String(error);
+  }
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
   // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
@@ -198,6 +250,10 @@ export function createCliContainer(): CliContainer {
     llmProvider,
     privacyGateway,
     llmConfig,
+    dbPath,
+    sourcesConfigPath,
+    sourcesConfigError,
+    close,
   };
 }
 

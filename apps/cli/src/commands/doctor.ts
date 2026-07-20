@@ -17,7 +17,8 @@ export async function renderDoctor(
     `Node: ${process.version}`,
     `Runtime: ${process.platform}/${process.arch}`,
     `Commands: ${ready} ready, ${skeleton} skeleton`,
-    "Storage: in-memory scaffold (SQLite pending)",
+    renderStorageStatus(container),
+    renderSourcesStatus(container),
     await renderLlmStatus(container, fetchImpl),
     "",
     renderSourceStatus(container),
@@ -41,4 +42,19 @@ async function renderLlmStatus(container: CliContainer, fetchImpl: typeof fetch)
     const reason = error instanceof Error ? error.message : String(error);
     return `${base} · 연결 실패(${reason})`;
   }
+}
+
+function renderStorageStatus(container: CliContainer): string {
+  return container.dbPath === undefined
+    ? "Storage: in-memory (DODODO_DB_PATH 없음)"
+    : `Storage: SQLite (${container.dbPath})`;
+}
+
+function renderSourcesStatus(container: CliContainer): string {
+  if (container.sourcesConfigError !== undefined) {
+    return `Sources: 설정 오류 — Fixture로 폴백 중 (${container.sourcesConfigError})`;
+  }
+  return container.sourcesConfigPath === undefined
+    ? "Sources: Fixture 데모 (DODODO_SOURCES_CONFIG_PATH 없음)"
+    : `Sources: 실제 설정 사용 중 (${container.sourcesConfigPath})`;
 }

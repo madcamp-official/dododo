@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
+dododo.sources.json
+data/
 *.db
 *.db-shm
 *.db-wal

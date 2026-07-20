@@ -23,60 +23,66 @@ async function main(): Promise<void> {
 
   const container = createCliContainer();
 
-  if (command === "doctor") {
-    console.log(await renderDoctor(container));
-    return;
-  }
-  if (command === "setup") {
-    console.log(await runSetup(container));
-    return;
-  }
-  if (command === "sync") {
-    console.log(await runSync(container));
-    return;
-  }
-  if (command === "inbox") {
-    console.log(await renderInbox(container));
-    return;
-  }
-  if (command === "today") {
-    console.log(await renderToday(container));
-    return;
-  }
-  if (command === "task") {
-    console.log(await runTask(container, process.argv.slice(3)));
-    return;
-  }
-  if (command === "watch") {
-    console.log(await runWatch(container, process.argv.slice(3)));
-    return;
-  }
-  if (command === "screen") {
-    console.log(await runScreen(container));
-    return;
-  }
-  if (command === "advise") {
-    console.log(await runAdvise(container, process.argv.slice(3)));
-    return;
-  }
-  if (command === "ask") {
-    console.log(await runAsk(container, process.argv.slice(3)));
-    return;
-  }
-  if (command === "add") {
-    console.log(await runAdd(container, process.argv.slice(3)));
-    return;
-  }
+  // SQLite를 열었으면(DODODO_DB_PATH 설정) 명령이 어떻게 끝나든(정상·오류·watch의
+  // SIGINT 종료 전부) 파일 잠금을 풀어야 다음 실행이 곧바로 붙을 수 있다.
+  try {
+    if (command === "doctor") {
+      console.log(await renderDoctor(container));
+      return;
+    }
+    if (command === "setup") {
+      console.log(await runSetup(container));
+      return;
+    }
+    if (command === "sync") {
+      console.log(await runSync(container));
+      return;
+    }
+    if (command === "inbox") {
+      console.log(await renderInbox(container));
+      return;
+    }
+    if (command === "today") {
+      console.log(await renderToday(container));
+      return;
+    }
+    if (command === "task") {
+      console.log(await runTask(container, process.argv.slice(3)));
+      return;
+    }
+    if (command === "watch") {
+      console.log(await runWatch(container, process.argv.slice(3)));
+      return;
+    }
+    if (command === "screen") {
+      console.log(await runScreen(container));
+      return;
+    }
+    if (command === "advise") {
+      console.log(await runAdvise(container, process.argv.slice(3)));
+      return;
+    }
+    if (command === "ask") {
+      console.log(await runAsk(container, process.argv.slice(3)));
+      return;
+    }
+    if (command === "add") {
+      console.log(await runAdd(container, process.argv.slice(3)));
+      return;
+    }
 
-  const definition = commandCatalog.find((candidate) => candidate.name === command);
+    const definition = commandCatalog.find((candidate) => candidate.name === command);
 
-  if (definition === undefined) {
-    console.error(`알 수 없는 명령입니다: ${command}`);
-    console.error("사용 가능한 명령은 `npm start -- help`로 확인하세요.");
-    process.exitCode = 1;
-  } else {
-    console.log(`${definition.name}: 스켈레톤만 생성된 명령입니다.`);
-    console.log(`담당 영역: ${definition.owner}`);
+    if (definition === undefined) {
+      console.error(`알 수 없는 명령입니다: ${command}`);
+      console.error("사용 가능한 명령은 `npm start -- help`로 확인하세요.");
+      process.exitCode = 1;
+    } else {
+      console.log(`${definition.name}: 스켈레톤만 생성된 명령입니다.`);
+      console.log(`담당 영역: ${definition.owner}`);
+    }
+  } finally {
+    container.close();
   }
 }
 
