@@ -49,7 +49,11 @@ function countOverlap(profileValues: string[], signals: Set<string>): number {
 // 판단 근거가 없으므로 위반으로 처리하지 않는다(애매 → 노출).
 function violatesEligibility(item: ContextItem, profile: UserProfile): boolean {
   const haystack = [...item.requirements, item.title].join(" ");
-  const isUndergraduate = /학부|학사|대학생/.test(profile.year) || /학부|학사|대학생/.test(profile.school);
+  const academicText = `${profile.year} ${profile.school}`;
+  const explicitlyGraduate = /대학원|석사|박사/.test(academicText);
+  const ordinaryYear = /(?:^|\s)[1-6]\s*학년(?:\s|$)/.test(profile.year);
+  const isUndergraduate = !explicitlyGraduate
+    && (/학부|학사|대학생/.test(academicText) || ordinaryYear);
 
   if (isUndergraduate && /대학원생\s*(만|한정|대상)|석사\s*(만|이상)|졸업생\s*(만|한정|대상)/.test(haystack)) {
     return true;
