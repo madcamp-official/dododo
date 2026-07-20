@@ -73,6 +73,7 @@ test("setup saves a profile collected from scripted stdin", async () => {
     "AI, 해커톤",
     "온라인",
     "서울",
+    "",
   ]));
   const output = discardOutput();
 
@@ -82,4 +83,46 @@ test("setup saves a profile collected from scripted stdin", async () => {
   const profile = await container.profileRepository.get();
   assert.equal(profile?.school, "테스트대학교");
   assert.deepEqual(profile?.interests, ["AI", "해커톤"]);
+  assert.equal(profile?.quietHours, undefined);
+});
+
+test("setup saves quietHours when both times are valid", async () => {
+  const container = createCliContainer();
+  const input = Readable.from(pacedLines([
+    "테스트대학교",
+    "컴퓨터공학",
+    "3학년",
+    "AI, 해커톤",
+    "온라인",
+    "서울",
+    "22:00",
+    "07:00",
+  ]));
+  const output = discardOutput();
+
+  const summary = await runSetup(container, { input, output });
+  assert.doesNotMatch(summary, /Quiet Hours를 설정하지 않았습니다/);
+
+  const profile = await container.profileRepository.get();
+  assert.deepEqual(profile?.quietHours, { start: "22:00", end: "07:00" });
+});
+
+test("setup skips quietHours and warns when the start time is malformed", async () => {
+  const container = createCliContainer();
+  const input = Readable.from(pacedLines([
+    "테스트대학교",
+    "컴퓨터공학",
+    "3학년",
+    "AI, 해커톤",
+    "온라인",
+    "서울",
+    "25:99",
+  ]));
+  const output = discardOutput();
+
+  const summary = await runSetup(container, { input, output });
+  assert.match(summary, /Quiet Hours를 설정하지 않았습니다/);
+
+  const profile = await container.profileRepository.get();
+  assert.equal(profile?.quietHours, undefined);
 });

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { runScreen } from "../apps/cli/src/commands/screen.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
+import { captureActiveScreen } from "../packages/collectors/src/screen/capture.ts";
 import { ScreenCollector } from "../packages/collectors/src/screen/index.ts";
 import { parseScreenFixture, toRawItem } from "../packages/collectors/src/screen/transform.ts";
 
@@ -71,4 +72,25 @@ test("runScreen은 fixtures/screen을 privacy allowlist 오류 없이 동기화�
   assert.match(output, /수집 1/);
   assert.doesNotMatch(output, /Source is not allowed/);
   assert.doesNotMatch(output, /오류:/);
+});
+
+test("captureActiveScreen은 주입된 runner의 바이트를 base64로 감싼다", async () => {
+  const fakeBytes = Buffer.from("fake-png-bytes");
+  const result = await captureActiveScreen(
+    async () => fakeBytes,
+    () => new Date("2026-07-20T10:00:00+09:00"),
+  );
+
+  assert.equal(result.byteLength, fakeBytes.byteLength);
+  assert.equal(result.imageBase64, fakeBytes.toString("base64"));
+  assert.equal(result.capturedAt.toISOString(), new Date("2026-07-20T10:00:00+09:00").toISOString());
+});
+
+test("captureActiveScreen은 runner 실패를 그대로 전파한다", async () => {
+  await assert.rejects(
+    () => captureActiveScreen(async () => {
+      throw new Error("캡처 명령 실패");
+    }),
+    /캡처 명령 실패/,
+  );
 });

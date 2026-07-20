@@ -1,6 +1,6 @@
 import type { CliContainer } from "../runtime/container.ts";
 
-const USAGE = "사용법: dododo advise --screen";
+const USAGE = "사용법: dododo advise --screen [--live]";
 
 // user-scenarios.md Scenario 5: 화면 일시 캡처 → 활동 요약 → 관련 Task 탐색 →
 // 조언 또는 거절 렌더링 → 원본 캡처 삭제. screenCollector.sync()를 직접 호출하고
@@ -13,6 +13,10 @@ export async function runAdvise(
 ): Promise<string> {
   if (!args.includes("--screen")) {
     return `advise는 현재 --screen만 지원합니다.\n${USAGE}`;
+  }
+
+  if (args.includes("--live")) {
+    return runLiveCapture(container);
   }
 
   const [activity] = await container.screenCollector.sync();
@@ -35,4 +39,24 @@ export async function runAdvise(
     lines.push(`근거: ${decision.evidenceIds.join(", ")}`);
   }
   return lines.join("\n");
+}
+
+// 실제 픽셀 캡처는 Windows에서 동작하지만 Vision 분석이 아직 어디에도 연결되지
+// 않아(docs/llm-architecture.md §3) 이미지를 활동 요약으로 바꿀 방법이 없다.
+// 그래서 지금은 캡처 성공/실패만 정직하게 보고하고 이미지 바이트는 여기서 스코프를
+// 벗어나며 버려진다 — 로그에도, 어디에도 남기지 않는다.
+// TODO(screen-capture-v2): Vision 분석이 붙으면 capture.imageBase64를 그쪽에 넘기고
+// 이 함수를 지우거나 위 fixture 경로와 합친다.
+async function runLiveCapture(container: CliContainer): Promise<string> {
+  try {
+    const capture = await container.captureLiveScreen();
+    return [
+      "실시간 화면 캡처 완료.",
+      `크기: ${capture.byteLength} bytes, 시각: ${capture.capturedAt.toISOString()}`,
+      "Vision 분석이 아직 연결되지 않아 활동 요약과 조언은 생성할 수 없습니다.",
+    ].join("\n");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return `실시간 화면 캡처에 실패했습니다: ${reason}`;
+  }
 }

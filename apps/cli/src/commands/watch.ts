@@ -1,10 +1,11 @@
+import { WindowsOsNotifier } from "../../../../packages/scheduler/src/index.ts";
 import type { CliContainer } from "../runtime/container.ts";
 import { runWatchLoop } from "../runtime/watchLoop.ts";
 import type { WatchTickResult } from "../runtime/watchTick.ts";
 
-const USAGE = "사용법: dododo watch [--loop] [--interval <seconds>]";
+const USAGE = "사용법: dododo watch [--loop] [--interval <seconds>] [--os-notify]";
 const DEFAULT_INTERVAL_SECONDS = 300;
-const KNOWN_FLAGS = new Set(["--loop", "--interval"]);
+const KNOWN_FLAGS = new Set(["--loop", "--interval", "--os-notify"]);
 
 // docs/architecture.md: "MVP, 실제 데몬 아님" — 기본은 1회 실행이고, 계속 도는
 // 것은 --loop를 명시했을 때만이다. --loop일 땐 여러 실제 tick에 걸쳐 시간이
@@ -31,13 +32,19 @@ export async function runWatch(
     return `알 수 없는 옵션입니다: ${unknownFlag}\n${USAGE}`;
   }
 
+  // container를 그대로 변형하지 않고 notifier만 교체한 얕은 복사본을 쓴다 —
+  // 호출자가 넘긴 container 객체를 이 함수가 몰래 바꿔놓지 않기 위함이다.
+  const effectiveContainer = args.includes("--os-notify")
+    ? { ...container, notifier: new WindowsOsNotifier() }
+    : container;
+
   const controller = new AbortController();
   const onSigint = (): void => controller.abort();
   process.on("SIGINT", onSigint);
 
   const lines: string[] = [];
   try {
-    const results = await runWatchLoop(container, {
+    const results = await runWatchLoop(effectiveContainer, {
       intervalMs: intervalSeconds * 1000,
       maxIterations: loop ? undefined : 1,
       signal: controller.signal,

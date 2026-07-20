@@ -131,3 +131,16 @@ test("runWatch는 잘못된 --interval 값을 거부한다", async () => {
   const output = await runWatch(container, ["--interval", "0"]);
   assert.match(output, /--interval은 0보다 큰 초 단위 숫자여야 합니다/);
 });
+
+test("runWatch --os-notify는 알 수 없는 옵션으로 처리되지 않는다", async () => {
+  // 실제 WindowsOsNotifier.send()가 호출되면 진짜 PowerShell 알림을 띄우려 하므로,
+  // 이미 30분 dedup으로 알림이 하나도 안 나가는 두 번째 tick에서만 --os-notify를 써서
+  // 플래그 인식만 검증하고 실제 알림 발송 경로는 타지 않게 한다.
+  const container = createCliContainer();
+  await runWatch(container, []);
+
+  const output = await runWatch(container, ["--os-notify"]);
+
+  assert.doesNotMatch(output, /알 수 없는 옵션/);
+  assert.match(output, /Watch 종료/);
+});

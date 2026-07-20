@@ -100,6 +100,34 @@ test("runAdvise는 --screen이 없으면 사용법을 보여준다", async () =>
   assert.match(output, /사용법: dododo advise --screen/);
 });
 
+test("runAdvise --screen --live는 캡처 성공 시 Vision 미연결 안내를 반환한다", async () => {
+  const container = createCliContainer();
+  container.captureLiveScreen = async () => ({
+    capturedAt: new Date("2026-07-20T10:00:00+09:00"),
+    byteLength: 12345,
+    imageBase64: "fake",
+  });
+
+  const output = await runAdvise(container, ["--screen", "--live"]);
+
+  assert.match(output, /실시간 화면 캡처 완료/);
+  assert.match(output, /12345 bytes/);
+  assert.match(output, /Vision 분석이 아직 연결되지 않아/);
+  assert.doesNotMatch(output, /fake/);
+});
+
+test("runAdvise --screen --live는 캡처 실패를 명확한 오류로 보여준다", async () => {
+  const container = createCliContainer();
+  container.captureLiveScreen = async () => {
+    throw new Error("실제 화면 캡처는 현재 Windows만 지원합니다 (현재 플랫폼: linux)");
+  };
+
+  const output = await runAdvise(container, ["--screen", "--live"]);
+
+  assert.match(output, /실시간 화면 캡처에 실패했습니다/);
+  assert.match(output, /Windows만 지원/);
+});
+
 test("relatedTaskCandidate가 없으면 거절한다", async () => {
   const decision = await defaultScreenAdvicePolicy.evaluate({
     activity: screenActivity({ metadata: { confidence: 0.9 } }),

@@ -4,6 +4,7 @@ import type { RawItem } from "../../../shared/src/index.ts";
 import { BaseCollector } from "../base.ts";
 import { parseScreenFixture, toRawItem } from "./transform.ts";
 
+export * from "./capture.ts";
 export * from "./transform.ts";
 
 // 지금은 다른 세 Collector와 같은 단계(fixture-first)다. 나중에 실제 화면 캡처로

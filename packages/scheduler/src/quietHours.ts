@@ -43,6 +43,11 @@ export function nextQuietHoursEnd(
   return zonedDate(parts.year, parts.month, parts.day, dayOffset, window.endMinutes, timeZone, now);
 }
 
+// setup 같은 입력 단계에서 "HH:mm" 형식을 즉시 검증할 때 쓴다(parseHHMM 재사용).
+export function isValidClockTime(value: string): boolean {
+  return parseHHMM(value) !== undefined;
+}
+
 function parseWindow(quietHours: UserProfile["quietHours"]): QuietWindow | undefined {
   if (quietHours === undefined) return undefined;
   const startMinutes = parseHHMM(quietHours.start);

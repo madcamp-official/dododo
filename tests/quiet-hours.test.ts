@@ -3,7 +3,12 @@ import test from "node:test";
 
 import type { Recommendation } from "../packages/shared/src/index.ts";
 import { emptyProfile } from "../apps/cli/src/runtime/container.ts";
-import { gateNotification, isWithinQuietHours, nextQuietHoursEnd } from "../packages/scheduler/src/index.ts";
+import {
+  gateNotification,
+  isValidClockTime,
+  isWithinQuietHours,
+  nextQuietHoursEnd,
+} from "../packages/scheduler/src/index.ts";
 
 function profileWithQuietHours(start: string, end: string) {
   return { ...emptyProfile(), quietHours: { start, end } };
@@ -98,4 +103,14 @@ test("gateNotification은 Quiet Hours 밖이면 그대로 통과시킨다", () =
 test("gateNotification은 quietHours 미설정 profile에서 항상 통과시킨다", () => {
   const result = gateNotification(sampleRecommendation(), emptyProfile(), new Date("2026-07-20T23:00:00+09:00"));
   assert.equal(result.send, true);
+});
+
+test("isValidClockTime은 HH:mm 형식만 허용한다", () => {
+  assert.equal(isValidClockTime("22:00"), true);
+  assert.equal(isValidClockTime("00:00"), true);
+  assert.equal(isValidClockTime("23:59"), true);
+  assert.equal(isValidClockTime("25:99"), false);
+  assert.equal(isValidClockTime("9:00"), false);
+  assert.equal(isValidClockTime("abc"), false);
+  assert.equal(isValidClockTime(""), false);
 });

@@ -7,7 +7,12 @@ import {
   DeterministicContextResolver,
   RuleBasedRecommendationEngine,
 } from "../../../../packages/context-engine/src/index.ts";
-import { JsonFixtureCollector, ScreenCollector } from "../../../../packages/collectors/src/index.ts";
+import {
+  captureActiveScreen,
+  JsonFixtureCollector,
+  ScreenCollector,
+  type ScreenCaptureResult,
+} from "../../../../packages/collectors/src/index.ts";
 import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
@@ -51,6 +56,10 @@ export interface CliContainer {
   screenCollector: Collector;
   // Context Intelligence의 실제 조언 정책이 이 필드를 교체해 넣는 연결 지점.
   screenAdvicePolicy: ScreenAdvicePolicy;
+  // 실제 픽셀 캡처(Windows만 지원, 실패 시 명확한 오류). 테스트가 실제 OS 캡처를
+  // 안 타도록 여기서 주입 지점을 둔다 — school-site HTTP Loader의 fetchImplementation과
+  // 같은 이유(환경 의존 없는 테스트).
+  captureLiveScreen: () => Promise<ScreenCaptureResult>;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -121,6 +130,7 @@ export function createCliContainer(): CliContainer {
     collectors,
     screenCollector,
     screenAdvicePolicy: defaultScreenAdvicePolicy,
+    captureLiveScreen: () => captureActiveScreen(),
   };
 }
 
