@@ -1,5 +1,6 @@
 export * from "./base.ts";
 export * from "./calendar/index.ts";
+export * from "./config/index.ts";
 export * from "./files/index.ts";
 export * from "./fixtures/index.ts";
 export * from "./integration.ts";
