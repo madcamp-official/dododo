@@ -11,6 +11,10 @@ export interface WatchLoopOptions {
   maxIterations?: number;
   signal?: AbortSignal;
   onTick?: (result: WatchTickResult, iteration: number) => void;
+  // 한 tick(profile/context/recommendation/history/notifier 등)이 예외를 던지면
+  // 그 tick만 실패로 기록하고 다음 interval로 넘어간다 — watch는 오래 켜두는
+  // 프로세스라 tick 하나의 일시 오류로 전체가 죽으면 안 된다(팀 리뷰 지적).
+  onTickError?: (error: unknown, iteration: number) => void;
   // true(기본)면 매 tick 결과를 배열로 모아 반환한다. 무한히(또는 아주 오래) 도는
   // 실행에선 false로 둬서 메모리가 tick 수에 비례해 계속 자라지 않게 한다(팀 리뷰
   // 지적) — tickCount/totalNotified 요약은 keepResults와 무관하게 항상 정확하다.
@@ -21,6 +25,7 @@ export interface WatchLoopSummary {
   results: WatchTickResult[];
   tickCount: number;
   totalNotified: number;
+  tickErrorCount: number;
 }
 
 async function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -49,13 +54,19 @@ export async function runWatchLoop(
   const results: WatchTickResult[] = [];
   let tickCount = 0;
   let totalNotified = 0;
+  let tickErrorCount = 0;
 
   for (;;) {
-    const result = await runWatchTick(container, now());
     tickCount += 1;
-    totalNotified += result.notified.length;
-    if (keepResults) results.push(result);
-    options.onTick?.(result, tickCount);
+    try {
+      const result = await runWatchTick(container, now());
+      totalNotified += result.notified.length;
+      if (keepResults) results.push(result);
+      options.onTick?.(result, tickCount);
+    } catch (error) {
+      tickErrorCount += 1;
+      options.onTickError?.(error, tickCount);
+    }
 
     if (tickCount >= maxIterations || (options.signal?.aborted ?? false)) break;
 
@@ -63,5 +74,5 @@ export async function runWatchLoop(
     if (options.signal?.aborted ?? false) break;
   }
 
-  return { results, tickCount, totalNotified };
+  return { results, tickCount, totalNotified, tickErrorCount };
 }

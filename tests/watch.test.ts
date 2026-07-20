@@ -166,6 +166,35 @@ test("runWatchLoop은 keepResults:false면 results를 안 쌓고 요약만 정�
   assert.ok(summary.totalNotified >= 0);
 });
 
+test("runWatchLoop은 tick 하나가 예외를 던져도 다음 tick으로 계속 진행한다", async () => {
+  const container = createCliContainer();
+  let calls = 0;
+  container.profileRepository = {
+    async get() {
+      calls += 1;
+      if (calls === 1) throw new Error("일시적 오류");
+      return undefined;
+    },
+    async save() {},
+  };
+
+  const tickErrors: Array<{ error: unknown; iteration: number }> = [];
+  const summary = await runWatchLoop(container, {
+    intervalMs: 0,
+    maxIterations: 2,
+    now: () => new Date("2026-07-20T10:00:00+09:00"),
+    sleep: async () => {},
+    onTickError: (error, iteration) => tickErrors.push({ error, iteration }),
+  });
+
+  assert.equal(summary.tickCount, 2, "실패한 tick도 카운트는 소모해야 함");
+  assert.equal(summary.tickErrorCount, 1);
+  assert.equal(tickErrors.length, 1);
+  assert.equal(tickErrors[0]?.iteration, 1);
+  assert.match((tickErrors[0]?.error as Error).message, /일시적 오류/);
+  assert.equal(summary.results.length, 1, "성공한 두 번째 tick만 results에 담겨야 함");
+});
+
 test("runWatch --once는 즉시 끝나고 tick 진행 상황을 console.log로 찍는다", async () => {
   const container = createCliContainer();
   const logged = captureConsoleLog();
@@ -211,6 +240,12 @@ test("runWatch는 잘못된 --interval 값을 거부한다", async () => {
   const container = createCliContainer();
   const output = await runWatch(container, ["--interval", "0"]);
   assert.match(output, /--interval은 0보다 큰 초 단위 숫자여야 합니다/);
+});
+
+test("runWatch는 Node 타이머 한계를 넘는 --interval을 거부한다", async () => {
+  const container = createCliContainer();
+  const output = await runWatch(container, ["--interval", "999999999999"]);
+  assert.match(output, /--interval은 .*초를 넘을 수 없습니다/);
 });
 
 test("runWatch --os-notify는 알 수 없는 옵션으로 처리되지 않는다", async () => {

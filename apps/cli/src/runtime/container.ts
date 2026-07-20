@@ -19,8 +19,8 @@ import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler
 import {
   InMemoryContextRepository,
   InMemoryRawItemRepository,
-  RawItemSyncService,
 } from "../../../../packages/storage/src/index.ts";
+import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
 import type {
   Collector,
   ContextRepository,
@@ -31,7 +31,6 @@ import type {
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
 import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
-import { IncrementalCollector } from "./incrementalCollector.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -52,6 +51,11 @@ export interface CliContainer {
   recommendationEngine: RecommendationEngine;
   syncStatus: SyncStatusStore;
   pipeline: ContextPipeline;
+  // sync/watch가 syncIncrementally(incrementalSync.ts)를 통해 변경 판정에 쓴다.
+  // 판정만 먼저 하고 커밋(save)은 pipeline 처리 성공 후에만 해야 실패한 항목이
+  // 다음 tick에 재시도된다 — 그래서 Collector를 감싸는 대신 이 저장소 자체를
+  // 공개해 호출부가 직접 순서를 통제하게 한다.
+  rawItemRepository: RawItemRepository;
   collectors: Collector[];
   // 화면 캡처는 의도적으로 collectors에 넣지 않는다: "변경분만 동기화"라는
   // 주기 폴링 개념이 실시간 화면엔 안 맞고, AGENTS.md 최소수집 원칙상 사용자
@@ -107,12 +111,11 @@ export function createCliContainer(): CliContainer {
   const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
-  // watch가 같은 Collector를 매 tick 다시 부를 때 변경 없는 RawItem까지 재분석하지
-  // 않도록 감싼다(IncrementalCollector 주석 참고). screenCollector는 일부러 안 감싼다 —
-  // advise --screen은 매번 "지금" 활동 스냅샷을 원하지 "지난번과 다를 때만"이 아니다.
-  const rawItemSyncService = new RawItemSyncService(new InMemoryRawItemRepository());
-  const collectors = loadFixtureCollectors()
-    .map((collector) => new IncrementalCollector(collector, rawItemSyncService));
+  // sync/watch가 syncIncrementally로 이 저장소를 써서 변경 없는 RawItem은 재분석을
+  // 건너뛴다. screenCollector는 여기 관여하지 않는다 — advise --screen은 매번
+  // "지금" 활동 스냅샷을 원하지 "지난번과 다를 때만"이 아니다.
+  const rawItemRepository = new InMemoryRawItemRepository();
+  const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
@@ -137,6 +140,7 @@ export function createCliContainer(): CliContainer {
     recommendationEngine,
     syncStatus,
     pipeline,
+    rawItemRepository,
     collectors,
     screenCollector,
     screenAdvicePolicy: defaultScreenAdvicePolicy,

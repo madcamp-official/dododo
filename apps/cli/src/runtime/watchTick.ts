@@ -1,6 +1,7 @@
 import { gateNotification } from "../../../../packages/scheduler/src/index.ts";
 import type { Recommendation, SyncResult } from "../../../../packages/shared/src/index.ts";
 import { emptyProfile, type CliContainer } from "./container.ts";
+import { syncIncrementally } from "./incrementalSync.ts";
 import { isSnoozed } from "./snooze.ts";
 
 export interface WatchTickResult {
@@ -15,7 +16,7 @@ export interface WatchTickResult {
 export async function runWatchTick(container: CliContainer, now: Date): Promise<WatchTickResult> {
   const syncedSources: SyncResult[] = [];
   for (const collector of container.collectors) {
-    const result = await container.pipeline.sync(collector);
+    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
     container.syncStatus.record(result, now);
     syncedSources.push(result);
   }

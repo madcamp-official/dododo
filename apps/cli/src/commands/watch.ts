@@ -5,6 +5,10 @@ import type { WatchTickResult } from "../runtime/watchTick.ts";
 
 const USAGE = "사용법: dododo watch [--once] [--interval <seconds>] [--os-notify]";
 const DEFAULT_INTERVAL_SECONDS = 300;
+// Node 타이머(setTimeout 계열)는 지연을 32비트 부호 있는 정수(ms)로 다뤄
+// 2147483647ms(약 24.8일)를 넘으면 오버플로로 1ms로 바뀌어 즉시 실행된다.
+// 그 함정을 조용히 밟지 않도록 명시적으로 상한을 두고 거부한다(팀 리뷰 지적).
+const MAX_INTERVAL_SECONDS = Math.floor(2_147_483_647 / 1000);
 const KNOWN_FLAGS = new Set(["--once", "--interval", "--os-notify"]);
 
 // docs/architecture.md·docs/mvp-scope.md: watch 프로세스가 실행되는 동안 계속
@@ -26,6 +30,9 @@ export async function runWatch(
     const parsed = Number(intervalArg);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       return `--interval은 0보다 큰 초 단위 숫자여야 합니다: ${intervalArg}\n${USAGE}`;
+    }
+    if (parsed > MAX_INTERVAL_SECONDS) {
+      return `--interval은 ${MAX_INTERVAL_SECONDS}초를 넘을 수 없습니다(Node 타이머 한계): ${intervalArg}\n${USAGE}`;
     }
     intervalSeconds = parsed;
   }
@@ -56,9 +63,11 @@ export async function runWatch(
       signal: controller.signal,
       now: once ? () => now : () => new Date(),
       onTick: (result, iteration) => console.log(renderTickLine(result, iteration)),
+      onTickError: (error, iteration) => console.error(renderTickErrorLine(error, iteration)),
     });
 
-    return `Watch 종료: ${summary.tickCount}회 실행, 총 ${summary.totalNotified}건 알림`;
+    const errorSuffix = summary.tickErrorCount > 0 ? ` · tick 오류 ${summary.tickErrorCount}건` : "";
+    return `Watch 종료: ${summary.tickCount}회 실행, 총 ${summary.totalNotified}건 알림${errorSuffix}`;
   } finally {
     process.off("SIGINT", onSigint);
   }
@@ -69,6 +78,11 @@ function renderTickLine(result: WatchTickResult, iteration: number): string {
   const errorSuffix = errorCount > 0 ? ` · 오류 ${errorCount}건` : "";
   return `[tick ${iteration}] 동기화 ${result.syncedSources.length}개 · 알림 ${result.notified.length}건`
     + ` · Quiet Hours 보류 ${result.heldForQuietHours.length}건${errorSuffix}`;
+}
+
+function renderTickErrorLine(error: unknown, iteration: number): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  return `[tick ${iteration}] 오류로 이번 tick을 건너뜁니다: ${reason}`;
 }
 
 function findFlagValue(args: string[], flag: string): string | undefined {
