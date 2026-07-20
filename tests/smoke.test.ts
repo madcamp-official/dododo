@@ -975,3 +975,26 @@ test("마감과 무관한 고권위 Evidence가 낮은 권위의 최신 마감 �
     "마감을 뒷받침하는 근거끼리(observation vs observation, 최신 우선) 비교해 갱신돼야 한다",
   );
 });
+
+test("resolveWithEvidence는 주입된 now를 ContextItem·History 시각에 쓴다(시스템 시간 비의존)", async () => {
+  const resolver = new DeterministicContextResolver();
+  const injectedNow = "2026-07-18T09:00:00+09:00";
+  const rawItem: RawItem = {
+    id: "raw-time-1", sourceId: "lms", sourceType: "lms", uri: "u",
+    title: "과제", content: "과제 마감", contentHash: "h", observedAt: injectedNow, metadata: {},
+  };
+  const fact: Fact = {
+    id: "fact-time-1", rawItemId: "raw-time-1", kind: "task", subject: "과제",
+    value: "제출", eventTime: "2026-07-22T18:00:00+09:00", confidence: 0.9, evidenceText: "과제 마감",
+  };
+
+  const outcome = await resolver.resolveWithEvidence([fact], [], {
+    rawItemsById: new Map([["raw-time-1", rawItem]]),
+    existingEvidence: [],
+    now: injectedNow,
+  });
+
+  assert.equal(outcome.createdItems[0]?.createdAt, injectedNow);
+  assert.equal(outcome.createdItems[0]?.updatedAt, injectedNow);
+  assert.equal(outcome.history[0]?.changedAt, injectedNow, "변경 이력 changedAt이 주입된 now와 같아야 append-only 재분석이 멱등이 된다");
+});

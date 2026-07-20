@@ -19,6 +19,10 @@ export * from "./similarity.ts";
 export interface ResolveContext {
   rawItemsById: Map<string, RawItem>;
   existingEvidence: Evidence[];
+  // 이 분석의 기준 시각(ISO). ContextItem 생성/갱신 시각과 변경 이력 changedAt에
+  // 쓴다. 시스템 로컬 시간에 암묵적으로 의존하지 않기 위해 호출부(ContextPipeline)가
+  // RawItem의 관찰 시각을 주입한다(AGENTS.md). 지정하지 않으면 현재 시각으로 폴백한다.
+  now?: string;
 }
 
 export interface ResolveOutcome {
@@ -66,7 +70,7 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     existing: ContextItem[],
     context: ResolveContext,
   ): Promise<ResolveOutcome> {
-    const now = new Date().toISOString();
+    const now = context.now ?? new Date().toISOString();
     const createdItems: ContextItem[] = [];
     const updatedItems: ContextItem[] = [];
     const newEvidence: Evidence[] = [];
