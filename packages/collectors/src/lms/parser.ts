@@ -33,11 +33,17 @@ function selectValue(item: Cheerio<AnyNode>, selector?: string): string | undefi
 
 function resolveUri(sourceUri: string, link?: string): string {
   if (!link) return sourceUri;
+  let uri: URL;
   try {
-    return new URL(link, sourceUri).toString();
+    uri = new URL(link, sourceUri);
   } catch {
     throw new Error(`유효하지 않은 LMS 링크입니다: ${link}`);
   }
+
+  if (uri.protocol !== "http:" && uri.protocol !== "https:") {
+    throw new Error(`LMS 링크는 HTTP 또는 HTTPS여야 합니다: ${link}`);
+  }
+  return uri.toString();
 }
 
 export function parseLmsHtml(

@@ -85,6 +85,41 @@ test("잘못된 LMS 항목 하나를 격리하고 다음 항목 수집을 계속
   assert.equal(instance.listErrors()[0]?.itemIndex, 0);
 });
 
+test("LMS 상세 링크는 HTTP 또는 HTTPS만 허용하고 위험한 항목을 격리한다", async () => {
+  const input = {
+    html: `
+      <article class="notice" data-item-id="unsafe-script">
+        <h2 class="title">Script 링크</h2>
+        <a class="detail" href="javascript:alert('unsafe')">상세</a>
+      </article>
+      <article class="notice" data-item-id="unsafe-data">
+        <h2 class="title">Data 링크</h2>
+        <a class="detail" href="data:text/html,unsafe">상세</a>
+      </article>
+      <article class="notice" data-item-id="unsafe-file">
+        <h2 class="title">File 링크</h2>
+        <a class="detail" href="file:///etc/passwd">상세</a>
+      </article>
+      <article class="notice" data-item-id="safe-item">
+        <h2 class="title">정상 링크</h2>
+        <a class="detail" href="/courses/os/notices/safe">상세</a>
+      </article>
+    `,
+    sourceUri: "https://lms.school.example/dashboard",
+  };
+  const instance = collector(async () => [input]);
+
+  const items = await instance.sync();
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.externalId, "safe-item");
+  assert.equal(items[0]?.uri, "https://lms.school.example/courses/os/notices/safe");
+  assert.deepEqual(instance.listErrors().map((error) => error.itemIndex), [0, 1, 2]);
+  for (const error of instance.listErrors()) {
+    assert.match(error.message, /HTTP 또는 HTTPS/);
+  }
+});
+
 test("선택자와 일치하는 항목이 없는 문서 오류를 격리한다", async () => {
   const input = {
     html: "<html><body><p>점검 중입니다.</p></body></html>",
