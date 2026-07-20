@@ -30,6 +30,12 @@ test("container loads fixture-backed collectors for school-site, school-email an
   assert.deepEqual(sourceIds, ["lms-main", "school-email-main", "school-site-main"]);
 });
 
+test("container keeps screenCollector separate from the auto-synced collectors", () => {
+  const container = createCliContainer();
+  assert.equal(container.screenCollector.sourceType, "screen");
+  assert.equal(container.collectors.some((collector) => collector.sourceType === "screen"), false);
+});
+
 test("sync populates opportunities and tasks that inbox/today can render", async () => {
   const container = createCliContainer();
   const syncSummary = await runSync(container);

@@ -7,7 +7,7 @@ import {
   DeterministicContextResolver,
   RuleBasedRecommendationEngine,
 } from "../../../../packages/context-engine/src/index.ts";
-import { JsonFixtureCollector } from "../../../../packages/collectors/src/index.ts";
+import { JsonFixtureCollector, ScreenCollector } from "../../../../packages/collectors/src/index.ts";
 import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
@@ -21,6 +21,7 @@ import type {
   SourceType,
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
+import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -42,6 +43,14 @@ export interface CliContainer {
   syncStatus: SyncStatusStore;
   pipeline: ContextPipeline;
   collectors: Collector[];
+  // 화면 캡처는 의도적으로 collectors에 넣지 않는다: "변경분만 동기화"라는
+  // 주기 폴링 개념이 실시간 화면엔 안 맞고, AGENTS.md 최소수집 원칙상 사용자
+  // 모르게 화면을 주기적으로 캡처해선 안 되며, user-scenarios.md도 화면 조언을
+  // 명시적 사용자 액션(advise --screen)으로 서술한다. screen/advise 명령이
+  // 이 필드를 직접 사용한다.
+  screenCollector: Collector;
+  // Context Intelligence의 실제 조언 정책이 이 필드를 교체해 넣는 연결 지점.
+  screenAdvicePolicy: ScreenAdvicePolicy;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -65,20 +74,42 @@ function loadFixtureCollectors(): Collector[] {
   return collectors;
 }
 
+function loadScreenCollector(): Collector {
+  const dirPath = join(repoRoot, "fixtures", "screen");
+  let fixturePaths: string[];
+  try {
+    fixturePaths = readdirSync(dirPath)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => join(dirPath, name));
+  } catch {
+    fixturePaths = [];
+  }
+
+  return new ScreenCollector("screen-manual", fixturePaths);
+}
+
 export function createCliContainer(): CliContainer {
   const repository = new InMemoryContextRepository();
   const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
-  const recommendationEngine = new RuleBasedRecommendationEngine();
   const syncStatus = new SyncStatusStore();
   const collectors = loadFixtureCollectors();
+  const screenCollector = loadScreenCollector();
 
+  // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
+  // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
+  // "Source is not allowed: screen"으로 조용히 막히지 않는다.
   const pipeline = new ContextPipeline({
     repository,
-    privacyGateway: new AllowlistPrivacyGateway(collectors.map((collector) => collector.sourceType)),
+    privacyGateway: new AllowlistPrivacyGateway(
+      [...collectors, screenCollector].map((collector) => collector.sourceType),
+    ),
     factExtractor: new TempHeuristicFactExtractor(),
     contextResolver: new DeterministicContextResolver(),
   });
+  // watch가 저장한 알림 이력(evidenceStore)을 재알림 dedup(30분 억제)에 그대로 재사용한다.
+  // watch를 한 번도 안 돌렸으면 listRecommendations()가 빈 배열이라 today/inbox 동작은 그대로다.
+  const recommendationEngine = new RuleBasedRecommendationEngine({ history: pipeline.evidenceStore });
 
   return {
     repository,
@@ -88,6 +119,8 @@ export function createCliContainer(): CliContainer {
     syncStatus,
     pipeline,
     collectors,
+    screenCollector,
+    screenAdvicePolicy: defaultScreenAdvicePolicy,
   };
 }
 
