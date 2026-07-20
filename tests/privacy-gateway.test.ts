@@ -23,16 +23,23 @@ function rawItem(overrides: Partial<RawItem> = {}): RawItem {
   };
 }
 
-test("maskSensitiveText는 전화번호·학번·개인 이메일을 가리고 학교 도메인은 보존한다", () => {
-  const text = "문의 010-1234-5678, 학번 20231234, 개인 hong@gmail.com, 공식 support@school.ac.kr";
-  const masked = maskSensitiveText(text, { allowedEmailDomains: ["school.ac.kr"] });
+test("maskSensitiveText는 개인정보를 가리고 정확히 허용한 공식 이메일만 보존한다", () => {
+  const text = "문의 010-1234-5678, 학번 20231234, 개인 hong@gmail.com, 학생 student@school.ac.kr, 공식 support@school.ac.kr";
+  const masked = maskSensitiveText(text, {
+    allowedEmailAddresses: ["support@school.ac.kr"],
+  });
 
   assert.match(masked, /\[전화번호\]/);
   assert.match(masked, /\[학번\]/);
   assert.match(masked, /\[이메일\]/);
   assert.doesNotMatch(masked, /010-1234-5678/);
   assert.doesNotMatch(masked, /hong@gmail\.com/);
-  assert.match(masked, /support@school\.ac\.kr/, "학교 공식 도메인 이메일은 보존해야 한다");
+  assert.doesNotMatch(masked, /student@school\.ac\.kr/);
+  assert.match(masked, /support@school\.ac\.kr/, "명시적으로 허용한 공식 주소만 보존해야 한다");
+});
+
+test("maskSensitiveText는 주소 allowlist가 없으면 학교 도메인 이메일도 마스킹한다", () => {
+  assert.equal(maskSensitiveText("student@school.ac.kr"), "[이메일]");
 });
 
 test("maskSensitiveText는 마감·요구사항 같은 Task 텍스트를 훼손하지 않는다", () => {
@@ -102,21 +109,27 @@ test("ChunkingPrivacyGateway는 허용되지 않은 Source를 거부한다", asy
   );
 });
 
-test("ChunkingPrivacyGateway는 화면 원본 이미지가 metadata에 있으면 거부한다", async () => {
+test("ChunkingPrivacyGateway는 화면 안전 사본의 자유 형식 metadata를 비운다", async () => {
   const gateway = new ChunkingPrivacyGateway({ allowedSources: ["screen"] });
-  await assert.rejects(
-    () => gateway.prepare(rawItem({
-      sourceType: "screen",
-      metadata: { screenshotBase64: "iVBORw0KGgo..." },
-    })),
-    /화면 원본 이미지는 외부 전송할 수 없습니다/,
-  );
+  const original = rawItem({
+    sourceType: "screen",
+    metadata: {
+      pngBase64: "iVBORw0KGgo...",
+      capture: { screenshotBase64: "nested-image" },
+      applicationHint: "PDF Viewer",
+    },
+  });
+
+  const safe = await gateway.prepare(original);
+
+  assert.deepEqual(safe.metadata, {});
+  assert.notDeepEqual(original.metadata, {}, "원본 metadata는 변경하지 않는다");
 });
 
 test("ChunkingPrivacyGateway는 마스킹된 안전한 사본을 반환하고 원본은 건드리지 않는다", async () => {
   const gateway = new ChunkingPrivacyGateway({
     allowedSources: ["school-email"],
-    allowedEmailDomains: ["school.ac.kr"],
+    allowedEmailAddresses: ["support@school.ac.kr"],
   });
   const original = rawItem({
     content: "담당자 010-9876-5432에게 신청 마감 2026년 7월 25일까지 제출하세요.",

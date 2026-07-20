@@ -21,13 +21,11 @@ export class AllowlistPrivacyGateway implements PrivacyGateway {
   }
 }
 
-// 화면 원본 이미지가 실수로 metadata에 담겨 외부 LLM으로 나가는 것을 막기 위한 키 목록.
-// README 로컬·외부 경계 표: "화면 원본 이미지는 외부 전송 X, 요약 텍스트만 전송".
-const SCREEN_IMAGE_KEYS = ["screenshot", "screenshotBase64", "imageData", "imageBytes", "rawImage"];
-
 export interface ChunkingPrivacyGatewayOptions {
   allowedSources: SourceType[];
-  allowedEmailDomains?: string[];
+  // 외부 전달이 꼭 필요한 비개인 공식 주소만 정확한 주소 단위로 허용한다.
+  // 도메인 전체 허용은 같은 학교 도메인의 학생·교직원 개인 주소까지 노출하므로 금지한다.
+  allowedEmailAddresses?: string[];
   maxChars?: number;
 }
 
@@ -37,12 +35,12 @@ export interface ChunkingPrivacyGatewayOptions {
 // Evidence의 출처·위치는 정확하게 유지된다(pipeline.ts 참고).
 export class ChunkingPrivacyGateway implements PrivacyGateway {
   private readonly allowedSources: Set<SourceType>;
-  private readonly allowedEmailDomains: string[];
+  private readonly allowedEmailAddresses: string[];
   private readonly maxChars: number | undefined;
 
   constructor(options: ChunkingPrivacyGatewayOptions) {
     this.allowedSources = new Set(options.allowedSources);
-    this.allowedEmailDomains = options.allowedEmailDomains ?? [];
+    this.allowedEmailAddresses = options.allowedEmailAddresses ?? [];
     this.maxChars = options.maxChars;
   }
 
@@ -51,31 +49,24 @@ export class ChunkingPrivacyGateway implements PrivacyGateway {
       throw new Error(`Source is not allowed: ${rawItem.sourceType}`);
     }
 
-    if (rawItem.sourceType === "screen") {
-      assertNoRawImage(rawItem);
-    }
-
     const selected = selectRelevantContent(rawItem.content, {
       maxChars: this.maxChars,
       title: rawItem.title,
     });
     const safeContent = maskSensitiveText(selected, {
-      allowedEmailDomains: this.allowedEmailDomains,
+      allowedEmailAddresses: this.allowedEmailAddresses,
     });
 
     const safe = structuredClone(rawItem);
     safe.content = safeContent;
     if (safe.title !== undefined) {
-      safe.title = maskSensitiveText(safe.title, { allowedEmailDomains: this.allowedEmailDomains });
+      safe.title = maskSensitiveText(safe.title, {
+        allowedEmailAddresses: this.allowedEmailAddresses,
+      });
     }
+    // screen metadata는 자유 형식이라 키 blacklist로 원본 이미지 유출을 완전히 막을 수 없다.
+    // 현재 LLM 추출은 metadata를 사용하지 않으므로 화면 안전 사본에는 아무 필드도 전달하지 않는다.
+    if (safe.sourceType === "screen") safe.metadata = {};
     return safe;
-  }
-}
-
-function assertNoRawImage(rawItem: RawItem): void {
-  for (const key of SCREEN_IMAGE_KEYS) {
-    if (rawItem.metadata[key] !== undefined) {
-      throw new Error(`화면 원본 이미지는 외부 전송할 수 없습니다: metadata.${key}`);
-    }
   }
 }
