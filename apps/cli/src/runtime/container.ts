@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   ContextPipeline,
   DeterministicContextResolver,
+  LLMFactExtractor,
   RuleBasedRecommendationEngine,
 } from "../../../../packages/context-engine/src/index.ts";
 import {
@@ -13,7 +14,7 @@ import {
   ScreenCollector,
   type ScreenCaptureResult,
 } from "../../../../packages/collectors/src/index.ts";
-import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
+import { ChunkingPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
 import {
@@ -25,12 +26,17 @@ import type {
   Collector,
   ContextRepository,
   Notifier,
+  PrivacyGateway,
   ProfileRepository,
   RecommendationEngine,
   SourceType,
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
-import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
+import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
+import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
+import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -69,6 +75,15 @@ export interface CliContainer {
   // 안 타도록 여기서 주입 지점을 둔다 — school-site HTTP Loader의 fetchImplementation과
   // 같은 이유(환경 의존 없는 테스트).
   captureLiveScreen: () => Promise<ScreenCaptureResult>;
+  // .env의 DODODO_LLM_BASE_URL 미설정이면 undefined — advise/ask 등 LLM을 쓰는 명령이
+  // 이 값으로 폴백 여부를 직접 판단한다(docs/handoff-cli-llm-wiring.md).
+  llmProvider: LLMProvider | undefined;
+  // pipeline이 쓰는 것과 같은 인스턴스. ask 명령이 answerContextQuestion 호출 시
+  // 그대로 넘긴다(마스킹 정책 이원화 방지 — screenAdvicePolicy와 같은 이유).
+  privacyGateway: PrivacyGateway;
+  // doctor가 provider 내부(private baseUrl/model)를 안 건드리고 상태 문구를 만들 수 있게
+  // llmProvider와 같은 소스(resolveLlmConfig)에서 뽑은 설정을 그대로 노출한다.
+  llmConfig: LlmConfig | undefined;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -117,21 +132,53 @@ export function createCliContainer(): CliContainer {
   const rawItemRepository = new InMemoryRawItemRepository();
   const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
+  const llmConfig = resolveLlmConfig();
+  const llmProvider = createLlmProvider();
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
   // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
   // "Source is not allowed: screen"으로 조용히 막히지 않는다.
+  // 마스킹+Chunk 선택 적용(#21). allowedEmailAddresses는 실제 학교 공식 발신 주소가
+  // 정해지면 채운다(이슈#27 논의 1번, 도메인 전체 허용은 금지 — masking.ts 참고). 지금은
+  // 비워둬서 모든 이메일 주소가 안전하게 마스킹된다(과소 노출 쪽으로 fail). advise의
+  // LlmScreenAdvicePolicy도 이 인스턴스를 그대로 재사용한다(마스킹 정책 이원화 방지).
+  // "conversation"은 실제 Collector가 없는 합성 sourceType이다 — ask(qa.ts)와 추천 문장
+  // 생성(MaskingLLMProvider)이 질문/프롬프트를 담은 휘발성 RawItem을 이 sourceType으로
+  // 만들어 privacyGateway.prepare()에 넘긴다. allowlist에 없으면 그 요청이 거부되고
+  // 조용히 결정론적 폴백으로 넘어가 LLM이 설정돼 있어도 실제로는 절대 호출되지
+  // 않는다(PR #33 리뷰, doyeonid 지적 — ask의 LLM 경로가 항상 막혀 있었음).
+  const privacyGateway = new ChunkingPrivacyGateway({
+    allowedSources: [
+      ...[...collectors, screenCollector].map((collector) => collector.sourceType),
+      "conversation",
+    ],
+    allowedEmailAddresses: [],
+  });
+
   const pipeline = new ContextPipeline({
     repository,
-    privacyGateway: new AllowlistPrivacyGateway(
-      [...collectors, screenCollector].map((collector) => collector.sourceType),
-    ),
-    factExtractor: new TempHeuristicFactExtractor(),
+    privacyGateway,
+    // provider가 없으면(.env 미설정) 기존 임시 규칙 추출기를 그대로 쓴다 — 회귀 없음.
+    // 있으면 RetryAwareFactExtractor로 감싸 일시적 LLM 실패(retryable_failure)를
+    // "사실 없음"과 구분해 throw한다 — incrementalSync.ts가 이미 갖고 있는 "오류난 배치는
+    // 커밋 안 함" 규칙 덕분에 같은 RawItem이 다음 tick에 재시도된다(retryAwareFactExtractor.ts 참고).
+    factExtractor: llmProvider !== undefined
+      ? new RetryAwareFactExtractor(new LLMFactExtractor(llmProvider))
+      : new TempHeuristicFactExtractor(),
     contextResolver: new DeterministicContextResolver(),
   });
   // watch가 저장한 알림 이력(evidenceStore)을 재알림 dedup(30분 억제)에 그대로 재사용한다.
   // watch를 한 번도 안 돌렸으면 listRecommendations()가 빈 배열이라 today/inbox 동작은 그대로다.
-  const recommendationEngine = new RuleBasedRecommendationEngine({ history: pipeline.evidenceStore });
+  // llmProvider가 undefined면 추천 문장도 기존 결정론적 템플릿으로 폴백한다. 있으면
+  // MaskingLLMProvider로 감싸 phrasing.ts가 ContextItem.title 등을 마스킹 없이 그대로
+  // Provider에 보내지 않게 한다(maskingLlmProvider.ts 참고) — ask/advise와 달리 phrasing.ts는
+  // 자체 마스킹이 없어서 여기서만 필요하다.
+  const recommendationEngine = new RuleBasedRecommendationEngine({
+    history: pipeline.evidenceStore,
+    llmProvider: llmProvider !== undefined
+      ? new MaskingLLMProvider(llmProvider, privacyGateway)
+      : undefined,
+  });
 
   return {
     repository,
@@ -143,8 +190,14 @@ export function createCliContainer(): CliContainer {
     rawItemRepository,
     collectors,
     screenCollector,
-    screenAdvicePolicy: defaultScreenAdvicePolicy,
+    // provider 없으면(.env 미설정) 기존 substring-매칭 placeholder로 폴백 — 회귀 없음.
+    screenAdvicePolicy: llmProvider !== undefined
+      ? new LlmScreenAdvicePolicy(llmProvider, privacyGateway)
+      : defaultScreenAdvicePolicy,
     captureLiveScreen: () => captureActiveScreen(),
+    llmProvider,
+    privacyGateway,
+    llmConfig,
   };
 }
 

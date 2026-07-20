@@ -1,9 +1,21 @@
-import type { ContextItem, RawItem } from "../../../../packages/shared/src/index.ts";
+import {
+  generateScreenAdvice,
+  linkActivityToContext,
+  type LLMProvider,
+} from "../../../../packages/context-engine/src/index.ts";
+import type {
+  ContextItem,
+  PrivacyGateway,
+  RawItem,
+} from "../../../../packages/shared/src/index.ts";
 
 export interface ScreenAdviceInput {
   activity: RawItem;
   contextItems: ContextItem[];
   now: Date;
+  // 사용자가 dododo advise --screen --focus로 명시할 때만 true. 영속 저장하지 않는다
+  // (이슈#27 논의: 이 값을 매 실행마다 플래그로 받기로 결정 — CliContainer/도메인 변경 없음).
+  focusMode?: boolean;
 }
 
 export interface ScreenAdviceDecision {
@@ -55,4 +67,52 @@ function titlesOverlap(a: string, b: string): boolean {
   const normalizedA = normalize(a);
   const normalizedB = normalize(b);
   return normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA);
+}
+
+// PR#29 요청: linkActivityToContext(trigram 유사도+상태 필터)로 관련 Task를 찾고
+// generateScreenAdvice(LLM)로 조언 문장을 만드는 실제 정책. provider가 있을 때만
+// container.ts가 이걸로 defaultScreenAdvicePolicy를 대체한다.
+//
+// generateScreenAdvice의 lastAdvisedAt은 "이 Task에 마지막으로 조언한 시각"이라
+// 어떤 Task와 연결됐는지 안 뒤엔(linkActivityToContext 실행 후) 알 수 없다 — 그래서
+// 이 값은 ScreenAdviceInput으로 안 받고 정책 인스턴스가 Task id별로 직접 추적한다.
+// 인메모리라 프로세스 재시작하면 초기화되는 건 알려진 한계(SQLite 전환 시 해결 — 이슈#27).
+export class LlmScreenAdvicePolicy implements ScreenAdvicePolicy {
+  private readonly provider: LLMProvider;
+  private readonly privacyGateway: PrivacyGateway;
+  private readonly lastAdvisedAt = new Map<string, Date>();
+
+  constructor(provider: LLMProvider, privacyGateway: PrivacyGateway) {
+    this.provider = provider;
+    this.privacyGateway = privacyGateway;
+  }
+
+  async evaluate(input: ScreenAdviceInput): Promise<ScreenAdviceDecision> {
+    const link = linkActivityToContext(input.activity, input.contextItems, input.now);
+    if (link === undefined) {
+      return { advise: false, declineReason: "화면 활동과 관련된 Task를 찾지 못했거나 확신도가 낮습니다" };
+    }
+
+    const advice = await generateScreenAdvice({
+      activityRawItem: input.activity,
+      link,
+      now: input.now,
+      provider: this.provider,
+      privacyGateway: this.privacyGateway,
+      lastAdvisedAt: this.lastAdvisedAt.get(link.item.id),
+      focusMode: input.focusMode,
+    });
+
+    if (advice === undefined) {
+      return {
+        advise: false,
+        declineReason: input.focusMode === true
+          ? "집중 모드가 활성화돼 있어 조언하지 않습니다"
+          : `'${link.item.title}'와 관련은 있지만 조언 조건을 만족하지 않습니다(상태·최근 조언 여부 등)`,
+      };
+    }
+
+    this.lastAdvisedAt.set(link.item.id, input.now);
+    return { advise: true, message: advice.advice, evidenceIds: advice.evidenceIds };
+  }
 }

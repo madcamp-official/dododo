@@ -3,8 +3,25 @@ import test from "node:test";
 
 import { runAdvise } from "../apps/cli/src/commands/advise.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
-import { defaultScreenAdvicePolicy } from "../apps/cli/src/runtime/adviceLookup.ts";
-import type { ContextItem, RawItem } from "../packages/shared/src/index.ts";
+import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy } from "../apps/cli/src/runtime/adviceLookup.ts";
+import type { LLMJSONRequest, LLMProvider } from "../packages/context-engine/src/index.ts";
+import type { ContextItem, PrivacyGateway, RawItem } from "../packages/shared/src/index.ts";
+
+function fakeAdviceProvider(adviceText = "테스트 조언"): LLMProvider {
+  return {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { advice: adviceText };
+      if (!request.validate(value)) throw new Error("응답이 스키마를 통과하지 못했습니다");
+      return value;
+    },
+  };
+}
+
+const passthroughGateway: PrivacyGateway = {
+  async prepare(rawItem) {
+    return rawItem;
+  },
+};
 
 function screenActivity(overrides: Partial<RawItem> = {}): RawItem {
   return {
@@ -137,4 +154,63 @@ test("relatedTaskCandidate가 없으면 거절한다", async () => {
 
   assert.equal(decision.advise, false);
   assert.match(decision.declineReason ?? "", /관련 작업 후보를 찾지 못했습니다/);
+});
+
+test("LlmScreenAdvicePolicy는 관련 Task를 찾으면 LLM 조언을 반환한다", async () => {
+  const policy = new LlmScreenAdvicePolicy(fakeAdviceProvider("스케줄링 단원을 복습하세요"), passthroughGateway);
+
+  const decision = await policy.evaluate({
+    activity: screenActivity(),
+    contextItems: [taskItem()],
+    now: new Date("2026-07-18T15:20:00+09:00"),
+  });
+
+  assert.equal(decision.advise, true);
+  assert.equal(decision.message, "스케줄링 단원을 복습하세요");
+  assert.deepEqual(decision.evidenceIds, ["evidence-1"]);
+});
+
+test("LlmScreenAdvicePolicy는 관련 Task가 없으면 거절한다", async () => {
+  const policy = new LlmScreenAdvicePolicy(fakeAdviceProvider(), passthroughGateway);
+
+  const decision = await policy.evaluate({
+    activity: screenActivity(),
+    contextItems: [taskItem({ title: "완전히 다른 과목 발표 준비" })],
+    now: new Date("2026-07-18T15:20:00+09:00"),
+  });
+
+  assert.equal(decision.advise, false);
+  assert.match(decision.declineReason ?? "", /찾지 못했거나/);
+});
+
+test("LlmScreenAdvicePolicy는 --focus면 조언하지 않는다", async () => {
+  const policy = new LlmScreenAdvicePolicy(fakeAdviceProvider(), passthroughGateway);
+
+  const decision = await policy.evaluate({
+    activity: screenActivity(),
+    contextItems: [taskItem()],
+    now: new Date("2026-07-18T15:20:00+09:00"),
+    focusMode: true,
+  });
+
+  assert.equal(decision.advise, false);
+  assert.match(decision.declineReason ?? "", /집중 모드/);
+});
+
+test("LlmScreenAdvicePolicy는 같은 Task에 30분 이내 재조언하지 않는다", async () => {
+  const policy = new LlmScreenAdvicePolicy(fakeAdviceProvider(), passthroughGateway);
+  const first = await policy.evaluate({
+    activity: screenActivity(),
+    contextItems: [taskItem()],
+    now: new Date("2026-07-18T15:20:00+09:00"),
+  });
+  assert.equal(first.advise, true);
+
+  const second = await policy.evaluate({
+    activity: screenActivity(),
+    contextItems: [taskItem()],
+    now: new Date("2026-07-18T15:21:00+09:00"),
+  });
+
+  assert.equal(second.advise, false);
 });
