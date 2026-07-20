@@ -86,9 +86,9 @@ function buildUserPrompt(rawItem: RawItem): string {
 // 추출 결과를 성공/결과없음/실패로 구분한다(docs/llm-architecture.md §2.3). 동기 파이프라인은
 // facts만 쓰면 되지만, 백그라운드 작업자는 status로 재시도 여부를 판정한다.
 // - success: Fact를 하나 이상 추출
-// - no_facts: LLM은 성공했으나 (검증 통과) 추출된 Fact가 없음 → 재시도 불필요
-// - retryable_failure: 연결·timeout·5xx 등 일시적 실패 → 재시도 가능
-// - invalid_output: 무효 JSON·Schema 불일치 등 영구 실패 → 재시도해도 동일
+// - no_facts: LLM이 facts: []를 명시적으로 반환함 → 재시도 불필요
+// - retryable_failure: 연결·timeout·429·5xx 등 일시적 실패 → 재시도 가능
+// - invalid_output: 무효 JSON·Schema 불일치·Evidence 전부 탈락 등 영구 실패 → 재시도해도 동일
 export type FactExtractionStatus = "success" | "no_facts" | "retryable_failure" | "invalid_output";
 
 export interface FactExtractionOutcome {
@@ -136,11 +136,26 @@ export class LLMFactExtractor implements FactExtractor {
       };
     }
 
+    if (response.facts.length === 0) return { status: "no_facts", facts: [] };
+
     const facts = response.facts
       .filter((fact) => isNonEmptyVerbatimQuote(fact.evidenceText, rawItem.content))
       .map((fact, index) => toFact(fact, rawItem, index));
 
-    return { status: facts.length > 0 ? "success" : "no_facts", facts };
+    if (facts.length === 0) {
+      return {
+        status: "invalid_output",
+        facts: [],
+        error: new LLMExtractionError("LLM이 반환한 모든 Fact의 Evidence가 원문 검증에 실패했습니다", {
+          category: "invalid_output",
+          rawItemId: rawItem.id,
+          rawResponse: response,
+        }),
+      };
+    }
+
+    // 일부 Fact만 Evidence 검증에 실패한 경우에는 유효한 Fact를 보존하고 성공으로 처리한다.
+    return { status: "success", facts };
   }
 }
 

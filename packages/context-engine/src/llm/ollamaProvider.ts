@@ -1,4 +1,5 @@
 import { LLMExtractionError } from "./errors.ts";
+import type { LLMErrorCategory } from "./errors.ts";
 import { validateAgainstSchema } from "./jsonSchema.ts";
 import type { LLMJSONRequest, LLMProvider } from "./provider.ts";
 
@@ -13,6 +14,7 @@ export interface OllamaProviderConfig {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 class OllamaHttpError extends Error {
   readonly status: number;
@@ -33,13 +35,14 @@ interface OllamaGenerateResponse {
 }
 
 // Ollama 호환 로컬 서버 Provider. 구조화 출력을 우선 /api/chat + format:<schema>로 요청하고,
-// 서버가 Schema 제약을 거부하면(HTTP 오류) /api/generate + format:"json"으로 폴백한다.
+// 서버가 Schema 제약을 거부하면(일부 HTTP 4xx) /api/generate + format:"json"으로 폴백한다.
 // 어느 경로든 모델이 "검증됨"이라고 주장해도 반환 전 항상 Schema를 재검증한다.
 export class OllamaProvider implements LLMProvider {
   private readonly config: OllamaProviderConfig;
 
   constructor(config: OllamaProviderConfig) {
-    this.config = config;
+    if (config.defaultTimeoutMs !== undefined) validateTimeoutMs(config.defaultTimeoutMs, "defaultTimeoutMs");
+    this.config = { ...config };
   }
 
   async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
@@ -52,9 +55,11 @@ export class OllamaProvider implements LLMProvider {
     try {
       return await this.chatRequest(model, request);
     } catch (error) {
-      // /api/chat이 Schema 제약을 거부(4xx)한 경우에만 /api/generate로 폴백한다.
-      // 5xx·timeout·연결 실패는 폴백해도 같은 결과이므로 그대로 재시도 가능 오류로 던진다.
-      if (!(error instanceof OllamaHttpError) || error.status >= 500) throw toExtractionError(error);
+      // Schema·endpoint 미지원 가능성이 있는 400·404·422에서만 /api/generate로 폴백한다.
+      // 인증 실패, 408·429, 5xx는 같은 서버에 요청을 더 보내지 않고 원래 오류를 전달한다.
+      if (!(error instanceof OllamaHttpError) || !shouldFallbackToGenerate(error.status)) {
+        throw toExtractionError(error);
+      }
 
       try {
         return await this.generateRequest(model, request);
@@ -115,6 +120,7 @@ export class OllamaProvider implements LLMProvider {
 
   private async post(path: string, body: unknown, timeoutMs?: number): Promise<Response> {
     const limit = timeoutMs ?? this.config.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    validateTimeoutMs(limit, timeoutMs === undefined ? "defaultTimeoutMs" : "timeoutMs");
     let response: Response;
     try {
       response = await fetch(`${this.config.baseUrl}${path}`, {
@@ -182,11 +188,30 @@ function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 }
 
+function validateTimeoutMs(value: number, field: "defaultTimeoutMs" | "timeoutMs"): void {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > MAX_TIMEOUT_MS) {
+    throw new LLMExtractionError(
+      `${field}는 1 이상 ${MAX_TIMEOUT_MS} 이하의 정수여야 합니다`,
+      { category: "client_error" },
+    );
+  }
+}
+
+function shouldFallbackToGenerate(status: number): boolean {
+  return status === 400 || status === 404 || status === 422;
+}
+
+function categoryForHttpStatus(status: number): LLMErrorCategory {
+  if (status === 408) return "timeout";
+  if (status === 429) return "rate_limited";
+  return status >= 500 ? "server_error" : "client_error";
+}
+
 function toExtractionError(error: unknown): LLMExtractionError {
   if (error instanceof LLMExtractionError) return error;
   if (error instanceof OllamaHttpError) {
     return new LLMExtractionError(error.message, {
-      category: error.status >= 500 ? "server_error" : "client_error",
+      category: categoryForHttpStatus(error.status),
       cause: error,
     });
   }

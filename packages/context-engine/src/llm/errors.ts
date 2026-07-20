@@ -10,13 +10,19 @@ export type LLMErrorCategory =
   | "connection" // 서버에 연결 실패(DNS·연결 거부)
   | "timeout" // 요청 시간 초과
   | "server_error" // HTTP 5xx
+  | "rate_limited" // HTTP 429
   // 재시도해도 같은 결과인 영구 실패
   | "client_error" // HTTP 4xx(잘못된 요청)
   | "invalid_output" // JSON 파싱 실패·Schema 불일치·validate 실패
   | "no_content" // 응답에 본문 필드가 없음
   | "unknown";
 
-const RETRYABLE: ReadonlySet<LLMErrorCategory> = new Set(["connection", "timeout", "server_error"]);
+const RETRYABLE: ReadonlySet<LLMErrorCategory> = new Set([
+  "connection",
+  "timeout",
+  "server_error",
+  "rate_limited",
+]);
 
 export function isRetryableCategory(category: LLMErrorCategory): boolean {
   return RETRYABLE.has(category);

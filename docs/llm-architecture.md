@@ -74,9 +74,9 @@ Collectors → RawItem Store → Job Queue
 
 위 로드맵 전체가 아니라, 백그라운드 작업자화의 **전제**가 되고 지금 내 소유 영역(`packages/context-engine/src/llm/`, `extraction/`)에서 계약 변경 없이 가능한 것만 착수했다.
 
-- **LLM 오류 분류** (`llm/errors.ts`): `LLMExtractionError.category`(`connection`/`timeout`/`server_error`/`client_error`/`invalid_output`/`no_content`)와 `retryable` 게터. Job Queue가 재시도할지 Dead Letter로 보낼지 판정하는 근거.
-- **Provider 제어** (`llm/provider.ts`, `ollamaProvider.ts`): 요청별 `timeoutMs`(초과 시 `timeout` 오류), `temperature`(구조화 추출은 0 권장), 오류의 category 분류, 5xx는 폴백하지 않고 재시도 가능 오류로 전달.
-- **추출 결과 구분** (`extraction/index.ts`): `LLMFactExtractor.extractWithStatus()`가 `success`/`no_facts`/`retryable_failure`/`invalid_output`를 구분해 반환. 기존 `extract(): Promise<Fact[]>`는 하위호환 유지(내부적으로 `extractWithStatus`를 호출).
+- **LLM 오류 분류** (`llm/errors.ts`): `LLMExtractionError.category`(`connection`/`timeout`/`server_error`/`rate_limited`/`client_error`/`invalid_output`/`no_content`)와 `retryable` 게터. Job Queue가 재시도할지 Dead Letter로 보낼지 판정하는 근거.
+- **Provider 제어** (`llm/provider.ts`, `ollamaProvider.ts`): 요청별 `timeoutMs`(초과 시 `timeout` 오류), `temperature`(구조화 추출은 0 권장), 오류의 category 분류, 408·429·5xx는 폴백하지 않고 재시도 가능 오류로 전달. `/api/generate` 폴백은 Schema·endpoint 미지원 가능성이 있는 400·404·422로 제한한다.
+- **추출 결과 구분** (`extraction/index.ts`): `LLMFactExtractor.extractWithStatus()`가 `success`/`no_facts`/`retryable_failure`/`invalid_output`를 구분해 반환. LLM이 명시적으로 `facts: []`를 반환한 경우만 `no_facts`이고, 응답 Fact가 Evidence 검증에서 전부 탈락하면 `invalid_output`이다. 일부만 탈락하면 유효한 Fact를 보존한다. 기존 `extract(): Promise<Fact[]>`는 하위호환 유지(내부적으로 `extractWithStatus`를 호출).
 
 이 세 가지로 "LLM 서버가 잠시 죽었을 때 재시도" vs "정보가 없거나 응답이 무효라 재시도 무의미"를 구분할 수 있게 됐다. Job Queue가 도입되면 이 status/category를 그대로 소비한다.
 
