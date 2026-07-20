@@ -1,6 +1,7 @@
 export * from "./activity/index.ts";
 export * from "./classification/index.ts";
 export * from "./extraction/index.ts";
+export * from "./intent/index.ts";
 export * from "./llm/index.ts";
 export * from "./pipeline.ts";
 export * from "./recommendation/index.ts";
