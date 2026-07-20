@@ -40,6 +40,12 @@ test("maskSensitiveText는 마감·요구사항 같은 Task 텍스트를 훼손�
   assert.equal(maskSensitiveText(text, {}), text);
 });
 
+test("maskSensitiveText는 구분자 유무와 관계없이 주민등록번호를 가린다", () => {
+  const masked = maskSensitiveText("주민번호 990101-1234567, 외국인번호 990101 5123456, 연속형 9901013123456");
+
+  assert.equal(masked, "주민번호 [주민등록번호], 외국인번호 [주민등록번호], 연속형 [주민등록번호]");
+});
+
 test("selectRelevantContent는 짧은 본문을 그대로 둔다", () => {
   const short = "신청 마감은 7월 25일입니다.";
   assert.equal(selectRelevantContent(short, { maxChars: 2000 }), short);
@@ -57,6 +63,20 @@ test("selectRelevantContent는 긴 본문을 예산 안으로 줄이되 마감 �
 
   assert.ok(selected.length <= 300, "예산 이내여야 한다");
   assert.match(selected, /2026년 7월 25일/, "마감이 담긴 문단은 유지해야 한다");
+});
+
+test("selectRelevantContent는 신호가 있는 단일 문단이 예산보다 길어도 상한을 지킨다", () => {
+  const longParagraph = `신청 마감 제출 요구사항 ${"세부 안내 ".repeat(100)}`;
+  const selected = selectRelevantContent(longParagraph, { maxChars: 80 });
+
+  assert.ok(selected.length <= 80);
+  assert.match(selected, /신청 마감/);
+});
+
+test("selectRelevantContent는 잘못된 문자 예산을 거부한다", () => {
+  for (const maxChars of [0, -1, 1.5, Number.NaN]) {
+    assert.throws(() => selectRelevantContent("본문", { maxChars }), /maxChars/);
+  }
 });
 
 test("selectRelevantContent는 신호가 약하면 첫 문단과 제목 포함 문단을 보존한다", () => {

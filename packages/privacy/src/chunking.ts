@@ -21,6 +21,9 @@ const KEYWORD_PATTERN = /(마감|제출|신청|접수|요구사항|자격|기한
 export function selectRelevantContent(content: string, options: ChunkingOptions = {}): string {
   const maxChars = options.maxChars ?? DEFAULT_MAX_CHARS;
   const minScore = options.minScore ?? DEFAULT_MIN_SCORE;
+  if (!Number.isSafeInteger(maxChars) || maxChars <= 0) {
+    throw new Error("maxChars는 1 이상의 정수여야 합니다");
+  }
 
   const paragraphs = splitIntoParagraphs(content);
   if (paragraphs.length === 0) return "";
@@ -36,10 +39,11 @@ export function selectRelevantContent(content: string, options: ChunkingOptions 
     : pickFallback(scored, options.title);
 
   // 원래 문단 순서를 유지해 맥락이 뒤섞이지 않게 한다.
-  return selected
+  const joined = selected
     .sort((a, b) => a.index - b.index)
     .map((paragraph) => paragraph.text)
     .join("\n\n");
+  return truncateToBudget(joined, maxChars);
 }
 
 interface ScoredParagraph {
@@ -90,7 +94,8 @@ function pickByScore(scored: ScoredParagraph[], maxChars: number, minScore: numb
     used += added;
   }
 
-  // 예산이 너무 작아 아무것도 못 담았다면 최고 점수 문단 하나만이라도 넣는다.
+  // 예산이 너무 작아 아무것도 못 담았다면 최고 점수 문단 하나를 선택한다.
+  // 실제 문자 상한은 직렬화 이후 truncateToBudget에서 반드시 적용한다.
   if (selected.length === 0 && candidates.length > 0) selected.push(candidates[0]!);
   return selected;
 }
@@ -108,4 +113,10 @@ function pickFallback(scored: ScoredParagraph[], title: string | undefined): Sco
   }
 
   return [...selected.values()];
+}
+
+// 어떤 선택 경로에서도 LLM 전달 예산을 넘지 않게 하는 최종 방어선이다. 긴 단일 문단,
+// fallback 문단 여러 개처럼 개별 선택만으로 상한을 보장할 수 없는 경우도 여기서 자른다.
+function truncateToBudget(text: string, maxChars: number): string {
+  return text.length <= maxChars ? text : text.slice(0, maxChars).trimEnd();
 }
