@@ -1,10 +1,14 @@
 import type {
   ContextItem,
+  ContextChangeEvent,
+  Evidence,
   Fact,
   RawItem,
+  RawItemAnalysisResult,
   Recommendation,
   SourceType,
   UserProfile,
+  StoredFact,
 } from "./domain.ts";
 
 export interface Collector {
@@ -31,6 +35,19 @@ export interface ContextRepository {
   saveContextItems(items: ContextItem[]): Promise<void>;
   listContextItems(kind?: ContextItem["kind"]): Promise<ContextItem[]>;
   findContextItem(id: string): Promise<ContextItem | undefined>;
+  listFactsByRawItemId(
+    rawItemId: string,
+    options?: { includeInactive?: boolean },
+  ): Promise<StoredFact[]>;
+  deactivateFactsByRawItemId(rawItemId: string, deactivatedAt: string): Promise<void>;
+  saveEvidence(evidence: Evidence[]): Promise<void>;
+  listEvidence(ids: string[]): Promise<Evidence[]>;
+  listEvidenceByContextItemId(contextItemId: string): Promise<Evidence[]>;
+  saveContextHistory(events: ContextChangeEvent[]): Promise<void>;
+  listContextHistory(contextItemId: string): Promise<ContextChangeEvent[]>;
+  saveRecommendations(recommendations: Recommendation[]): Promise<void>;
+  listRecommendations(contextItemId?: string): Promise<Recommendation[]>;
+  saveRawItemAnalysis(result: RawItemAnalysisResult): Promise<void>;
 }
 
 export interface RecommendationEngine {

@@ -1,5 +1,4 @@
-import type { Evidence, Recommendation } from "../../../shared/src/index.ts";
-import type { ContextChangeEvent } from "./types.ts";
+import type { ContextChangeEvent, Evidence, Recommendation } from "../../../shared/src/index.ts";
 
 // Stage 0 임시 저장소: packages/shared/src/contracts.ts의 ContextRepository에
 // Evidence·변경 이력·Recommendation 저장 메서드가 아직 없어 팀 합의 전까지

@@ -170,7 +170,7 @@ function normalize(text: string): string {
 
 function toFact(raw: RawFact, rawItem: RawItem, index: number): Fact {
   return {
-    id: `fact-${rawItem.id}-${index}`,
+    id: `fact-${rawItem.id}-${rawItem.contentHash}-${index}`,
     rawItemId: rawItem.id,
     kind: raw.kind,
     subject: raw.subject,

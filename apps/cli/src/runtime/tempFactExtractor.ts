@@ -14,7 +14,7 @@ export class TempHeuristicFactExtractor implements FactExtractor {
     if (kind === undefined || rawItem.title === undefined) return [];
 
     const fact: Fact = {
-      id: `fact-${rawItem.id}`,
+      id: `fact-${rawItem.id}-${rawItem.contentHash}`,
       rawItemId: rawItem.id,
       kind,
       subject: rawItem.title,
