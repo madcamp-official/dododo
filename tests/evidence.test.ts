@@ -160,3 +160,19 @@ test("evidence는 여러 Source의 근거를 모두 보여준다(병합된 Oppor
     container.close();
   }
 });
+
+test("evidence는 파생 항목의 근거가 부모 Opportunity에서 상속됐음을 표시한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  try {
+    await container.repository.saveContextItems([
+      taskItem({ metadata: { parentOpportunityId: "opportunity-parent" } }),
+    ]);
+    await container.repository.saveEvidence([evidence()]);
+
+    const output = await runEvidence(container, ["task-os"]);
+    assert.match(output, /부모 Opportunity에서 상속된 근거/);
+    assert.match(output, /opportunity-parent/);
+  } finally {
+    container.close();
+  }
+});

@@ -150,3 +150,23 @@ test("syncIncrementally는 변경 없으면 collector.sync()로 값은 받아오
   await syncIncrementally(collector, pipeline, rawItemRepository);
   assert.equal(prepareCalls, 1, "변경 없는 두 번째 호출은 privacyGateway를 다시 부르면 안 됨");
 });
+
+test("Collector 부분 오류는 정상 RawItem을 저장하면서 SyncResult에 보존한다", async () => {
+  const rawItemRepository = new InMemoryRawItemRepository();
+  const pipeline = new ContextPipeline({
+    repository: new InMemoryContextRepository(),
+    privacyGateway: { async prepare(rawItem: RawItem) { return rawItem; } },
+    factExtractor: NOOP_FACT_EXTRACTOR,
+    contextResolver: new DeterministicContextResolver(),
+  });
+  const item = sampleRawItem();
+  const collector: Collector & { listErrors(): Array<{ sourceUri: string; message: string }> } = {
+    ...fixedCollector(item),
+    listErrors: () => [{ sourceUri: "fixture://invalid", message: "일부 문서 오류" }],
+  };
+
+  const result = await syncIncrementally(collector, pipeline, rawItemRepository);
+
+  assert.match(result.errors[0] ?? "", /fixture:\/\/invalid: 일부 문서 오류/);
+  assert.notEqual(await rawItemRepository.findByUri(item.sourceId, item.uri), undefined);
+});

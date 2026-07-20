@@ -27,7 +27,12 @@ export async function runEvidence(container: CliContainer, args: string[]): Prom
     return renderNoEvidence(item, id);
   }
 
-  const lines = [`근거: ${item.title} (${id})`, `총 ${evidence.length}건`, ""];
+  const lines = [`근거: ${item.title} (${id})`, `총 ${evidence.length}건`];
+  const parentOpportunityId = item.metadata.parentOpportunityId;
+  if (typeof parentOpportunityId === "string") {
+    lines.push(`부모 Opportunity에서 상속된 근거입니다: ${parentOpportunityId}`);
+  }
+  lines.push("");
   evidence.forEach((entry, index) => {
     lines.push(`${index + 1}. [${entry.sourceType} · ${entry.authority}] ${entry.observedAt}`);
     lines.push(`   위치: ${entry.location}`);

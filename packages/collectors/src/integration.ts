@@ -13,7 +13,7 @@ export interface SourceCollectionResult {
   errors: SourceCollectionError[];
 }
 
-interface CollectorWithDiagnostics extends Collector {
+export interface CollectorWithDiagnostics extends Collector {
   listErrors(): Array<{ sourceUri?: string; message: string }>;
 }
 
@@ -32,7 +32,7 @@ export async function collectSources(
         sourceType: collector.sourceType,
         collected: items.length,
         items,
-        errors: readDiagnostics(collector),
+        errors: readCollectorDiagnostics(collector),
       };
     } catch (error) {
       return {
@@ -46,15 +46,15 @@ export async function collectSources(
   }));
 }
 
-function readDiagnostics(collector: Collector): SourceCollectionError[] {
-  if (!hasDiagnostics(collector)) return [];
+export function readCollectorDiagnostics(collector: Collector): SourceCollectionError[] {
+  if (!hasCollectorDiagnostics(collector)) return [];
   return collector.listErrors().map((error) => ({
     ...(error.sourceUri === undefined ? {} : { sourceUri: error.sourceUri }),
     message: error.message,
   }));
 }
 
-function hasDiagnostics(collector: Collector): collector is CollectorWithDiagnostics {
+export function hasCollectorDiagnostics(collector: Collector): collector is CollectorWithDiagnostics {
   return "listErrors" in collector
     && typeof (collector as Partial<CollectorWithDiagnostics>).listErrors === "function";
 }

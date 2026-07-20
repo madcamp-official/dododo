@@ -9,6 +9,10 @@ const EXCLUDED_STATUSES: ReadonlySet<ContextItem["status"]> = new Set([
   "expired",
 ]);
 
+export function isExcludedContextStatus(status: ContextItem["status"]): boolean {
+  return EXCLUDED_STATUSES.has(status);
+}
+
 // domain.ts에 Snooze 전용 필드가 없어 apps/cli/src/runtime/snooze.ts가 이미
 // ContextItem.metadata.snoozedUntil 관례로 처리하고 있다. context-engine은
 // apps/cli/에 의존할 수 없으므로(AGENTS.md 모듈 경계) 같은 키를 여기서 독립적으로
@@ -59,7 +63,7 @@ export function computePriority(
   todayEvents: ContextItem[],
   ctx: PriorityContext,
 ): PriorityBreakdown {
-  if (EXCLUDED_STATUSES.has(item.status)) {
+  if (isExcludedContextStatus(item.status)) {
     return excluded(`status: ${item.status}`);
   }
   if (isSnoozed(item, ctx.now)) {

@@ -14,6 +14,7 @@ export const commandCatalog: CommandDefinition[] = [
   { name: "watch", description: "주기 동기화와 알림을 실행합니다 (기본 지속 실행, --once로 1회, --interval <seconds>, --os-notify로 OS 알림)", owner: "runtime", status: "ready" },
   { name: "inbox", description: "추천 Opportunity를 표시합니다", owner: "intelligence", status: "ready" },
   { name: "today", description: "오늘의 Task와 Event를 표시합니다", owner: "intelligence", status: "ready" },
+  { name: "calendar", description: "이번 주 Event와 Task 마감을 표시합니다 (week)", owner: "runtime", status: "ready" },
   { name: "ask", description: "로컬 Context를 기반으로 답합니다", owner: "runtime", status: "ready" },
   { name: "add", description: "자연어로 Task 또는 Event를 추가합니다", owner: "runtime", status: "ready" },
   { name: "advise", description: "현재 화면과 Context를 바탕으로 조언합니다 (--screen [--live])", owner: "runtime", status: "ready" },
