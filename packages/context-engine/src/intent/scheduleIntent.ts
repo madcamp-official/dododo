@@ -26,6 +26,7 @@ export function parseScheduleIntent(utterance: string, now: Date): ScheduleInten
   if (date === undefined) return { kind: "unrecognized" };
 
   const time = resolveTime(utterance);
+  if (time === undefined) return { kind: "unrecognized" };
   const startAt = combineDateTime(date, time.hour, time.minute);
   const title = extractTitle(utterance);
 
@@ -82,8 +83,16 @@ function resolveDate(utterance: string, now: Date): Date | undefined {
   if (weekdayMatch !== null) {
     const targetDow = WEEKDAYS[weekdayMatch[2]!]!;
     const nextWeek = weekdayMatch[1] !== undefined && /다음/.test(weekdayMatch[1]);
-    let delta = (targetDow - base.getDay() + 7) % 7;
-    if (nextWeek) delta += 7;
+    let delta: number;
+    if (nextWeek) {
+      // 주의 시작은 월요일로 정의한다. 먼저 다음 달력 주의 월요일로 이동한 뒤
+      // 목표 요일 offset을 더해야 토요일의 "다음 주 금요일"이 다다음 주로 밀리지 않는다.
+      const daysUntilNextMonday = ((8 - base.getDay()) % 7) || 7;
+      const offsetFromMonday = (targetDow + 6) % 7;
+      delta = daysUntilNextMonday + offsetFromMonday;
+    } else {
+      delta = (targetDow - base.getDay() + 7) % 7;
+    }
     return addDays(base, delta);
   }
 
@@ -104,12 +113,18 @@ function resolveDate(utterance: string, now: Date): Date | undefined {
 
 // 시각을 파싱한다. "19시"/"오후 7시"는 명확, "저녁"/"오전"처럼 대략적 표현은 기본값을
 // 쓰되 ambiguous=true로 표시해 확인을 받게 한다.
-function resolveTime(utterance: string): ResolvedTime {
+function resolveTime(utterance: string): ResolvedTime | undefined {
   const explicit = /(오전|오후|아침|저녁|밤|낮)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?/.exec(utterance);
   if (explicit !== null) {
     let hour = Number(explicit[2]);
     const minute = explicit[3] !== undefined ? Number(explicit[3]) : 0;
     const meridiem = explicit[1];
+    if (minute < 0 || minute > 59) return undefined;
+    if (meridiem !== undefined) {
+      if (hour < 1 || hour > 12) return undefined;
+    } else if (hour < 0 || hour > 23) {
+      return undefined;
+    }
     if ((meridiem === "오후" || meridiem === "저녁" || meridiem === "밤") && hour < 12) hour += 12;
     if (meridiem === "오전" && hour === 12) hour = 0;
     return { hour, minute, ambiguous: false };
