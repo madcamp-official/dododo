@@ -64,7 +64,10 @@ export function normalizeText(value: string): string {
 
 function resolveUrl(value: string, baseUrl: string): string | undefined {
   try {
-    return new URL(value, baseUrl).toString();
+    const url = new URL(value, baseUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+    return url.toString();
   } catch {
     return undefined;
   }

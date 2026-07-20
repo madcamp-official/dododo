@@ -34,6 +34,32 @@ test("학교 공지 HTML에서 유효한 공지를 추출하고 누락·잘못�
   ]);
 });
 
+test("학교 공지와 첨부 링크는 HTTP 또는 HTTPS 프로토콜만 허용한다", () => {
+  const html = `
+    <article class="notice-item" data-notice-id="unsafe-notice">
+      <a class="notice-link" href="javascript:alert('unsafe')">위험한 공지</a>
+      <div class="notice-content">저장하면 안 되는 공지입니다.</div>
+    </article>
+    <article class="notice-item" data-notice-id="safe-notice">
+      <a class="notice-link" href="/notices/safe">정상 공지</a>
+      <div class="notice-content">안전한 링크만 저장합니다.</div>
+      <a class="notice-attachment" href="/files/safe.pdf">정상 첨부</a>
+      <a class="notice-attachment" href="data:text/plain,unsafe">Data 첨부</a>
+      <a class="notice-attachment" href="file:///etc/passwd">File 첨부</a>
+      <a class="notice-attachment" href="javascript:alert('unsafe')">Script 첨부</a>
+    </article>
+  `;
+
+  const notices = parseSchoolNoticeHtml(html, { baseUrl });
+
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0]?.externalId, "safe-notice");
+  assert.equal(notices[0]?.uri, "https://school.example/notices/safe");
+  assert.deepEqual(notices[0]?.attachmentUrls, [
+    "https://school.example/files/safe.pdf",
+  ]);
+});
+
 test("SchoolSiteCollector는 같은 HTML에서 안정적인 ID와 Hash를 생성한다", async () => {
   const html = await readFile(fixturePath, "utf8");
   const collector = createCollector(async () => html);
