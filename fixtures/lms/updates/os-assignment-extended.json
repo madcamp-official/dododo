@@ -1,0 +1,18 @@
+{
+  "id": "raw-lms-001",
+  "sourceId": "lms-main",
+  "sourceType": "lms",
+  "externalId": "course-os-assignment-3",
+  "uri": "https://lms.example/courses/os/assignments/3",
+  "title": "운영체제 과제 3",
+  "content": "운영체제 과제 3의 제출 마감이 2026년 7월 23일 18시로 연장되었습니다. 보고서 PDF와 소스코드 ZIP을 제출합니다.",
+  "contentHash": "fixture-lms-001-extended",
+  "observedAt": "2026-07-20T10:00:00+09:00",
+  "metadata": {
+    "course": "운영체제",
+    "category": "assignment",
+    "dueAt": "2026-07-23T18:00:00+09:00",
+    "official": true,
+    "revisionOf": "fixture-lms-001"
+  }
+}

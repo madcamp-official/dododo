@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -26,20 +26,33 @@ class MetadataFactExtractor implements FactExtractor {
 
   async extract(rawItem: RawItem): Promise<Fact[]> {
     this.callCount += 1;
-    const deadline = typeof rawItem.metadata.deadline === "string"
-      ? rawItem.metadata.deadline
-      : undefined;
+    const category = rawItem.metadata.category;
+    const eventTime = firstString(
+      rawItem.metadata.deadline,
+      rawItem.metadata.dueAt,
+      rawItem.metadata.startAt,
+    );
     return [{
       id: `fact-${rawItem.id}-${rawItem.contentHash}`,
       rawItemId: rawItem.id,
-      kind: rawItem.sourceType === "lms" ? "task" : "opportunity",
+      kind: category === "exam"
+        ? "event"
+        : rawItem.sourceType === "lms" ? "task" : "opportunity",
       subject: rawItem.title ?? "제목 없음",
       value: rawItem.content,
-      eventTime: deadline,
+      eventTime,
       confidence: 0.95,
       evidenceText: rawItem.content,
     }];
   }
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === "string");
+}
+
+async function loadFixture(path: string): Promise<RawItem> {
+  return JSON.parse(await readFile(path, "utf8")) as RawItem;
 }
 
 function item(overrides: Partial<RawItem> = {}): RawItem {
@@ -270,5 +283,62 @@ test("한 Source 수집 실패가 다른 Source의 SQLite 동기화를 막지 �
     assert.equal((await repository.listFactsByRawItemId(successful.id)).length, 1);
   } finally {
     database.close();
+  }
+});
+
+test("대표 Fixture 전체가 병합·시험 Event·마감 수정 후 SQLite 재시작에서도 유지된다", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-representative-fixtures-"));
+  const path = join(directory, "context.db");
+  try {
+    const site = await loadFixture("fixtures/school-site/ai-hackathon.json");
+    const email = await loadFixture("fixtures/school-email/ai-hackathon-email.json");
+    const assignment = await loadFixture("fixtures/lms/os-assignment.json");
+    const exam = await loadFixture("fixtures/lms/os-exam.json");
+    const assignmentUpdate = await loadFixture("fixtures/lms/updates/os-assignment-extended.json");
+
+    const firstDatabase = openContextDatabase(path);
+    const firstRepository = new SQLiteContextRepository(firstDatabase);
+    const firstRawItems = new SQLiteRawItemRepository(firstDatabase);
+    const firstPipeline = createPipeline(firstRepository, new MetadataFactExtractor());
+
+    for (const rawItem of [site, email, assignment, exam]) {
+      const result = await syncIncrementally(collector(rawItem), firstPipeline, firstRawItems);
+      assert.deepEqual(result.errors, [], `${rawItem.id} 동기화가 성공해야 한다`);
+    }
+    firstDatabase.close();
+
+    const secondDatabase = openContextDatabase(path);
+    try {
+      const repository = new SQLiteContextRepository(secondDatabase);
+      const rawItems = new SQLiteRawItemRepository(secondDatabase);
+      const pipeline = createPipeline(repository, new MetadataFactExtractor());
+
+      const opportunities = await repository.listContextItems("opportunity");
+      assert.equal(opportunities.length, 1);
+      assert.equal(opportunities[0]?.title, "대학생 AI 해커톤 참가자 모집");
+      assert.equal((await repository.listEvidenceByContextItemId(opportunities[0]!.id)).length, 2);
+
+      const events = await repository.listContextItems("event");
+      assert.equal(events.length, 1);
+      assert.equal(events[0]?.title, "운영체제 기말시험 안내");
+      assert.equal(events[0]?.startAt, "2026-07-23T14:00:00+09:00");
+
+      const updateResult = await syncIncrementally(collector(assignmentUpdate), pipeline, rawItems);
+      assert.deepEqual(updateResult.errors, []);
+      const tasks = await repository.listContextItems("task");
+      assert.equal(tasks.length, 1);
+      assert.equal(tasks[0]?.deadline, "2026-07-23T18:00:00+09:00");
+      assert.equal((await repository.listEvidenceByContextItemId(tasks[0]!.id)).length, 2);
+      assert.ok((await repository.listContextHistory(tasks[0]!.id)).some((event) =>
+        event.changeType === "field_updated"
+        && event.field === "deadline"
+        && event.previousValue === "2026-07-22T23:59:00+09:00"
+        && event.newValue === "2026-07-23T18:00:00+09:00"
+      ));
+    } finally {
+      secondDatabase.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
