@@ -36,6 +36,21 @@ test("container keeps screenCollector separate from the auto-synced collectors",
   assert.equal(container.collectors.some((collector) => collector.sourceType === "screen"), false);
 });
 
+test("privacyGateway는 conversation sourceType을 허용한다(ask/추천 문장 생성이 쓰는 합성 RawItem, PR #33 리뷰 반영)", async () => {
+  const container = createCliContainer();
+  const prepared = await container.privacyGateway.prepare({
+    id: "raw-conversation-1",
+    sourceId: "conversation",
+    sourceType: "conversation",
+    uri: "conversation://test",
+    content: "hello",
+    contentHash: "ephemeral",
+    observedAt: "2026-07-20T00:00:00+09:00",
+    metadata: {},
+  });
+  assert.equal(prepared.sourceType, "conversation");
+});
+
 test("sync populates opportunities and tasks that inbox/today can render", async () => {
   const container = createCliContainer();
   const syncSummary = await runSync(container);

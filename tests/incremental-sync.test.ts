@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { syncIncrementally } from "../apps/cli/src/runtime/incrementalSync.ts";
-import { ContextPipeline, DeterministicContextResolver } from "../packages/context-engine/src/index.ts";
+import { RetryAwareFactExtractor } from "../apps/cli/src/runtime/retryAwareFactExtractor.ts";
+import {
+  ContextPipeline,
+  DeterministicContextResolver,
+  LLMExtractionError,
+  LLMFactExtractor,
+  type LLMJSONRequest,
+  type LLMProvider,
+} from "../packages/context-engine/src/index.ts";
 import { InMemoryContextRepository, InMemoryRawItemRepository } from "../packages/storage/src/index.ts";
 import type { Collector, FactExtractor, PrivacyGateway, RawItem } from "../packages/shared/src/index.ts";
 
@@ -72,6 +80,51 @@ test("syncIncrementally는 pipeline 실패 시 커밋하지 않아 다음 호출
   const third = await syncIncrementally(collector, pipeline, rawItemRepository);
   assert.equal(third.skipped, 1, "성공 후 커밋됐으니 세 번째 호출은 변경 없음으로 건너뛰어야 함");
   assert.equal(third.collected, 0);
+});
+
+// 처음 N번은 재시도 가능한 오류(예: 연결 실패)를 던지고 이후엔 정상 응답하는 fake Provider —
+// "일시적 LLM 장애 → 복구" 재현용(PR #33 리뷰, doyeonid 지적).
+class FlakyLLMProvider implements LLMProvider {
+  private readonly failTimes: number;
+  private callCount = 0;
+
+  constructor(failTimes: number) {
+    this.failTimes = failTimes;
+  }
+
+  async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+    this.callCount += 1;
+    if (this.callCount <= this.failTimes) {
+      throw new LLMExtractionError("connect ECONNREFUSED", { category: "connection" });
+    }
+    const value = { facts: [] };
+    if (!request.validate(value)) throw new Error("unexpected: facts:[] should validate");
+    return value;
+  }
+}
+
+test("일시적 LLM 실패는 커밋되지 않고, Provider가 복구되면 같은 RawItem이 재시도돼 성공한다", async () => {
+  const rawItemRepository = new InMemoryRawItemRepository();
+  const flakyProvider = new FlakyLLMProvider(1);
+  const pipeline = new ContextPipeline({
+    repository: new InMemoryContextRepository(),
+    privacyGateway: { async prepare(rawItem: RawItem) { return rawItem; } },
+    factExtractor: new RetryAwareFactExtractor(new LLMFactExtractor(flakyProvider)),
+    contextResolver: new DeterministicContextResolver(),
+  });
+  const item = sampleRawItem();
+  const collector = fixedCollector(item);
+
+  const first = await syncIncrementally(collector, pipeline, rawItemRepository);
+  assert.ok(first.errors.length > 0, "첫 동기화는 일시적 LLM 오류로 실패해야 함");
+  assert.equal(
+    await rawItemRepository.findByUri(item.sourceId, item.uri),
+    undefined,
+    "재시도 가능한 실패는 체크포인트에 저장되면 안 됨(다음 tick에 스킵되지 않아야 함)",
+  );
+
+  const second = await syncIncrementally(collector, pipeline, rawItemRepository);
+  assert.deepEqual(second.errors, [], "Provider가 복구됐으니 두 번째 동기화는 성공해야 함");
 });
 
 test("syncIncrementally는 변경 없으면 collector.sync()로 값은 받아오되 pipeline은 안 부른다", async () => {

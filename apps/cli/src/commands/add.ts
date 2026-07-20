@@ -32,6 +32,13 @@ export async function runAdd(
     return "일정 추가 의도를 알아듣지 못했습니다. 예: \"이번 주 금요일 저녁에 민수랑 저녁 약속 있어\"";
   }
 
+  // 파이프·스크립트 등 비대화형 환경에서 stdin이 TTY가 아니면 rl.question()이 입력을
+  // 영원히 기다려 프로세스가 멈춘다(PR #33 리뷰, 김도현 지적). 기본 stdin을 그대로 쓰는
+  // 경우에만 검사한다 — 테스트가 주입하는 스크립트 스트림(io.input !== stdin)은 그대로 둔다.
+  if (io.input === stdin && stdin.isTTY !== true) {
+    return `${intent.clarifyingQuestion}\n비대화형 환경이라 자동으로 저장하지 않습니다. 대화형 터미널에서 다시 실행해 확인해주세요.`;
+  }
+
   const rl = createInterface({ input: io.input, output: io.output });
   let rawAnswer: string;
   try {

@@ -35,6 +35,8 @@ import type {
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
 import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
+import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
+import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -140,8 +142,16 @@ export function createCliContainer(): CliContainer {
   // 정해지면 채운다(이슈#27 논의 1번, 도메인 전체 허용은 금지 — masking.ts 참고). 지금은
   // 비워둬서 모든 이메일 주소가 안전하게 마스킹된다(과소 노출 쪽으로 fail). advise의
   // LlmScreenAdvicePolicy도 이 인스턴스를 그대로 재사용한다(마스킹 정책 이원화 방지).
+  // "conversation"은 실제 Collector가 없는 합성 sourceType이다 — ask(qa.ts)와 추천 문장
+  // 생성(MaskingLLMProvider)이 질문/프롬프트를 담은 휘발성 RawItem을 이 sourceType으로
+  // 만들어 privacyGateway.prepare()에 넘긴다. allowlist에 없으면 그 요청이 거부되고
+  // 조용히 결정론적 폴백으로 넘어가 LLM이 설정돼 있어도 실제로는 절대 호출되지
+  // 않는다(PR #33 리뷰, doyeonid 지적 — ask의 LLM 경로가 항상 막혀 있었음).
   const privacyGateway = new ChunkingPrivacyGateway({
-    allowedSources: [...collectors, screenCollector].map((collector) => collector.sourceType),
+    allowedSources: [
+      ...[...collectors, screenCollector].map((collector) => collector.sourceType),
+      "conversation",
+    ],
     allowedEmailAddresses: [],
   });
 
@@ -149,17 +159,25 @@ export function createCliContainer(): CliContainer {
     repository,
     privacyGateway,
     // provider가 없으면(.env 미설정) 기존 임시 규칙 추출기를 그대로 쓴다 — 회귀 없음.
+    // 있으면 RetryAwareFactExtractor로 감싸 일시적 LLM 실패(retryable_failure)를
+    // "사실 없음"과 구분해 throw한다 — incrementalSync.ts가 이미 갖고 있는 "오류난 배치는
+    // 커밋 안 함" 규칙 덕분에 같은 RawItem이 다음 tick에 재시도된다(retryAwareFactExtractor.ts 참고).
     factExtractor: llmProvider !== undefined
-      ? new LLMFactExtractor(llmProvider)
+      ? new RetryAwareFactExtractor(new LLMFactExtractor(llmProvider))
       : new TempHeuristicFactExtractor(),
     contextResolver: new DeterministicContextResolver(),
   });
   // watch가 저장한 알림 이력(evidenceStore)을 재알림 dedup(30분 억제)에 그대로 재사용한다.
   // watch를 한 번도 안 돌렸으면 listRecommendations()가 빈 배열이라 today/inbox 동작은 그대로다.
-  // llmProvider가 undefined면 추천 문장도 기존 결정론적 템플릿으로 폴백한다.
+  // llmProvider가 undefined면 추천 문장도 기존 결정론적 템플릿으로 폴백한다. 있으면
+  // MaskingLLMProvider로 감싸 phrasing.ts가 ContextItem.title 등을 마스킹 없이 그대로
+  // Provider에 보내지 않게 한다(maskingLlmProvider.ts 참고) — ask/advise와 달리 phrasing.ts는
+  // 자체 마스킹이 없어서 여기서만 필요하다.
   const recommendationEngine = new RuleBasedRecommendationEngine({
     history: pipeline.evidenceStore,
-    llmProvider,
+    llmProvider: llmProvider !== undefined
+      ? new MaskingLLMProvider(llmProvider, privacyGateway)
+      : undefined,
   });
 
   return {
