@@ -977,7 +977,7 @@ test("마감과 무관한 고권위 Evidence가 낮은 권위의 최신 마감 �
   );
 });
 
-test("resolveWithEvidence는 주입된 analyzedAt을 ContextItem·History 시각에 쓴다(시스템 시간 비의존)", async () => {
+test("resolveWithEvidence는 주입된 observedAt을 ContextItem·History 시각에 쓴다(시스템 시간 비의존)", async () => {
   const resolver = new DeterministicContextResolver();
   const injectedNow = "2026-07-18T09:00:00+09:00";
   const rawItem: RawItem = {
@@ -992,12 +992,12 @@ test("resolveWithEvidence는 주입된 analyzedAt을 ContextItem·History 시각
   const outcome = await resolver.resolveWithEvidence([fact], [], {
     rawItemsById: new Map([["raw-time-1", rawItem]]),
     existingEvidence: [],
-    analyzedAt: injectedNow,
+    observedAt: injectedNow,
   });
 
   assert.equal(outcome.createdItems[0]?.createdAt, injectedNow);
   assert.equal(outcome.createdItems[0]?.updatedAt, injectedNow);
-  assert.equal(outcome.history[0]?.changedAt, injectedNow, "변경 이력 changedAt이 주입된 analyzedAt과 같아야 append-only 재분석이 멱등이 된다");
+  assert.equal(outcome.history[0]?.changedAt, injectedNow, "변경 이력 changedAt이 RawItem observedAt과 같아야 append-only 재분석이 멱등이 된다");
 });
 
 // 김도연님 리뷰 P2: 기준 시각이 관찰 시각이라, 뒤늦게 수집된 오래된 공지가 기존
@@ -1029,7 +1029,7 @@ test("오래된 관찰이 병합돼도 ContextItem.updatedAt은 과거로 돌아
   const outcome = await resolver.resolveWithEvidence([oldFact], [existingItem], {
     rawItemsById: new Map([["raw-old", oldRawItem]]),
     existingEvidence: [],
-    analyzedAt: earlierObservation,
+    observedAt: earlierObservation,
   });
 
   const merged = outcome.updatedItems[0];
@@ -1046,7 +1046,7 @@ test("오래된 관찰이 병합돼도 ContextItem.updatedAt은 과거로 돌아
   );
 });
 
-// 김도연님 리뷰 P3: analyzedAt은 필수 필드라 호출부가 생략할 수 없다. RawItem이
+// 관찰 시각은 필수 필드라 호출부가 생략할 수 없다. RawItem이
 // 없는 좁은 resolve() 경로만 기준 시각을 만들 데가 없으므로 시계를 주입받는다.
 test("좁은 resolve() 경로는 주입된 시계를 쓴다(new Date() 직접 호출 없음)", async () => {
   const fixed = new Date("2026-07-18T09:00:00+09:00");
