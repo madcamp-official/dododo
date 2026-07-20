@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   ContextPipeline,
   DeterministicContextResolver,
+  LLMFactExtractor,
   RuleBasedRecommendationEngine,
 } from "../../../../packages/context-engine/src/index.ts";
 import {
@@ -13,7 +14,7 @@ import {
   ScreenCollector,
   type ScreenCaptureResult,
 } from "../../../../packages/collectors/src/index.ts";
-import { AllowlistPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
+import { ChunkingPrivacyGateway } from "../../../../packages/privacy/src/index.ts";
 import { InMemoryProfileRepository } from "../../../../packages/profile/src/index.ts";
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
 import {
@@ -30,7 +31,9 @@ import type {
   SourceType,
   UserProfile,
 } from "../../../../packages/shared/src/index.ts";
+import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { createLlmProvider } from "./llmProvider.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -69,6 +72,9 @@ export interface CliContainer {
   // 안 타도록 여기서 주입 지점을 둔다 — school-site HTTP Loader의 fetchImplementation과
   // 같은 이유(환경 의존 없는 테스트).
   captureLiveScreen: () => Promise<ScreenCaptureResult>;
+  // .env의 DODODO_LLM_BASE_URL 미설정이면 undefined — advise/ask 등 LLM을 쓰는 명령이
+  // 이 값으로 폴백 여부를 직접 판단한다(docs/handoff-cli-llm-wiring.md).
+  llmProvider: LLMProvider | undefined;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -117,21 +123,33 @@ export function createCliContainer(): CliContainer {
   const rawItemRepository = new InMemoryRawItemRepository();
   const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
+  const llmProvider = createLlmProvider();
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
   // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
   // "Source is not allowed: screen"으로 조용히 막히지 않는다.
   const pipeline = new ContextPipeline({
     repository,
-    privacyGateway: new AllowlistPrivacyGateway(
-      [...collectors, screenCollector].map((collector) => collector.sourceType),
-    ),
-    factExtractor: new TempHeuristicFactExtractor(),
+    // 마스킹+Chunk 선택 적용(#21). allowedEmailAddresses는 실제 학교 공식 발신
+    // 주소가 정해지면 채운다(이슈#27 논의 1번, 도메인 전체 허용은 금지 — masking.ts 참고).
+    // 지금은 비워둬서 모든 이메일 주소가 안전하게 마스킹된다(과소 노출 쪽으로 fail).
+    privacyGateway: new ChunkingPrivacyGateway({
+      allowedSources: [...collectors, screenCollector].map((collector) => collector.sourceType),
+      allowedEmailAddresses: [],
+    }),
+    // provider가 없으면(.env 미설정) 기존 임시 규칙 추출기를 그대로 쓴다 — 회귀 없음.
+    factExtractor: llmProvider !== undefined
+      ? new LLMFactExtractor(llmProvider)
+      : new TempHeuristicFactExtractor(),
     contextResolver: new DeterministicContextResolver(),
   });
   // watch가 저장한 알림 이력(evidenceStore)을 재알림 dedup(30분 억제)에 그대로 재사용한다.
   // watch를 한 번도 안 돌렸으면 listRecommendations()가 빈 배열이라 today/inbox 동작은 그대로다.
-  const recommendationEngine = new RuleBasedRecommendationEngine({ history: pipeline.evidenceStore });
+  // llmProvider가 undefined면 추천 문장도 기존 결정론적 템플릿으로 폴백한다.
+  const recommendationEngine = new RuleBasedRecommendationEngine({
+    history: pipeline.evidenceStore,
+    llmProvider,
+  });
 
   return {
     repository,
@@ -145,6 +163,7 @@ export function createCliContainer(): CliContainer {
     screenCollector,
     screenAdvicePolicy: defaultScreenAdvicePolicy,
     captureLiveScreen: () => captureActiveScreen(),
+    llmProvider,
   };
 }
 

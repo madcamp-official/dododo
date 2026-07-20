@@ -107,6 +107,25 @@ test("setup saves quietHours when both times are valid", async () => {
   assert.deepEqual(profile?.quietHours, { start: "22:00", end: "07:00" });
 });
 
+test("container has no llmProvider without DODODO_LLM_BASE_URL(회귀 없음 확인)", () => {
+  assert.equal(process.env.DODODO_LLM_BASE_URL, undefined, "테스트 환경에 이 변수가 이미 설정돼 있으면 안 됨");
+  const container = createCliContainer();
+  assert.equal(container.llmProvider, undefined);
+});
+
+test("DODODO_LLM_BASE_URL을 설정하면 container가 llmProvider를 갖고, LLM이 실패해도 sync는 안 죽는다", async () => {
+  process.env.DODODO_LLM_BASE_URL = "http://127.0.0.1:1"; // 아무도 안 듣는 포트 — 연결 실패 유도
+  try {
+    const container = createCliContainer();
+    assert.notEqual(container.llmProvider, undefined);
+
+    const summary = await runSync(container);
+    assert.match(summary, /school-site-main/);
+  } finally {
+    delete process.env.DODODO_LLM_BASE_URL;
+  }
+});
+
 test("setup skips quietHours and warns when the start time is malformed", async () => {
   const container = createCliContainer();
   const input = Readable.from(pacedLines([
