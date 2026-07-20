@@ -1,11 +1,14 @@
 import { commandCatalog } from "./commands/catalog.ts";
 import { renderDoctor } from "./commands/doctor.ts";
 import { renderHelp } from "./commands/help.ts";
+import { runAdvise } from "./commands/advise.ts";
 import { renderInbox } from "./commands/inbox.ts";
 import { runSetup } from "./commands/setup.ts";
 import { runSync } from "./commands/sync.ts";
+import { runScreen } from "./commands/screen.ts";
 import { runTask } from "./commands/task.ts";
 import { renderToday } from "./commands/today.ts";
+import { runWatch } from "./commands/watch.ts";
 import { createCliContainer } from "./runtime/container.ts";
 
 const command = process.argv[2] ?? "help";
@@ -40,6 +43,18 @@ async function main(): Promise<void> {
   }
   if (command === "task") {
     console.log(await runTask(container, process.argv.slice(3)));
+    return;
+  }
+  if (command === "watch") {
+    console.log(await runWatch(container, process.argv.slice(3)));
+    return;
+  }
+  if (command === "screen") {
+    console.log(await runScreen(container));
+    return;
+  }
+  if (command === "advise") {
+    console.log(await runAdvise(container, process.argv.slice(3)));
     return;
   }
 

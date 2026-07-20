@@ -1,4 +1,5 @@
 import type { CliContainer } from "../runtime/container.ts";
+import { syncIncrementally } from "../runtime/incrementalSync.ts";
 
 export async function runSync(container: CliContainer, now: Date = new Date()): Promise<string> {
   const lines = ["dododo sync", ""];
@@ -9,7 +10,7 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
   }
 
   for (const collector of container.collectors) {
-    const result = await container.pipeline.sync(collector);
+    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
     container.syncStatus.record(result, now);
 
     const errorSuffix = result.errors.length > 0 ? ` · 오류: ${result.errors.join(", ")}` : "";
