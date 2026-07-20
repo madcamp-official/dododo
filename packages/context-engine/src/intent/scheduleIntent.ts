@@ -16,8 +16,7 @@ export type ScheduleIntentResult =
 const SCHEDULE_SIGNAL = /(약속|미팅|회의|일정|모임|만나|보기로|예약)/;
 
 const WEEKDAYS: Record<string, number> = {
-  일요일: 0, 일: 0, 월요일: 1, 월: 1, 화요일: 2, 화: 2, 수요일: 3, 수: 3,
-  목요일: 4, 목: 4, 금요일: 5, 금: 5, 토요일: 6, 토: 6,
+  일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6,
 };
 
 export function parseScheduleIntent(utterance: string, now: Date): ScheduleIntentResult {
@@ -70,12 +69,16 @@ function resolveDate(utterance: string, now: Date): Date | undefined {
   if (monthDay !== null) {
     const month = Number(monthDay[1]) - 1;
     const day = Number(monthDay[2]);
-    const candidate = new Date(base);
-    candidate.setMonth(month, day);
-    return candidate;
+    const candidate = localDate(base.getFullYear(), month, day);
+    if (candidate === undefined) return undefined;
+    return candidate < base
+      ? localDate(base.getFullYear() + 1, month, day)
+      : candidate;
   }
 
-  const weekdayMatch = /(다음\s*주|이번\s*주)?\s*([일월화수목금토])(?:요일)?/.exec(utterance);
+  // 단일 글자(일/월/화/...)는 "일정", "3월" 같은 흔한 단어에도 들어가므로
+  // 반드시 "요일" 접미사가 있는 표현만 요일로 해석한다.
+  const weekdayMatch = /(다음\s*주|이번\s*주)?\s*([일월화수목금토])요일/.exec(utterance);
   if (weekdayMatch !== null) {
     const targetDow = WEEKDAYS[weekdayMatch[2]!]!;
     const nextWeek = weekdayMatch[1] !== undefined && /다음/.test(weekdayMatch[1]);
@@ -86,9 +89,14 @@ function resolveDate(utterance: string, now: Date): Date | undefined {
 
   const dayOnly = /(\d{1,2})\s*일/.exec(utterance);
   if (dayOnly !== null) {
-    const candidate = new Date(base);
-    candidate.setDate(Number(dayOnly[1]));
-    return candidate;
+    const day = Number(dayOnly[1]);
+    const thisMonth = localDate(base.getFullYear(), base.getMonth(), day);
+    if (thisMonth !== undefined && thisMonth >= base) return thisMonth;
+
+    const nextMonthSeed = new Date(base);
+    nextMonthSeed.setDate(1);
+    nextMonthSeed.setMonth(nextMonthSeed.getMonth() + 1);
+    return localDate(nextMonthSeed.getFullYear(), nextMonthSeed.getMonth(), day);
   }
 
   return undefined;
@@ -162,6 +170,18 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+function localDate(year: number, month: number, day: number): Date | undefined {
+  if (!Number.isInteger(month) || month < 0 || month > 11 || !Number.isInteger(day) || day < 1 || day > 31) {
+    return undefined;
+  }
+  const candidate = new Date(0);
+  candidate.setHours(0, 0, 0, 0);
+  candidate.setFullYear(year, month, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === month && candidate.getDate() === day
+    ? candidate
+    : undefined;
 }
 
 // 시스템 타임존 기준 로컬 ISO 문자열(offset 포함). UTC로 밀리면 날짜가 하루 어긋날 수
