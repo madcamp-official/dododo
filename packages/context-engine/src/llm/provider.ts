@@ -11,6 +11,12 @@ export interface LLMJSONRequest<T> {
   userPrompt: string;
   schema: JSONSchemaNode;
   images?: string[];
+  // 호출 시간 상한(ms). 초과하면 category "timeout"인 LLMExtractionError로 실패한다.
+  // 지정하지 않으면 Provider 기본값을 쓴다.
+  timeoutMs?: number;
+  // 구조화 추출은 일관성이 중요하므로 낮은 값(예: 0)을 권장한다(docs/llm-architecture.md §7).
+  // 지정하지 않으면 모델 기본값을 쓴다.
+  temperature?: number;
   // 구조적 Schema 검증을 통과한 뒤 추가로 의미적 조건(예: 배열 필드 존재)을
   // 확인하고 타입을 좁힌다. 실패하면 completeJSON이 LLMExtractionError를 던진다.
   validate: (value: unknown) => value is T;
