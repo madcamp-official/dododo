@@ -8,6 +8,7 @@
 - MVP 범위, 7일 계획, 완료 조건: `docs/mvp-scope.md`
 - 대표 사용자 흐름: `docs/user-scenarios.md`
 - 모듈 구조와 데이터 흐름: `docs/architecture.md`
+- LLM 활용 방향과 확장 경계: `docs/llm-architecture.md`
 
 문서와 구현이 충돌하면 조용히 한쪽을 가정하지 않는다. 충돌을 알리고, 사용자가 정한 범위에 맞춰 문서와 구현을 함께 갱신한다.
 
