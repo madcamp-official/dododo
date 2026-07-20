@@ -43,8 +43,10 @@ export function adaptScreenFixtureToRawItem(
 }
 
 const MIN_ACTIVITY_CONFIDENCE = 0.6;
-const MIN_LINK_SIMILARITY = 0.2;
+const MIN_LINK_SIMILARITY = 0.35;
 const MAX_ACTIVITY_RELEVANCE = 15;
+const EXCLUDED_STATUSES = new Set(["done", "cancelled", "dismissed", "expired"]);
+const GENERIC_CONTEXT_TAGS = new Set(["task", "event", "opportunity", "note", "activity"]);
 
 export interface ActivityLink {
   item: ContextItem;
@@ -59,6 +61,7 @@ export interface ActivityLink {
 export function linkActivityToContext(
   activityRawItem: RawItem,
   items: ContextItem[],
+  now: Date,
 ): ActivityLink | undefined {
   const confidence = numberOrUndefined(activityRawItem.metadata.confidence);
   if (confidence === undefined || confidence < MIN_ACTIVITY_CONFIDENCE) return undefined;
@@ -68,9 +71,14 @@ export function linkActivityToContext(
 
   let best: ActivityLink | undefined;
   for (const item of items) {
+    // 조언할 수 없는 항목은 최댓값을 고른 뒤 버리지 말고 후보 선택 전에 제외한다.
+    // 그래야 완료·Snooze 항목이 1위여도 활성 상태인 차선 항목으로 폴백할 수 있다.
+    if (EXCLUDED_STATUSES.has(item.status) || isSnoozed(item, now)) continue;
+
+    const meaningfulTags = item.tags.filter((tag) => !GENERIC_CONTEXT_TAGS.has(tag.trim().toLowerCase()));
     const similarity = Math.max(
       trigramSimilarity(candidateText, item.title),
-      ...item.tags.map((tag) => trigramSimilarity(candidateText, tag)),
+      ...meaningfulTags.map((tag) => trigramSimilarity(candidateText, tag)),
     );
     if (similarity < MIN_LINK_SIMILARITY) continue;
     if (best === undefined || similarity > best.similarity) {
@@ -99,7 +107,6 @@ export interface ScreenAdviceOptions {
 }
 
 const ADVICE_SUPPRESS_MINUTES = 30;
-const EXCLUDED_STATUSES = new Set(["done", "cancelled", "dismissed", "expired"]);
 
 interface AdviceResponse {
   advice: string;
@@ -133,6 +140,7 @@ export async function generateScreenAdvice(
   if (focusMode === true) return undefined;
   if (EXCLUDED_STATUSES.has(link.item.status)) return undefined;
   if (isSnoozed(link.item, now)) return undefined;
+  if (link.similarity < MIN_LINK_SIMILARITY) return undefined;
   if (lastAdvisedAt !== undefined && minutesBetween(lastAdvisedAt, now) < ADVICE_SUPPRESS_MINUTES) {
     return undefined;
   }
@@ -142,7 +150,7 @@ export async function generateScreenAdvice(
     response = await provider.completeJSON({
       modelKind: "text",
       systemPrompt: SYSTEM_PROMPT,
-      userPrompt: buildUserPrompt(activityRawItem, link.item, now),
+      userPrompt: buildUserPrompt(activityRawItem, link, now),
       schema: adviceSchema,
       validate: isAdviceResponse,
     });
@@ -157,7 +165,8 @@ export async function generateScreenAdvice(
   };
 }
 
-function buildUserPrompt(activityRawItem: RawItem, item: ContextItem, now: Date): string {
+function buildUserPrompt(activityRawItem: RawItem, link: ActivityLink, now: Date): string {
+  const item = link.item;
   return [
     "<activity>",
     `현재 활동: ${activityRawItem.content}`,
@@ -167,6 +176,7 @@ function buildUserPrompt(activityRawItem: RawItem, item: ContextItem, now: Date)
     "</activity>",
     "<task>",
     `관련 Task: ${item.title}`,
+    `연결 유사도: ${link.similarity.toFixed(2)}`,
     item.deadline !== undefined ? `마감: ${item.deadline}` : undefined,
     item.requirements.length > 0 ? `미완료 요구사항: ${item.requirements.join(", ")}` : undefined,
     `현재 시각: ${now.toISOString()}`,

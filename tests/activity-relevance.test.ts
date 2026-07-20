@@ -52,6 +52,8 @@ const screenFixture = {
   confidence: 0.82,
 };
 
+const NOW = new Date("2026-07-18T15:20:00+09:00");
+
 test("adaptScreenFixtureToRawItem은 screen RawItem으로 변환하고 재현 가능한 id를 만든다", () => {
   const a = adaptScreenFixtureToRawItem(screenFixture);
   const b = adaptScreenFixtureToRawItem(screenFixture);
@@ -65,20 +67,56 @@ test("linkActivityToContext는 화면 활동을 관련 Task와 연결한다", ()
   const raw = adaptScreenFixtureToRawItem(screenFixture);
   const items = [osTask(), osTask({ id: "ctx-eng", title: "영어 에세이 제출", tags: ["task"], evidenceIds: ["ev-e"] })];
 
-  const link = linkActivityToContext(raw, items);
+  const link = linkActivityToContext(raw, items, NOW);
   assert.equal(link?.item.id, "ctx-os");
   assert.ok(link!.relevance > 0 && link!.relevance <= 15);
 });
 
 test("linkActivityToContext는 확신도가 낮으면 연결하지 않는다", () => {
   const raw = adaptScreenFixtureToRawItem({ ...screenFixture, confidence: 0.4 });
-  assert.equal(linkActivityToContext(raw, [osTask()]), undefined);
+  assert.equal(linkActivityToContext(raw, [osTask()], NOW), undefined);
 });
 
 test("linkActivityToContext는 유사한 항목이 없으면 연결하지 않는다", () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
   const unrelated = osTask({ id: "ctx-x", title: "동아리 회비 납부", tags: ["task"], evidenceIds: ["ev-x"] });
-  assert.equal(linkActivityToContext(raw, [unrelated]), undefined);
+  assert.equal(linkActivityToContext(raw, [unrelated], NOW), undefined);
+});
+
+test("linkActivityToContext는 완료된 최선 매치 대신 활성 차선 Task를 선택한다", () => {
+  const raw = adaptScreenFixtureToRawItem(screenFixture);
+  const doneBest = osTask({ id: "ctx-done", status: "done" });
+  const activeSecond = osTask({
+    id: "ctx-active",
+    title: "운영체제 시험 대비 계획",
+    evidenceIds: ["ev-active"],
+  });
+
+  const link = linkActivityToContext(raw, [doneBest, activeSecond], NOW);
+  assert.equal(link?.item.id, "ctx-active");
+});
+
+test("linkActivityToContext는 Snooze된 최선 매치 대신 활성 차선 Task를 선택한다", () => {
+  const raw = adaptScreenFixtureToRawItem(screenFixture);
+  const snoozedBest = osTask({
+    id: "ctx-snoozed",
+    metadata: { snoozedUntil: "2026-07-19T00:00:00+09:00" },
+  });
+  const activeSecond = osTask({ id: "ctx-active", title: "운영체제 시험 대비 계획" });
+
+  const link = linkActivityToContext(raw, [snoozedBest, activeSecond], NOW);
+  assert.equal(link?.item.id, "ctx-active");
+});
+
+test("linkActivityToContext는 범주형 공통 태그만 겹치면 연결하지 않는다", () => {
+  const raw = adaptScreenFixtureToRawItem({
+    ...screenFixture,
+    activity: "task 목록을 확인 중",
+    relatedTaskCandidate: "task",
+  });
+  const unrelated = osTask({ title: "영어 에세이 제출", tags: ["task"] });
+
+  assert.equal(linkActivityToContext(raw, [unrelated], NOW), undefined);
 });
 
 function undergraduateProfile(overrides: Partial<UserProfile> = {}): UserProfile {
@@ -114,7 +152,7 @@ test("relevanceScore는 자격이 애매하면 배제하지 않는다", () => {
 
 test("generateScreenAdvice는 정책을 통과하면 LLM 조언을 생성한다", async () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
-  const link = linkActivityToContext(raw, [osTask()])!;
+  const link = linkActivityToContext(raw, [osTask()], NOW)!;
   const advice = await generateScreenAdvice({
     activityRawItem: raw,
     link,
@@ -129,7 +167,7 @@ test("generateScreenAdvice는 정책을 통과하면 LLM 조언을 생성한다"
 
 test("generateScreenAdvice는 집중 모드면 조언하지 않는다", async () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
-  const link = linkActivityToContext(raw, [osTask()])!;
+  const link = linkActivityToContext(raw, [osTask()], NOW)!;
   const advice = await generateScreenAdvice({
     activityRawItem: raw, link, now: new Date("2026-07-18T15:20:00+09:00"),
     provider: fixedProvider({ advice: "x" }), focusMode: true,
@@ -137,20 +175,17 @@ test("generateScreenAdvice는 집중 모드면 조언하지 않는다", async ()
   assert.equal(advice, undefined);
 });
 
-test("generateScreenAdvice는 완료·Snooze 상태의 Task에는 조언하지 않는다", async () => {
+test("linkActivityToContext는 완료·Snooze 상태의 Task만 있으면 연결하지 않는다", () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
-  const now = new Date("2026-07-18T15:20:00+09:00");
-
-  const doneLink = linkActivityToContext(raw, [osTask({ status: "done" })])!;
-  assert.equal(await generateScreenAdvice({ activityRawItem: raw, link: doneLink, now, provider: fixedProvider({ advice: "x" }) }), undefined);
-
-  const snoozedLink = linkActivityToContext(raw, [osTask({ metadata: { snoozedUntil: "2026-07-19T00:00:00+09:00" } })])!;
-  assert.equal(await generateScreenAdvice({ activityRawItem: raw, link: snoozedLink, now, provider: fixedProvider({ advice: "x" }) }), undefined);
+  assert.equal(linkActivityToContext(raw, [osTask({ status: "done" })], NOW), undefined);
+  assert.equal(linkActivityToContext(raw, [osTask({
+    metadata: { snoozedUntil: "2026-07-19T00:00:00+09:00" },
+  })], NOW), undefined);
 });
 
 test("generateScreenAdvice는 최근 30분 이내 조언했으면 반복하지 않는다", async () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
-  const link = linkActivityToContext(raw, [osTask()])!;
+  const link = linkActivityToContext(raw, [osTask()], NOW)!;
   const advice = await generateScreenAdvice({
     activityRawItem: raw, link,
     now: new Date("2026-07-18T15:20:00+09:00"),
@@ -162,7 +197,7 @@ test("generateScreenAdvice는 최근 30분 이내 조언했으면 반복하지 �
 
 test("generateScreenAdvice는 LLM 실패 시 억지 조언 없이 undefined를 반환한다", async () => {
   const raw = adaptScreenFixtureToRawItem(screenFixture);
-  const link = linkActivityToContext(raw, [osTask()])!;
+  const link = linkActivityToContext(raw, [osTask()], NOW)!;
   const advice = await generateScreenAdvice({
     activityRawItem: raw, link, now: new Date("2026-07-18T15:20:00+09:00"),
     provider: failingProvider,
