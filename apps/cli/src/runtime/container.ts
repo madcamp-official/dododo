@@ -34,7 +34,7 @@ import type {
 } from "../../../../packages/shared/src/index.ts";
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
-import { createLlmProvider } from "./llmProvider.ts";
+import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -79,6 +79,9 @@ export interface CliContainer {
   // pipeline이 쓰는 것과 같은 인스턴스. ask 명령이 answerContextQuestion 호출 시
   // 그대로 넘긴다(마스킹 정책 이원화 방지 — screenAdvicePolicy와 같은 이유).
   privacyGateway: PrivacyGateway;
+  // doctor가 provider 내부(private baseUrl/model)를 안 건드리고 상태 문구를 만들 수 있게
+  // llmProvider와 같은 소스(resolveLlmConfig)에서 뽑은 설정을 그대로 노출한다.
+  llmConfig: LlmConfig | undefined;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -127,6 +130,7 @@ export function createCliContainer(): CliContainer {
   const rawItemRepository = new InMemoryRawItemRepository();
   const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
+  const llmConfig = resolveLlmConfig();
   const llmProvider = createLlmProvider();
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
@@ -175,6 +179,7 @@ export function createCliContainer(): CliContainer {
     captureLiveScreen: () => captureActiveScreen(),
     llmProvider,
     privacyGateway,
+    llmConfig,
   };
 }
 

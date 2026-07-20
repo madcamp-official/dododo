@@ -59,9 +59,44 @@ test("doctor reports source status after sync", async () => {
   const container = createCliContainer();
   await runSync(container);
 
-  const doctor = renderDoctor(container);
+  const doctor = await renderDoctor(container);
   assert.match(doctor, /Source 상태/);
   assert.match(doctor, /마지막 동기화/);
+});
+
+test("doctor는 DODODO_LLM_BASE_URL 미설정이면 미설정 문구를 보여준다", async () => {
+  const container = createCliContainer();
+  const doctor = await renderDoctor(container);
+  assert.match(doctor, /LLM: 미설정\(\.env의 DODODO_LLM_BASE_URL 없음\)/);
+});
+
+test("doctor는 baseUrl 설정+연결 성공이면 연결 OK를 보여준다", async () => {
+  const container = createCliContainer();
+  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  const fakeFetch = (async () => new Response(null, { status: 200 })) as typeof fetch;
+
+  const doctor = await renderDoctor(container, fakeFetch);
+  assert.match(doctor, /LLM: http:\/\/vm:11434 · text=gemma3:12b vision=gemma3:4b · 연결 OK/);
+});
+
+test("doctor는 연결 실패 응답이면 HTTP 상태코드를 보여준다", async () => {
+  const container = createCliContainer();
+  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  const fakeFetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
+
+  const doctor = await renderDoctor(container, fakeFetch);
+  assert.match(doctor, /연결 실패\(HTTP 500\)/);
+});
+
+test("doctor는 fetch가 실패해도 죽지 않고 실패 사유를 보여준다", async () => {
+  const container = createCliContainer();
+  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  const fakeFetch = (async () => {
+    throw new Error("connect ECONNREFUSED");
+  }) as typeof fetch;
+
+  const doctor = await renderDoctor(container, fakeFetch);
+  assert.match(doctor, /연결 실패\(connect ECONNREFUSED\)/);
 });
 
 test("setup saves a profile collected from scripted stdin", async () => {

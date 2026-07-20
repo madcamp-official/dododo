@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const container = createCliContainer();
 
   if (command === "doctor") {
-    console.log(renderDoctor(container));
+    console.log(await renderDoctor(container));
     return;
   }
   if (command === "setup") {
