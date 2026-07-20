@@ -1,48 +1,48 @@
 import type {
   Collector,
   ContextItem,
+  ContextChangeEvent,
   ContextRepository,
   ContextResolver,
   Fact,
   FactExtractor,
   PrivacyGateway,
   RawItem,
+  Evidence,
   SyncResult,
 } from "../../shared/src/index.ts";
 import { isEvidenceAware } from "./resolution/index.ts";
-import { InterimContextStore } from "./store/index.ts";
 
 export interface ContextPipelineDependencies {
   repository: ContextRepository;
   privacyGateway: PrivacyGateway;
   factExtractor: FactExtractor;
   contextResolver: ContextResolver;
-  // 지정하지 않으면 파이프라인이 자체적으로 하나를 만들어 이 인스턴스의 생애주기 동안
-  // 재사용한다. packages/shared/src/contracts.ts의 ContextRepository가 아직 Evidence를
-  // 저장할 방법이 없어(docs/proposals/context-repository-contract-extension.md) 임시로
-  // 여기서 관리한다.
-  evidenceStore?: InterimContextStore;
 }
 
 interface ResolveResult {
   createdItems: ContextItem[];
   updatedItems: ContextItem[];
+  evidence: Evidence[];
+  history: ContextChangeEvent[];
 }
 
 export class ContextPipeline {
   private readonly dependencies: ContextPipelineDependencies;
-  readonly evidenceStore: InterimContextStore;
+  readonly evidenceStore: Pick<
+    ContextRepository,
+    "saveEvidence" | "listEvidence" | "saveContextHistory" | "listContextHistory"
+      | "saveRecommendations" | "listRecommendations"
+  >;
 
   constructor(dependencies: ContextPipelineDependencies) {
     this.dependencies = dependencies;
-    this.evidenceStore = dependencies.evidenceStore ?? new InterimContextStore();
+    this.evidenceStore = dependencies.repository;
   }
 
   async sync(collector: Collector): Promise<SyncResult> {
     try {
       const rawItems = await collector.sync();
-      await this.dependencies.repository.saveRawItems(rawItems);
-
       const rawItemsById = new Map(rawItems.map((item) => [item.id, item]));
       const existing = await this.dependencies.repository.listContextItems();
       let created = 0;
@@ -51,10 +51,20 @@ export class ContextPipeline {
       for (const rawItem of rawItems) {
         const safeItem = await this.dependencies.privacyGateway.prepare(rawItem);
         const facts = await this.dependencies.factExtractor.extract(safeItem);
-        await this.dependencies.repository.saveFacts(facts);
 
-        const { createdItems, updatedItems } = await this.resolve(facts, existing, rawItemsById);
-        await this.dependencies.repository.saveContextItems([...createdItems, ...updatedItems]);
+        const { createdItems, updatedItems, evidence, history } = await this.resolve(
+          facts,
+          existing,
+          rawItemsById,
+        );
+        await this.dependencies.repository.saveRawItemAnalysis({
+          rawItem,
+          facts,
+          contextItems: [...createdItems, ...updatedItems],
+          evidence,
+          history,
+          analyzedAt: rawItem.observedAt,
+        });
 
         applyToWorkingSet(existing, createdItems, updatedItems);
         created += createdItems.length;
@@ -94,7 +104,7 @@ export class ContextPipeline {
 
     if (!isEvidenceAware(resolver)) {
       const items = await resolver.resolve(facts, existing);
-      return { createdItems: items, updatedItems: [] };
+      return { createdItems: items, updatedItems: [], evidence: [], history: [] };
     }
 
     const existingEvidenceIds = existing.flatMap((item) => item.evidenceIds);
@@ -104,9 +114,12 @@ export class ContextPipeline {
       rawItemsById,
       existingEvidence,
     });
-    await this.evidenceStore.saveEvidence(outcome.evidence);
-    await this.evidenceStore.saveContextHistory(outcome.history);
-    return { createdItems: outcome.createdItems, updatedItems: outcome.updatedItems };
+    return {
+      createdItems: outcome.createdItems,
+      updatedItems: outcome.updatedItems,
+      evidence: outcome.evidence,
+      history: outcome.history,
+    };
   }
 }
 

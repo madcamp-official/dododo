@@ -72,6 +72,15 @@ export interface Fact {
   evidenceText: string;
 }
 
+export type StoredFactStatus = "active" | "inactive";
+
+// FactExtractor의 출력은 저장소 생명주기를 알 필요가 없다. 활성/비활성 상태는
+// 저장된 Fact를 조회할 때만 노출한다.
+export interface StoredFact extends Fact {
+  status: StoredFactStatus;
+  supersededAt?: string;
+}
+
 export interface Evidence {
   id: string;
   rawItemId: string;
@@ -109,6 +118,36 @@ export interface Recommendation {
   evidenceIds: string[];
   createdAt: string;
   suppressedUntil?: string;
+}
+
+export type ContextChangeType =
+  | "created"
+  | "field_updated"
+  | "status_changed"
+  | "merged"
+  | "evidence_added";
+
+export interface ContextChangeEvent {
+  id: string;
+  contextItemId: string;
+  changeType: ContextChangeType;
+  field?: string;
+  previousValue?: unknown;
+  newValue?: unknown;
+  evidenceId?: string;
+  changedAt: string;
+}
+
+// RawItem 하나에서 파생된 분석 결과의 원자적 저장 단위다. Repository 구현은
+// 전부 반영하거나 전혀 반영하지 않아야 한다.
+export interface RawItemAnalysisResult {
+  rawItem: RawItem;
+  facts: Fact[];
+  contextItems: ContextItem[];
+  evidence: Evidence[];
+  history: ContextChangeEvent[];
+  recommendations?: Recommendation[];
+  analyzedAt: string;
 }
 
 export interface UserProfile {

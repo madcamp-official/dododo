@@ -2,7 +2,7 @@
 
 - 작성자: 김도현 (Context Intelligence & Recommendation)
 - 대상 파일: `packages/shared/src/domain.ts`, `packages/shared/src/contracts.ts`
-- 상태: 제안 (팀 리뷰 대기, 아직 코드에 반영하지 않음)
+- 상태: Storage 리뷰 반영, 공통 계약 변경 제안
 - 관련 PR: Stage 0 — Context Intelligence 임시 저장소
 
 AGENTS.md의 "공동 소유 파일과 변경 절차"에 따라, 변경 이유와 예시를 먼저 제시하고
@@ -32,6 +32,26 @@ AGENTS.md의 "공동 소유 파일과 변경 절차"에 따라, 변경 이유와
 
 ## 2. 제안하는 변경 (Before → After)
 
+### 저장 정책
+
+- `save*`는 ID 기준 upsert다. 단, Context 변경 이력은 append-only다.
+- Recommendation은 반복 추천 억제와 사용자 피드백 추적을 위해 삭제하지 않고 보존한다.
+- RawItem이 수정되어 재분석되면 기존 Fact는 삭제하지 않고 `inactive`로 전환한다.
+- 새 분석의 Fact ID는 RawItem의 `contentHash` 등 분석 버전을 포함해야 한다. 저장소는 비활성
+  Fact의 ID 재사용을 거부해 이전 Fact가 upsert로 덮어써지는 것을 막는다.
+- RawItem 하나와 여기서 파생된 Fact·ContextItem·Evidence·History·Recommendation을 하나의
+  트랜잭션으로 저장한다. 일부만 저장된 분석 결과를 허용하지 않는다.
+- Evidence는 ID 목록뿐 아니라 `contextItemId`로도 조회할 수 있어야 한다.
+
+입력과 결과 예시:
+
+```text
+raw-lms-1(hash-a) 분석 → fact-a(active), ctx-1, ev-a 저장
+raw-lms-1(hash-b) 재분석 → fact-a(inactive), fact-b(active), ctx-1 갱신,
+                           ev-b 추가, deadline 변경 History append
+저장 도중 History 충돌 → raw-lms-1 분석 결과 전체 rollback
+```
+
 ### `domain.ts` — 타입 추가 (기존 타입 변경 없음)
 
 ```ts
@@ -47,6 +67,26 @@ export interface ContextChangeEvent {
 }
 ```
 
+추출된 `Fact`에는 저장 상태를 넣지 않는다. Extractor와 저장소 생명주기를 분리하기 위해
+조회 결과에만 상태가 있는 `StoredFact`를 사용한다.
+
+```ts
+export interface StoredFact extends Fact {
+  status: "active" | "inactive";
+  supersededAt?: string;
+}
+
+export interface RawItemAnalysisResult {
+  rawItem: RawItem;
+  facts: Fact[];
+  contextItems: ContextItem[];
+  evidence: Evidence[];
+  history: ContextChangeEvent[];
+  recommendations?: Recommendation[];
+  analyzedAt: string;
+}
+```
+
 ### `contracts.ts` — `ContextRepository`에 메서드 추가
 
 ```diff
@@ -58,12 +98,19 @@ export interface ContextChangeEvent {
    findContextItem(id: string): Promise<ContextItem | undefined>;
 +  saveEvidence(evidence: Evidence[]): Promise<void>;
 +  listEvidence(ids: string[]): Promise<Evidence[]>;
++  listEvidenceByContextItemId(contextItemId: string): Promise<Evidence[]>;
 +  saveContextHistory(events: ContextChangeEvent[]): Promise<void>;
 +  listContextHistory(contextItemId: string): Promise<ContextChangeEvent[]>;
 +  saveRecommendations(recommendations: Recommendation[]): Promise<void>;
 +  listRecommendations(contextItemId?: string): Promise<Recommendation[]>;
++  listFactsByRawItemId(rawItemId: string, options?: { includeInactive?: boolean }): Promise<StoredFact[]>;
++  deactivateFactsByRawItemId(rawItemId: string, deactivatedAt: string): Promise<void>;
++  saveRawItemAnalysis(result: RawItemAnalysisResult): Promise<void>;
  }
 ```
+
+`saveRawItemAnalysis`가 원자 저장의 공개 경계다. 기존 개별 `save*` 메서드는 기존 소비자와
+단계적 전환을 위해 유지하지만, 전체 분석 결과를 저장하는 신규 Pipeline은 이 메서드를 사용한다.
 
 ### `contracts.ts` — `ContextResolver` 시그니처 확장
 
@@ -105,13 +152,17 @@ Resolver가 Evidence를 만들려면 Fact의 출처인 원본 `RawItem`이 필�
 - **기존 테스트**: `tests/smoke.test.ts`의 inline mock `ContextResolver`(narrow 시그니처)가 있다.
   이 PR에서는 `ContextPipeline`이 넓은 시그니처와 좁은 시그니처를 모두 허용하도록 폴백을 두어
   기존 테스트가 깨지지 않게 했다 — 계약이 실제로 바뀌면 이 폴백도 함께 정리한다.
+- **Fact 생산자**: `StoredFact`를 별도 조회 타입으로 도입하므로 기존 `FactExtractor`는 변경되지 않는다.
+- **트랜잭션 소비자**: `ContextPipeline`은 RawItem별 분석이 끝난 뒤 `saveRawItemAnalysis()`를 호출하도록
+  후속 변경한다. SQLite 구현은 이 호출 하나를 실제 DB 트랜잭션 하나로 처리한다.
 
 ## 4. 반영 절차 (AGENTS.md 기준)
 
 1. (완료) 변경 이유와 Before/After 예시 제시 — 본 문서.
 2. 생산자(context-engine)·소비자(storage) 영향 범위 확인 — 위 3번 항목.
 3. 합의되면 `domain.ts`/`contracts.ts`를 이 문서대로 갱신하고, 대표 Fixture 기대 결과도 함께 갱신한다.
-4. `packages/storage/src/index.ts`의 `InMemoryContextRepository`에 6개 메서드를 구현한다(김도연).
+4. `packages/storage/src/index.ts`의 `InMemoryContextRepository`에 확장 메서드와 RawItem 단위
+   원자 저장을 구현한다(김도연).
 5. `packages/context-engine/src/store/interimStore.ts`를 삭제하고, `ContextPipeline`이
    실제 `ContextRepository`를 호출하도록 교체한다(김도현).
 6. `npm run check` 통과 확인.
