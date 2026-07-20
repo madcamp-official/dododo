@@ -32,6 +32,31 @@ test("LMS JSON Fixture를 RawItem으로 읽는다", async () => {
   assert.equal(item?.externalId, "course-os-assignment-3");
 });
 
+test("LMS 시험과 마감 수정 Fixture가 동일 RawItem 계약을 사용한다", async () => {
+  const currentCollector = new JsonFixtureCollector(
+    "lms-main",
+    "lms",
+    ["fixtures/lms/os-assignment.json", "fixtures/lms/os-exam.json"],
+  );
+  const updateCollector = new JsonFixtureCollector(
+    "lms-main",
+    "lms",
+    ["fixtures/lms/updates/os-assignment-extended.json"],
+  );
+
+  const current = await currentCollector.sync();
+  const [updatedAssignment] = await updateCollector.sync();
+  const exam = current.find((item) => item.externalId === "course-os-exam-final");
+  const assignment = current.find((item) => item.externalId === "course-os-assignment-3");
+
+  assert.equal(exam?.metadata.category, "exam");
+  assert.equal(exam?.metadata.startAt, "2026-07-23T14:00:00+09:00");
+  assert.equal(updatedAssignment?.id, assignment?.id);
+  assert.equal(updatedAssignment?.externalId, assignment?.externalId);
+  assert.notEqual(updatedAssignment?.contentHash, assignment?.contentHash);
+  assert.equal(updatedAssignment?.metadata.dueAt, "2026-07-23T18:00:00+09:00");
+});
+
 test("Collector와 Fixture의 Source가 다르면 거부한다", async () => {
   const collector = new JsonFixtureCollector(
     "wrong-source",

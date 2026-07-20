@@ -8,5 +8,10 @@
   "content": "대학생 AI 해커톤 참가자를 모집합니다. 신청 마감은 2026년 7월 25일 18시입니다.",
   "contentHash": "fixture-school-site-001",
   "observedAt": "2026-07-18T09:00:00+09:00",
-  "metadata": { "official": true, "category": "competition" }
+  "metadata": {
+    "official": true,
+    "category": "competition",
+    "canonicalTitle": "대학생 AI 해커톤 참가자 모집",
+    "deadline": "2026-07-25T18:00:00+09:00"
+  }
 }

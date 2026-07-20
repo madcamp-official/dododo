@@ -1,0 +1,19 @@
+{
+  "id": "raw-lms-os-exam-001",
+  "sourceId": "lms-main",
+  "sourceType": "lms",
+  "externalId": "course-os-exam-final",
+  "uri": "https://lms.example/courses/os/exams/final",
+  "title": "운영체제 기말시험 안내",
+  "content": "운영체제 기말시험은 2026년 7월 23일 14시부터 공학관 101호에서 진행합니다. 시험 범위는 프로세스, 스케줄링, 동기화입니다.",
+  "contentHash": "fixture-lms-os-exam-001",
+  "observedAt": "2026-07-18T09:30:00+09:00",
+  "metadata": {
+    "course": "운영체제",
+    "category": "exam",
+    "startAt": "2026-07-23T14:00:00+09:00",
+    "location": "공학관 101호",
+    "scope": ["프로세스", "스케줄링", "동기화"],
+    "official": true
+  }
+}
