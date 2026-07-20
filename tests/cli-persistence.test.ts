@@ -46,10 +46,10 @@ test("sync 후 container를 새로 만들어도(프로세스 재시작 흉내) i
   }
 });
 
-test("doctor는 DODODO_DB_PATH 미설정이면 in-memory 상태를 보여준다", () => {
+test("doctor는 DODODO_DB_PATH 미설정이면 in-memory 상태를 보여준다", async () => {
   const container = createCliContainer({});
   try {
-    assert.match(renderDoctor(container), /Storage: in-memory \(DODODO_DB_PATH 없음\)/);
+    assert.match(await renderDoctor(container), /Storage: in-memory \(DODODO_DB_PATH 없음\)/);
   } finally {
     container.close();
   }
@@ -61,7 +61,7 @@ test("doctor는 DODODO_DB_PATH 설정이면 SQLite 경로를 보여준다", asyn
   try {
     const container = createCliContainer({ DODODO_DB_PATH: dbPath });
     try {
-      assert.match(renderDoctor(container), new RegExp(`Storage: SQLite`));
+      assert.match(await renderDoctor(container), new RegExp(`Storage: SQLite`));
     } finally {
       container.close();
     }
@@ -70,10 +70,10 @@ test("doctor는 DODODO_DB_PATH 설정이면 SQLite 경로를 보여준다", asyn
   }
 });
 
-test("doctor는 Source 설정 파일이 없으면 Fixture 데모 상태를 보여준다", () => {
+test("doctor는 Source 설정 파일이 없으면 Fixture 데모 상태를 보여준다", async () => {
   const container = createCliContainer({});
   try {
-    assert.match(renderDoctor(container), /Sources: Fixture 데모/);
+    assert.match(await renderDoctor(container), /Sources: Fixture 데모/);
   } finally {
     container.close();
   }
@@ -86,7 +86,7 @@ test("doctor는 Source 설정 파일이 잘못됐으면 Fixture로 폴백하되 
     await writeFile(configPath, "{ not json");
     const container = createCliContainer({ DODODO_SOURCES_CONFIG_PATH: configPath });
     try {
-      assert.match(renderDoctor(container), /Sources: 설정 오류 — Fixture로 폴백 중/);
+      assert.match(await renderDoctor(container), /Sources: 설정 오류 — Fixture로 폴백 중/);
       const sourceIds = container.collectors.map((collector) => collector.sourceId).sort();
       assert.deepEqual(sourceIds, ["lms-main", "school-email-main", "school-site-main"]);
     } finally {
