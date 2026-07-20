@@ -38,7 +38,11 @@ const expectedHackathon: ExpectedContextItem = {
 };
 
 test("evaluateExtraction은 완벽히 일치하면 F1 1.0을 낸다", () => {
-  const actual = [contextItem({ title: "대학생 AI 해커톤 참가자 모집", kind: "opportunity" })];
+  const actual = [contextItem({
+    title: "대학생 AI 해커톤 참가자 모집",
+    kind: "opportunity",
+    evidenceIds: ["ev-site", "ev-email"],
+  })];
   const result = evaluateExtraction([expectedHackathon], actual);
 
   assert.equal(result.truePositive, 1);
@@ -72,7 +76,7 @@ test("evaluateExtraction은 kind 오분류를 FP와 FN에 모두 반영한다", 
   ];
   const actual = [
     contextItem({ title: "운영체제 과제", kind: "event" }),
-    contextItem({ title: "AI 해커톤", kind: "opportunity" }),
+    contextItem({ title: "AI 해커톤", kind: "opportunity", evidenceIds: ["ev-ai"] }),
   ];
 
   const result = evaluateExtraction(expected, actual);
@@ -83,6 +87,50 @@ test("evaluateExtraction은 kind 오분류를 FP와 FN에 모두 반영한다", 
   assert.equal(result.metrics.precision, 0.5);
   assert.equal(result.metrics.recall, 0.5);
   assert.equal(result.metrics.f1, 0.5);
+});
+
+test("evaluateExtraction은 deadline과 evidenceCount가 틀리면 TP로 인정하지 않는다", () => {
+  const expected: ExpectedContextItem[] = [{
+    title: "운영체제 과제 3",
+    kind: "task",
+    deadline: "2026-07-22T23:59:00+09:00",
+    evidenceCount: 2,
+  }];
+  const actual = [contextItem({
+    title: "운영체제 과제 3",
+    kind: "task",
+    deadline: "2099-01-01T00:00:00+09:00",
+    evidenceIds: [],
+  })];
+
+  const result = evaluateExtraction(expected, actual);
+
+  assert.equal(result.truePositive, 0);
+  assert.equal(result.falsePositive, 1, "필드가 여러 개 틀려도 실제 항목은 한 번만 센다");
+  assert.equal(result.falseNegative, 1, "필드가 여러 개 틀려도 기대 항목은 한 번만 센다");
+  assert.equal(result.metrics.f1, 0);
+  assert.ok(result.failures.some((failure) => failure.type === "wrong_deadline"));
+  assert.ok(result.failures.some((failure) => failure.type === "wrong_evidence_count"));
+});
+
+test("evaluateExtraction 제목 매칭은 배열 순서와 무관하게 정확한 kind·제목을 우선한다", () => {
+  const expected: ExpectedContextItem[] = [
+    { title: "AI", kind: "task", evidenceCount: 1 },
+    { title: "AI 해커톤", kind: "opportunity", evidenceCount: 1 },
+  ];
+  const actual = [
+    contextItem({ title: "AI 해커톤", kind: "opportunity", evidenceIds: ["ev-hackathon"] }),
+    contextItem({ title: "AI", kind: "task", evidenceIds: ["ev-task"] }),
+  ];
+
+  for (const expectedOrder of [expected, [...expected].reverse()]) {
+    for (const actualOrder of [actual, [...actual].reverse()]) {
+      const result = evaluateExtraction(expectedOrder, actualOrder);
+      assert.equal(result.truePositive, 2);
+      assert.equal(result.metrics.f1, 1);
+      assert.deepEqual(result.failures, []);
+    }
+  }
 });
 
 test("evaluateMergeAccuracy는 기대한 두 출처가 한 항목에 모이면 1.0을 낸다", () => {
@@ -96,6 +144,7 @@ test("evaluateMergeAccuracy는 기대한 두 출처가 한 항목에 모이면 1
   assert.equal(result.accuracy, 1);
   assert.equal(result.correctMerges, 1);
   assert.equal(result.falseMerges, 0);
+  assert.equal(result.duplicateAssignments, 0);
 });
 
 test("evaluateMergeAccuracy는 병합돼야 할 것이 분리되면 not_merged로 감점한다", () => {
@@ -124,6 +173,25 @@ test("evaluateMergeAccuracy는 예상 밖 병합(false merge)을 감지한다", 
   const result = evaluateMergeAccuracy([], items, evidence);
   assert.equal(result.falseMerges, 1);
   assert.ok(result.failures.some((f) => f.type === "false_merge"));
+});
+
+test("evaluateMergeAccuracy는 하나의 RawItem이 여러 ContextItem에 연결되면 순서와 무관하게 실패한다", () => {
+  const items = [
+    contextItem({ id: "ctx-duplicate", evidenceIds: ["ev-a"] }),
+    contextItem({ id: "ctx-merged", evidenceIds: ["ev-a", "ev-b"] }),
+  ];
+  const evidence: Evidence[] = [
+    { id: "ev-a", rawItemId: "raw-a", sourceType: "school-site", location: "u", quote: "q", observedAt: "t", authority: "official" },
+    { id: "ev-b", rawItemId: "raw-b", sourceType: "school-email", location: "u", quote: "q", observedAt: "t", authority: "official" },
+  ];
+
+  for (const itemOrder of [items, [...items].reverse()]) {
+    const result = evaluateMergeAccuracy([["raw-a", "raw-b"]], itemOrder, evidence);
+    assert.equal(result.correctMerges, 0);
+    assert.equal(result.duplicateAssignments, 1);
+    assert.equal(result.accuracy, 0);
+    assert.ok(result.failures.some((failure) => failure.type === "duplicate_context"));
+  }
 });
 
 // Ground Truth fixture를 실제 파이프라인에 태워 채점하는 end-to-end 벤치마크.
