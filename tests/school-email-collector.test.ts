@@ -24,6 +24,9 @@ test("학교 .eml에서 Message-ID, 주소, 본문과 첨부 Metadata를 추출�
   assert.equal(item?.externalId, "<ai-hackathon-1542@school.example>");
   assert.equal(item?.metadata.from, "student-support@school.example");
   assert.deepEqual(item?.metadata.to, ["student@school.example"]);
+  assert.equal(item?.metadata.senderDomainAllowed, true);
+  assert.equal(item?.metadata.authenticationStatus, "unverified");
+  assert.equal(item?.metadata.official, false);
   assert.match(item?.content ?? "", /신청 마감은 2026년 7월 25일 18시/);
   const attachments = item?.metadata.attachments as Array<Record<string, unknown>>;
   assert.equal(attachments.length, 1);
@@ -49,6 +52,26 @@ test("허용되지 않은 외부 발신자 이메일은 수집하지 않는다",
 
   assert.deepEqual(await collector.sync(), []);
   assert.deepEqual(collector.listErrors(), []);
+});
+
+test("학교 도메인 From 헤더만으로 이메일을 공식 출처로 판정하지 않는다", async () => {
+  const collector = createCollector(async () => [{
+    raw: [
+      "From: Spoofed Sender <student-support@school.example>",
+      "To: student@school.example",
+      "Subject: 위조 가능 이메일",
+      "Message-ID: <spoofed@school.example>",
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      "From 헤더는 발신자 인증 근거가 아닙니다.",
+    ].join("\r\n"),
+  }]);
+
+  const [item] = await collector.sync();
+
+  assert.equal(item?.metadata.senderDomainAllowed, true);
+  assert.equal(item?.metadata.authenticationStatus, "unverified");
+  assert.equal(item?.metadata.official, false);
 });
 
 test("잘못된 이메일 하나는 오류로 기록하고 다른 이메일 수집을 계속한다", async () => {

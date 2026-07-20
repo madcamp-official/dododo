@@ -55,7 +55,9 @@ export class SchoolEmailCollector extends BaseCollector {
           from: email.from,
           to: email.to,
           attachments: email.attachments,
-          official: true,
+          senderDomainAllowed: true,
+          authenticationStatus: "unverified",
+          official: false,
         };
         if (email.receivedAt !== undefined) metadata.receivedAt = email.receivedAt;
 
