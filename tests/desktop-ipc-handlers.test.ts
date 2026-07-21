@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,6 +8,8 @@ import {
   handleAddSubmit,
   handleAsk,
   handleProfileSave,
+  handleSourceRegister,
+  handleSourceRemove,
   handleTaskComplete,
   handleTaskDetail,
   handleTaskSetReminderOffset,
@@ -17,6 +19,23 @@ import {
 } from "../apps/desktop/src/main/ipc/handlers.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
+
+// doyeonid 리뷰(PR #67) 1번 반영 후, DODODO_SOURCE_CONFIG로 명시한 경로에 파일이
+// 없으면 에러를 던진다 — 빈 설정 파일을 미리 만들어 둔다.
+async function withTempSourceConfig(fn: () => Promise<void>): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-handlers-source-"));
+  const configPath = join(directory, "dododo.sources.json");
+  await writeFile(configPath, "{}\n", "utf8");
+  const original = process.env.DODODO_SOURCE_CONFIG;
+  process.env.DODODO_SOURCE_CONFIG = configPath;
+  try {
+    await fn();
+  } finally {
+    if (original === undefined) delete process.env.DODODO_SOURCE_CONFIG;
+    else process.env.DODODO_SOURCE_CONFIG = original;
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 
 async function seededContainer() {
   const container = createCliContainer({ databasePath: ":memory:" });
@@ -158,4 +177,21 @@ test("handleTaskSetReminderOffset은 잘못된 id 또는 offsetMinutes를 거절
 
   const ok = await handleTaskSetReminderOffset(container, { id: taskId, offsetMinutes: 60 });
   assert.equal(ok.ok, true);
+});
+
+test("handleSourceRegister/handleSourceRemove는 잘못된 payload를 모두 거절한다", async () => {
+  await withTempSourceConfig(async () => {
+    assertValidationFailure(await handleSourceRegister(undefined));
+    assertValidationFailure(await handleSourceRegister(null));
+    assertValidationFailure(await handleSourceRegister({}));
+    assertValidationFailure(await handleSourceRegister({ type: "file", value: "x" })); // 지원 안 하는 타입
+    assertValidationFailure(await handleSourceRegister({ type: "school-site", value: 123 }));
+
+    assertValidationFailure(await handleSourceRemove(undefined));
+    assertValidationFailure(await handleSourceRemove({}));
+    assertValidationFailure(await handleSourceRemove({ id: "file" }));
+
+    const ok = await handleSourceRegister({ type: "school-site", value: "https://school.example" });
+    assert.equal(ok.ok, true);
+  });
 });

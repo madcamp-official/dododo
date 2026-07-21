@@ -296,10 +296,22 @@ type Result<T> =
 "task:setReminderOffset"  → (input: { id: string; offsetMinutes: number }) => Promise<Result<void>>
   // 아직 미구현(초안)
 
-// Source 등록(2.3) — 아직 미구현(초안)
-"source:list"     → () => Promise<Result<{ sources: SourceView[] }>>
-"source:register" → (input: { type: "school-site" | "school-email" | "lms"; value: string }) => Promise<Result<{ id: string }>>
-"source:remove"   → (input: { id: string }) => Promise<Result<void>>
+// Source 등록(2.3) — #61~#67 PR 스택에 school-site만 구현·테스트됨(아직 main
+// 머지 전). school-email/lms는 register가 지원하지 않는다(2.3 각주 참고) — 안전한
+// 기본값이 없는 필수 필드가 있어서다. 실제 반환 shape은 초안 단계에서 상정했던
+// { id }/void가 아니라 restartRequired다: 등록·제거는 설정 파일만 쓰고 실행 중인
+// container의 collectors/privacyGateway는 앱 재시작 후에만 반영되기 때문이다
+// (팀 논의로 확정 — 즉시 반영은 container 재구성·watch 루프·notifier 재배선까지
+// 필요해 범위 밖으로 미뤘다).
+"source:list" → () => Promise<Result<{
+  sources: Array<{ id: "school-site" | "school-email" | "lms"; value: string }>
+}>>
+"source:register" → (input: { type: "school-site" | "school-email" | "lms"; value: string }) =>
+  Promise<Result<{ restartRequired: true }>>
+  // type이 "school-site"가 아니면 code: "not-supported"
+"source:remove" → (input: { id: "school-site" | "school-email" | "lms" }) =>
+  Promise<Result<{ restartRequired: true }>>
+  // 등록되지 않은 id면 code: "not-found"
 
 // 동기화 — Source 설정 오류(sourcesConfigError)는 throw 대신
 // { ok: false, error: { code: "sources-config-error", message } }로 명시적으로 알린다
