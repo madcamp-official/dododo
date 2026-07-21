@@ -63,7 +63,21 @@ export class RemoteJobLLMProvider implements LLMProvider {
 
     try {
       while (true) {
-        const status = await this.getJob(job.jobId, deadline);
+        let status: InferenceJobResponse;
+        try {
+          status = await this.getJob(job.jobId, deadline);
+        } catch (error) {
+          // Job 생성 이후 상태 조회는 부작용 없는 GET이다. Cloudflare/Tunnel의 일시적인
+          // 502·504, 요청 timeout 등에 Job을 새로 만들지 말고 같은 ID를 다시 조회한다.
+          if (!(error instanceof LLMExtractionError) || !error.retryable) throw error;
+          const delay = clampPollDelay(job.pollAfterMs);
+          if (Date.now() + delay >= deadline) {
+            await this.cancelQuietly(job.jobId);
+            throw timeoutError(totalTimeoutMs);
+          }
+          await this.sleepImplementation(delay);
+          continue;
+        }
         if (status.status === "succeeded") return validateResult(status.result, request);
         if (status.status === "failed") throw jobFailure(status);
         if (status.status === "cancelled") {

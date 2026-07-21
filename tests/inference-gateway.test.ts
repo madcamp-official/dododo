@@ -131,6 +131,53 @@ test("Gateway의 재시도 가능 LLM 오류가 RemoteJobLLMProvider까지 보�
   });
 });
 
+test("RemoteJobLLMProvider는 polling 중 일시적인 502 뒤 같은 Job을 다시 조회한다", async () => {
+  let call = 0;
+  const responses = [
+    new Response(JSON.stringify({ jobId: "job_retry", status: "queued", pollAfterMs: 1 }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    }),
+    new Response(JSON.stringify({
+      error: { code: "tunnel_error", message: "temporary tunnel failure", retryable: true },
+    }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    }),
+    new Response(JSON.stringify({
+      jobId: "job_retry",
+      status: "succeeded",
+      result: { answer: "재조회 성공" },
+      createdAt: "2026-07-21T00:00:00.000Z",
+      updatedAt: "2026-07-21T00:00:01.000Z",
+      expiresAt: "2026-07-21T00:30:00.000Z",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  ];
+  const remote = new RemoteJobLLMProvider({
+    baseUrl: "https://llm.example.test",
+    token: "token",
+    defaultTimeoutMs: 5_000,
+    fetchImplementation: (async () => responses[call++]!) as typeof fetch,
+    sleepImplementation: () => Promise.resolve(),
+  });
+
+  const result = await remote.completeJSON({
+    modelKind: "text",
+    systemPrompt: "system",
+    userPrompt: "user",
+    schema: resultSchema,
+    validate: (value): value is { answer: string } => (
+      typeof value === "object" && value !== null && typeof (value as { answer?: unknown }).answer === "string"
+    ),
+  });
+
+  assert.deepEqual(result, { answer: "재조회 성공" });
+  assert.equal(call, 3);
+});
+
 function remoteRequest(): Record<string, unknown> {
   return {
     modelKind: "text",
