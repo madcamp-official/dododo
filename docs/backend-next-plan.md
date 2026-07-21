@@ -105,9 +105,10 @@ P0 스택에 없는 것만 남는다.
 
 ## 공동 조율이 필요한 것
 
-- `packages/shared` 계약 확장: Job 테이블(§5), `ContextRepository`에 아직 없는
-  delete 메서드(Task/Event 삭제 API의 전제 — P0 스택 `#64`가 이미 구현했는지
-  확인 필요).
+- `packages/shared` 계약 확장: Job 테이블(§5)만 남았다. Task/Event 삭제는 `#64`가
+  `ContextRepository`에 delete 메서드를 추가하지 않고 기존 `saveContextItems`(upsert)로
+  `status: "cancelled"` 소프트 삭제를 구현해 해소했다 — `isExcludedContextStatus`가
+  이미 cancelled를 오늘/추천에서 제외하므로 계약 확장이 필요 없었다.
 - P0 스택 병합 후 IPC 계약과 실제 구현이 어긋나는 부분은 프론트엔드(박도현·
   김도연)와 조율.
 - 우선순위 역전·Vision 파이프라인의 입출력 타입은 구현 전 프론트엔드와 먼저

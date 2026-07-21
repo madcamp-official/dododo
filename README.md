@@ -19,8 +19,9 @@
 | 김도현 | [KimDoDohyeon](https://github.com/KimDoDohyeon) | 백엔드 전체(Runtime & CLI, Data Ingestion & Storage, Context Intelligence & Recommendation) |
 | 박도현 | [dotori235](https://github.com/dotori235) | 프론트엔드(Desktop UI) — Electron Main |
 
-역할별 담당 경로와 책임 상세는 [`AGENTS.md`](AGENTS.md#팀-역할과-소유권)와
-[MVP 범위의 3인 분업](docs/mvp-scope.md#9-3인-분업-상세)을 따른다.
+역할별 담당 경로와 책임 상세는 [`AGENTS.md`의 팀 역할과 소유권](AGENTS.md#팀-역할과-소유권)이
+유일한 기준이다. [MVP 범위의 3인 분업 상세](docs/mvp-scope.md#9-3인-분업-상세)는 팀 구조가
+바뀌기 전 7일 계획 시점의 역사적 기록이다.
 
 ---
 
@@ -143,8 +144,10 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 ## 팀원별 참여 내용
 
-담당 경로, 받는 입력·내보내는 결과, 완료 기준은 [MVP 범위의 3인 분업 상세](docs/mvp-scope.md#9-3인-분업-상세)와
-[`AGENTS.md`의 팀 역할과 소유권](AGENTS.md#팀-역할과-소유권)을 따른다. 아래는 회고용 기록만 남긴다.
+현재 담당 경로는 [`AGENTS.md`의 팀 역할과 소유권](AGENTS.md#팀-역할과-소유권)이 유일한
+기준이다. 받는 입력·내보내는 결과·완료 기준은 팀 구조가 바뀌기 전 역사적 기록인
+[MVP 범위의 3인 분업 상세](docs/mvp-scope.md#9-3인-분업-상세)에 남아 있다. 아래는
+회고용 기록만 남긴다.
 
 ### 박도현 — Runtime & CLI
 
