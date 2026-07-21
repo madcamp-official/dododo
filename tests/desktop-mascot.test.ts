@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -22,4 +22,104 @@ test("desktop mascot Renderer가 기본 idle 에셋과 preload를 함께 배포�
     access("apps/desktop/resources/character/idle.png"),
     access("apps/desktop/src/preload/index.cjs"),
   ]);
+});
+
+test("desktop mascot의 mouse passthrough 초기 상태는 Renderer가 단독으로 설정한다", async () => {
+  const [main, preload, renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
+    readFile("apps/desktop/src/preload/index.cjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  // schedulePassthroughFallback은 Renderer가 응답 없을 때만 늦게 개입하는 안전망이라
+  // 예외다(아래 폴백 테스트 참고) — 그 함수 바깥에는 setIgnoreMouseEvents(true)가 없어야
+  // Renderer가 여전히 정상 경로의 단독 소유자다.
+  const mainWithoutFallback = main.replace(/function schedulePassthroughFallback[\s\S]*?\r?\n\}\r?\n/, "");
+  assert.doesNotMatch(mainWithoutFallback, /setIgnoreMouseEvents\(true/);
+  assert.match(renderer, /setMousePassthrough\(isIgnoringMouse\)/);
+  assert.match(renderer, /startCharacterDrag/);
+  assert.match(renderer, /setPointerCapture/);
+  assert.match(preload, /desktop:start-character-drag/);
+  assert.match(main, /characterWindow\.setPosition/);
+  assert.match(style, /-webkit-app-region: no-drag/);
+});
+
+test("desktop mascot은 Renderer가 응답 없을 때 click-through로 되돌아가는 폴백을 둔다", async () => {
+  const main = await readFile("apps/desktop/src/main/index.mjs", "utf8");
+
+  assert.match(main, /PASSTHROUGH_FALLBACK_MS/);
+  assert.match(main, /schedulePassthroughFallback\(characterWindow\)/);
+  assert.match(main, /cancelPassthroughFallback\(characterWindow\)/);
+  assert.match(main, /setIgnoreMouseEvents\(true, \{ forward: true \}\)/);
+});
+
+test("desktop mascot 팝업 메뉴는 창 위쪽 경계 안에 배치된다", async () => {
+  const [main, style] = await Promise.all([
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(style, /\.popup-menu\s*\{[^}]*top:\s*12px;[^}]*bottom:\s*auto;/s);
+  assert.match(style, /\.popup-menu\s*\{[^}]*box-sizing:\s*border-box;[^}]*overflow:\s*hidden;/s);
+  assert.match(main, /screen\.getDisplayNearestPoint\(pointer\)\.workArea/);
+});
+
+test("desktop mascot은 메뉴와 패널보다 위에 표시된다", async () => {
+  const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
+
+  assert.match(style, /\.character-button\s*\{[^}]*z-index:\s*10;/s);
+  assert.match(style, /\.popup-menu,\s*\.panel\s*\{[^}]*z-index:\s*4;/s);
+});
+
+test("desktop mascot은 확장된 메뉴와 패널 영역에 겹치지 않는다", async () => {
+  const [main, preload, renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
+    readFile("apps/desktop/src/preload/index.cjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(main, /EXPANDED_SIZE = \{ width: 680, height: 420 \}/);
+  assert.match(main, /width: EXPANDED_SIZE\.width/);
+  assert.doesNotMatch(preload, /desktop:set-surface-expanded/);
+  assert.doesNotMatch(renderer, /setSurfaceExpanded/);
+  assert.match(style, /\.popup-menu\s*\{[^}]*right:\s*200px;/s);
+  assert.match(style, /\.panel\s*\{[^}]*inset:\s*8px 200px 8px 8px;/s);
+  assert.doesNotMatch(main, /characterWindow\.setBounds/);
+});
+
+test("desktop mascot 상세 버튼 오류 처리는 정의되지 않은 상태를 참조하지 않는다", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
+  const openDetail = renderer.match(/async function openDetail[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.doesNotMatch(openDetail, /throwOnError/);
+  assert.match(openDetail, /renderError\(error\)/);
+});
+
+test("desktop mascot은 액션 후 목록 갱신 실패 시 제목을 목록 뷰 제목으로 남겨두지 않는다", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
+  const runTaskAction = renderer.match(/async function runTaskAction[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(runTaskAction, /panelTitle\.textContent = "처리 완료"/);
+});
+
+test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화면을 제공한다", async () => {
+  const [html, renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(html, /data-view="add"/);
+  assert.match(renderer, /desktopApi\.detail/);
+  assert.match(renderer, /desktopApi\.complete/);
+  assert.match(renderer, /desktopApi\.snooze/);
+  assert.match(renderer, /desktopApi\.add/);
+  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /createExclusiveActionRunner/);
+  assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
+  assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
+  assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
 });

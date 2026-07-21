@@ -1,12 +1,24 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
+const START_CHARACTER_DRAG = "desktop:start-character-drag";
+const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
+const END_CHARACTER_DRAG = "desktop:end-character-drag";
 
 contextBridge.exposeInMainWorld("desktopMascot", {
   setMousePassthrough(shouldIgnore) {
     if (typeof shouldIgnore === "boolean") {
       ipcRenderer.send(SET_MOUSE_PASSTHROUGH, shouldIgnore);
     }
+  },
+  startDrag(x, y) {
+    ipcRenderer.send(START_CHARACTER_DRAG, { x, y });
+  },
+  moveDrag(x, y) {
+    ipcRenderer.send(MOVE_CHARACTER_DRAG, { x, y });
+  },
+  endDrag() {
+    ipcRenderer.send(END_CHARACTER_DRAG);
   },
 });
 
