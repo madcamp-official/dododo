@@ -3,9 +3,10 @@ import test from "node:test";
 
 import { runWatch } from "../apps/cli/src/commands/watch.ts";
 import { createCliContainer, emptyProfile } from "../apps/cli/src/runtime/container.ts";
+import { isReminderRecommendationId } from "../apps/cli/src/runtime/reminderCheck.ts";
 import { runWatchLoop } from "../apps/cli/src/runtime/watchLoop.ts";
 import { runWatchTick } from "../apps/cli/src/runtime/watchTick.ts";
-import type { Notifier, Recommendation } from "../packages/shared/src/index.ts";
+import type { ContextItem, Notifier, Recommendation } from "../packages/shared/src/index.ts";
 
 // 모킹 프레임워크 대신 실제 객체 하나를 만들어 send() 호출을 기록한다(repo 관례).
 class RecordingNotifier implements Notifier {
@@ -13,6 +14,34 @@ class RecordingNotifier implements Notifier {
   async send(recommendation: Recommendation): Promise<void> {
     this.sent.push(recommendation);
   }
+}
+
+// 리마인더로 온 Recommendation만 전달 실패로 만든다 — 일반 추천 처리는 그대로 둬서
+// "리마인더 전달 실패가 리마인더 자신의 발송 완료 커밋만 막는지"를 정확히 격리해 본다.
+class FailingReminderNotifier implements Notifier {
+  readonly sent: Recommendation[] = [];
+  async send(recommendation: Recommendation): Promise<void> {
+    if (isReminderRecommendationId(recommendation.id)) throw new Error("리마인더 전달 실패");
+    this.sent.push(recommendation);
+  }
+}
+
+function taskDueSoon(id: string, now: Date): ContextItem {
+  return {
+    id,
+    kind: "task",
+    title: `마감 임박 Task ${id}`,
+    status: "confirmed",
+    deadline: new Date(now.getTime() + 60 * 60 * 1000).toISOString(), // 1시간 뒤(기본 24시간 오프셋 안)
+    requirements: [],
+    tags: [],
+    priority: 0,
+    confidence: 1,
+    evidenceIds: [],
+    metadata: {},
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
 }
 
 function captureConsoleLog(): { lines: string[]; restore: () => void } {
@@ -320,4 +349,61 @@ test("runWatchTick은 겹치는 Event를 감지하고, 같은 tick 안에서 재
 
   const second = await runWatchTick(container, now);
   assert.deepEqual(second.newConflicts, []);
+});
+
+// doyeonid 리뷰(PR #66) 1·2번 — 아래 세 테스트가 실제로 고쳐진 순서(판정 → gate →
+// 전달 → 커밋)를 end-to-end로 검증한다.
+test("runWatchTick의 리마인더는 Quiet Hours면 보류되고 발송 완료로 커밋되지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.collectors = []; // Fixture Source의 일반 추천과 섞이지 않게 한다
+  const now = new Date("2026-07-20T10:00:00+09:00");
+  await container.repository.saveContextItems([taskDueSoon("t1", now)]);
+  await container.profileRepository.save({ ...emptyProfile(), quietHours: { start: "00:00", end: "23:59" } });
+
+  const result = await runWatchTick(container, now);
+
+  const reminderResults = [...result.notified, ...result.heldForQuietHours].filter(
+    (r) => isReminderRecommendationId(r.id),
+  );
+  assert.equal(reminderResults.length, 1);
+  assert.equal(result.notified.some((r) => isReminderRecommendationId(r.id)), false, "Quiet Hours 중엔 전달되면 안 됨");
+
+  const item = await container.repository.findContextItem("t1");
+  assert.equal(item?.metadata.reminderSentForDeadline, undefined, "보류된 리마인더는 발송 완료로 커밋되면 안 됨");
+});
+
+test("runWatchTick의 리마인더는 Quiet Hours가 끝나면 다음 tick에 실제로 전달된다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.collectors = [];
+  const quietNow = new Date("2026-07-20T10:00:00+09:00");
+  await container.repository.saveContextItems([taskDueSoon("t1", quietNow)]);
+  await container.profileRepository.save({ ...emptyProfile(), quietHours: { start: "00:00", end: "23:59" } });
+  const notifier = new RecordingNotifier();
+  container.notifier = notifier;
+
+  await runWatchTick(container, quietNow);
+  assert.equal(notifier.sent.length, 0);
+
+  await container.profileRepository.save({ ...emptyProfile() }); // Quiet Hours 해제
+  const laterNow = new Date("2026-07-20T10:05:00+09:00");
+  const result = await runWatchTick(container, laterNow);
+
+  assert.equal(result.notified.filter((r) => isReminderRecommendationId(r.id)).length, 1);
+  assert.equal(notifier.sent.some((r) => isReminderRecommendationId(r.id)), true);
+
+  const item = await container.repository.findContextItem("t1");
+  assert.equal(item?.metadata.reminderSentForDeadline, taskDueSoon("t1", quietNow).deadline);
+});
+
+test("runWatchTick은 리마인더 전달이 실패하면 발송 완료로 커밋하지 않는다(doyeonid 리뷰 PR #66)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.collectors = [];
+  const now = new Date("2026-07-20T10:00:00+09:00");
+  await container.repository.saveContextItems([taskDueSoon("t1", now)]);
+  container.notifier = new FailingReminderNotifier();
+
+  await assert.rejects(runWatchTick(container, now), /리마인더 전달 실패/);
+
+  const item = await container.repository.findContextItem("t1");
+  assert.equal(item?.metadata.reminderSentForDeadline, undefined);
 });

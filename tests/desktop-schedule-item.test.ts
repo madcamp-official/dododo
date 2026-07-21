@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { submitAdd } from "../apps/desktop/src/main/ipc/add.ts";
-import { deleteScheduleItem, updateScheduleItem } from "../apps/desktop/src/main/ipc/scheduleItem.ts";
+import { deleteScheduleItem, setReminderOffset, updateScheduleItem } from "../apps/desktop/src/main/ipc/scheduleItem.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
 import type { ContextItem } from "../packages/shared/src/index.ts";
@@ -184,4 +184,41 @@ test("deleteScheduleItem은 존재하지 않는 id를 not-found로 보고한다"
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.error.code, "not-found");
+});
+
+test("setReminderOffset은 metadata.reminderOffsetMinutes를 갱신한다", async () => {
+  const { container, taskId } = await seededContainer();
+
+  const result = await setReminderOffset(container, taskId, 60, NOW);
+
+  assert.equal(result.ok, true);
+  const updated = await container.repository.findContextItem(taskId);
+  assert.equal(updated?.metadata.reminderOffsetMinutes, 60);
+});
+
+test("setReminderOffset은 음수·NaN·Infinity·소수를 거절한다", async () => {
+  const { container, taskId } = await seededContainer();
+
+  const negative = await setReminderOffset(container, taskId, -10, NOW);
+  assert.equal(negative.ok, false);
+  if (negative.ok === false) assert.equal(negative.error.code, "validation");
+
+  const notFinite = await setReminderOffset(container, taskId, Number.NaN, NOW);
+  assert.equal(notFinite.ok, false);
+
+  const infinite = await setReminderOffset(container, taskId, Number.POSITIVE_INFINITY, NOW);
+  assert.equal(infinite.ok, false);
+
+  const decimal = await setReminderOffset(container, taskId, 1.5, NOW);
+  assert.equal(decimal.ok, false);
+});
+
+test("setReminderOffset은 Opportunity를 거절한다(Task/Event 전용)", async () => {
+  const { container, opportunityId } = await seededContainer();
+
+  const result = await setReminderOffset(container, opportunityId, 60, NOW);
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.code, "validation");
 });

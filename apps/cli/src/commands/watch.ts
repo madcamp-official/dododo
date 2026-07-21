@@ -1,5 +1,6 @@
 import { WindowsOsNotifier } from "../../../../packages/scheduler/src/index.ts";
 import type { CliContainer } from "../runtime/container.ts";
+import { isReminderRecommendationId } from "../runtime/reminderCheck.ts";
 import { runWatchLoop } from "../runtime/watchLoop.ts";
 import type { WatchTickResult } from "../runtime/watchTick.ts";
 
@@ -83,8 +84,12 @@ function renderTickLine(result: WatchTickResult, iteration: number): string {
   const errorCount = result.syncedSources.reduce((sum, source) => sum + source.errors.length, 0);
   const errorSuffix = errorCount > 0 ? ` · 오류 ${errorCount}건` : "";
   const conflictSuffix = result.newConflicts.length > 0 ? ` · 일정 충돌 ${result.newConflicts.length}건` : "";
+  // 리마인더는 이제 notified/heldForQuietHours에 일반 추천과 함께 담긴다(reminderCheck.ts의
+  // "reminder-" id 접두사로 구분) — 여기서는 표시용으로만 따로 센다.
+  const remindersSent = result.notified.filter((r) => isReminderRecommendationId(r.id)).length;
+  const reminderSuffix = remindersSent > 0 ? ` · 리마인더 ${remindersSent}건` : "";
   return `[tick ${iteration}] 동기화 ${result.syncedSources.length}개 · 알림 ${result.notified.length}건`
-    + ` · Quiet Hours 보류 ${result.heldForQuietHours.length}건${conflictSuffix}${errorSuffix}`;
+    + ` · Quiet Hours 보류 ${result.heldForQuietHours.length}건${conflictSuffix}${reminderSuffix}${errorSuffix}`;
 }
 
 function renderTickErrorLine(error: unknown, iteration: number): string {

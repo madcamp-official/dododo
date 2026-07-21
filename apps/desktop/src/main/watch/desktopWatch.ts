@@ -31,6 +31,11 @@ export function startDesktopWatch(
       if (summary !== undefined) broadcastNotification(summary);
 
       for (const event of toConflictEvents(result.newConflicts, tickNow)) broadcastNotification(event);
+      // 리마인더는 더 이상 여기서 따로 push하지 않는다 — watchTick.ts가 다른 추천과
+      // 같은 gateNotification → container.notifier.send 경로를 타고, 그 경로 끝에서
+      // ElectronDesktopNotifier가 classifyRecommendation으로 "reminder-" id를 인식해
+      // 자동으로 IPC broadcast한다(doyeonid 리뷰 PR #66 — Quiet Hours를 우회하지
+      // 않고, 실제 전달 성공 후에만 발송 완료로 커밋하기 위한 재구성).
 
       const errorCount = result.syncedSources.reduce((sum, source) => sum + source.errors.length, 0);
       if (errorCount > 0) {

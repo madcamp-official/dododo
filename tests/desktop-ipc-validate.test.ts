@@ -27,10 +27,12 @@ test("isNonEmptyString은 빈 문자열·공백·비문자열을 거절한다", 
   assert.equal(isNonEmptyString(null), false);
 });
 
-test("isValidOffsetMinutes는 0 이상의 정수만 허용한다", () => {
-  assert.equal(isValidOffsetMinutes(0), true);
+test("isValidOffsetMinutes는 1 이상의 정수만 허용한다", () => {
   assert.equal(isValidOffsetMinutes(30), true);
   assert.equal(isValidOffsetMinutes(1440), true);
+  // doyeonid 리뷰(PR #66) 3번: 0은 reminderCheck.ts의 판정 순서상 절대 발동하지
+  // 않는 죽은 값이라 더 이상 허용하지 않는다.
+  assert.equal(isValidOffsetMinutes(0), false);
   assert.equal(isValidOffsetMinutes(-1), false);
   assert.equal(isValidOffsetMinutes(1.5), false);
   assert.equal(isValidOffsetMinutes(Number.NaN), false);
