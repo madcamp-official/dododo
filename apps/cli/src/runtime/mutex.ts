@@ -13,7 +13,10 @@ export function createMutex(): Mutex {
 
   return {
     run<T>(fn: () => Promise<T>): Promise<T> {
-      const result = tail.then(fn, fn);
+      // 김도현 리뷰(PR #61): tail은 아래에서 항상 resolve로만 재구성되어 절대
+      // reject하지 않는다 — 그래서 .then의 두 번째 인자(onRejected)는 실행될 일이
+      // 없는 죽은 코드였다. onFulfilled 하나만 넘겨도 동작은 같다.
+      const result = tail.then(fn);
       // 이전 작업이 실패해도 체인이 끊기지 않게 한다 — 실패는 각 호출자의 result에서
       // 그대로 드러난다(catch로 삼키는 대상은 체인 유지용 더미일 뿐).
       tail = result.then(
