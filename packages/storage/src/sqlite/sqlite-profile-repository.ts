@@ -57,7 +57,7 @@ type SqlRow = Record<string, unknown>;
 
 function rowToProfile(row: unknown): UserProfile {
   const value = row as SqlRow;
-  const quietHours = parseOptionalObject(value.quiet_hours_json, "quiet_hours_json");
+  const quietHours = parseQuietHours(value.quiet_hours_json);
   return {
     school: value.school as string,
     major: value.major as string,
@@ -65,7 +65,7 @@ function rowToProfile(row: unknown): UserProfile {
     interests: parseStringArray(value.interests_json, "interests_json"),
     activityTypes: parseStringArray(value.activity_types_json, "activity_types_json"),
     preferredLocations: parseStringArray(value.preferred_locations_json, "preferred_locations_json"),
-    ...(quietHours === undefined ? {} : { quietHours: quietHours as UserProfile["quietHours"] }),
+    ...(quietHours === undefined ? {} : { quietHours }),
     explicitConstraints: parseStringArray(value.explicit_constraints_json, "explicit_constraints_json"),
   };
 }
@@ -78,11 +78,23 @@ function parseStringArray(value: unknown, field: string): string[] {
   return parsed;
 }
 
-function parseOptionalObject(value: unknown, field: string): Record<string, unknown> | undefined {
+// packages/scheduler(박도현 소유)의 isValidClockTime과 같은 형식(zero-padded HH:mm,
+// 00-23:59)을 검사한다. import로 재사용하면 packages/storage가 packages/scheduler에
+// 의존하게 되어 두 담당 영역 경계를 새로 만들게 되므로, 이 파일 하나에 필요한 정규식
+// 한 줄만 복제해 둔다 — setup.ts가 저장 전에 이미 isValidClockTime으로 검증하므로
+// 이 값은 정상적으로는 항상 이 형식이지만, quiet_hours_json은 신뢰할 수 없는 저장소
+// 원본 값이라 읽어올 때도 형식을 확인한다(김도연님 리뷰 nit).
+const CLOCK_TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function parseQuietHours(value: unknown): UserProfile["quietHours"] {
   if (value === null || value === undefined) return undefined;
   const parsed = JSON.parse(value as string) as unknown;
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`SQLite UserProfile의 ${field}이 객체가 아닙니다`);
+    throw new Error("SQLite UserProfile의 quiet_hours_json이 객체가 아닙니다");
   }
-  return parsed as Record<string, unknown>;
+  const { start, end } = parsed as Record<string, unknown>;
+  if (typeof start !== "string" || typeof end !== "string" || !CLOCK_TIME.test(start) || !CLOCK_TIME.test(end)) {
+    throw new Error("SQLite UserProfile의 quiet_hours_json이 HH:mm 형식의 start/end를 갖고 있지 않습니다");
+  }
+  return { start, end };
 }

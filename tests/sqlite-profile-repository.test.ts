@@ -49,6 +49,19 @@ test("SQLite ProfileRepository는 Quiet Hours 미설정을 undefined로 왕복�
   assert.deepEqual(loaded, saved);
 });
 
+test("SQLite ProfileRepository는 quiet_hours_json의 start/end 형식을 검증한다(PR #48 리뷰 nit)", async () => {
+  const database = openContextDatabase();
+  const repository = new SQLiteProfileRepository(database);
+  await repository.save(profile());
+
+  // save()가 만드는 정상 경로로는 잘못된 형식이 저장될 수 없으므로, 저장소가
+  // 신뢰할 수 없는 원본 값을 직접 넣어 read 경로의 검증만 확인한다.
+  database.prepare("UPDATE user_profile SET quiet_hours_json = ? WHERE id = 1")
+    .run(JSON.stringify({ start: "9:30", end: "08:00" }));
+
+  await assert.rejects(() => repository.get(), /HH:mm 형식/);
+});
+
 test("SQLite ProfileRepository는 단일 행을 upsert하고 이전 값을 덮어쓴다", async () => {
   const database = openContextDatabase();
   const repository = new SQLiteProfileRepository(database);
