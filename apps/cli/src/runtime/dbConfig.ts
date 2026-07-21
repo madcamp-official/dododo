@@ -1,14 +1,25 @@
 import { isAbsolute, resolve } from "node:path";
 
-// .env.example가 이미 DODODO_DB_PATH=./data/context.db를 예시로 문서화해 두었다.
-// 미설정이면 undefined를 반환해 호출부가 기존 InMemory 저장소로 폴백하게 한다 —
-// DODODO_LLM_BASE_URL과 같은 패턴: 설정 파일 하나로 데모(InMemory)/영속(SQLite)을
-// 전환하고, .env 없이도 지금처럼 회귀 없이 동작해야 한다.
+const DEFAULT_RELATIVE_PATH = "./.dododo/dododo.db";
+const IN_MEMORY_SENTINEL = ":memory:";
+
+// createCliContainer의 databasePath 옵션(#43·#45와 시그니처를 통일하며 추가됨)과
+// DODODO_DB_PATH 둘 다 같은 ":memory:" 표기로 InMemory를 명시하게 한다 — 소스가
+// 달라도 동작이 갈리지 않는다.
+export function normalizeDbPath(path: string, cwd: string = process.cwd()): string | undefined {
+  if (path === IN_MEMORY_SENTINEL) return undefined;
+  return isAbsolute(path) ? path : resolve(cwd, path);
+}
+
+// PR #40 리뷰(김도현): 미설정 시 InMemory 폴백이면 issue #27(빈 저장소에서 대표
+// 시나리오 재현)이 .env 없이 실행한 사람에겐 그대로 남는다 — sync 후 프로세스가
+// 끝나면 다 사라진다. 그래서 기본값을 영속(SQLite, ./.dododo/dododo.db)으로 바꾸고,
+// InMemory는 DODODO_DB_PATH=:memory:로 명시했을 때만 쓰는 옵션으로 남긴다.
 export function resolveDbPath(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
 ): string | undefined {
   const raw = env.DODODO_DB_PATH?.trim();
-  if (raw === undefined || raw === "") return undefined;
-  return isAbsolute(raw) ? raw : resolve(cwd, raw);
+  const path = raw === undefined || raw === "" ? DEFAULT_RELATIVE_PATH : raw;
+  return normalizeDbPath(path, cwd);
 }

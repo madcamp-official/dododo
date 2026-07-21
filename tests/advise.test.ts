@@ -90,7 +90,7 @@ test("confidence가 낮으면 거절한다", async () => {
 });
 
 test("runAdvise --screen은 매치되는 Task가 있으면 조언 문구를 반환한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await container.repository.saveContextItems([taskItem()]);
   const before = await container.repository.listContextItems();
 
@@ -103,7 +103,7 @@ test("runAdvise --screen은 매치되는 Task가 있으면 조언 문구를 반�
 });
 
 test("runAdvise --screen은 매치되는 Task가 없으면 거절 문구를 반환한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
 
   const output = await runAdvise(container, ["--screen"], new Date("2026-07-18T15:20:00+09:00"));
 
@@ -112,13 +112,13 @@ test("runAdvise --screen은 매치되는 Task가 없으면 거절 문구를 반�
 });
 
 test("runAdvise는 --screen이 없으면 사용법을 보여준다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runAdvise(container, []);
   assert.match(output, /사용법: dododo advise --screen/);
 });
 
 test("runAdvise --screen --live는 캡처 성공 시 Vision 미연결 안내를 반환한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   container.captureLiveScreen = async () => ({
     capturedAt: new Date("2026-07-20T10:00:00+09:00"),
     byteLength: 12345,
@@ -134,7 +134,7 @@ test("runAdvise --screen --live는 캡처 성공 시 Vision 미연결 안내를 
 });
 
 test("runAdvise --screen --live는 캡처 실패를 명확한 오류로 보여준다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   container.captureLiveScreen = async () => {
     throw new Error("실제 화면 캡처는 현재 Windows만 지원합니다 (현재 플랫폼: linux)");
   };

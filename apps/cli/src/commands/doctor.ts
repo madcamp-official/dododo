@@ -46,7 +46,7 @@ async function renderLlmStatus(container: CliContainer, fetchImpl: typeof fetch)
 
 function renderStorageStatus(container: CliContainer): string {
   return container.dbPath === undefined
-    ? "Storage: in-memory (DODODO_DB_PATH 없음)"
+    ? "Storage: in-memory (DODODO_DB_PATH=:memory:)"
     : `Storage: SQLite (${container.dbPath})`;
 }
 
@@ -54,7 +54,11 @@ function renderSourcesStatus(container: CliContainer): string {
   if (container.sourcesConfigError !== undefined) {
     return `Sources: 설정 오류 — Fixture로 폴백 중 (${container.sourcesConfigError})`;
   }
-  return container.sourcesConfigPath === undefined
-    ? "Sources: Fixture 데모 (DODODO_SOURCES_CONFIG_PATH 없음)"
-    : `Sources: 실제 설정 사용 중 (${container.sourcesConfigPath})`;
+  if (container.sourcesConfigPath === undefined) {
+    return "Sources: Fixture 데모 (DODODO_SOURCES_CONFIG_PATH 없음)";
+  }
+  const origin = container.sourcesConfigPathIsExplicit
+    ? "DODODO_SOURCES_CONFIG_PATH"
+    : "cwd 기본값, 환경변수 미설정";
+  return `Sources: 실제 설정 사용 중 (${container.sourcesConfigPath}, 출처: ${origin})`;
 }

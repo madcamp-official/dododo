@@ -48,6 +48,12 @@ export async function runWatch(
     ? { ...container, notifier: new WindowsOsNotifier() }
     : container;
 
+  // sync와 같은 이유로 tick이 시작되기 전에 맨 위에 찍는다 — Fixture 폴백 중인 걸 doctor를
+  // 따로 실행해야만 알 수 있으면 위험하다(PR #40 리뷰, 김도현 지적).
+  if (effectiveContainer.sourcesConfigError !== undefined) {
+    console.log(`경고: Source 설정 오류로 Fixture 데모 데이터를 수집 중입니다 (${effectiveContainer.sourcesConfigError})`);
+  }
+
   const controller = new AbortController();
   const onSigint = (): void => controller.abort();
   process.on("SIGINT", onSigint);

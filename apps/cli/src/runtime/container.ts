@@ -38,11 +38,11 @@ import type {
 } from "../../../../packages/shared/src/index.ts";
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
-import { resolveDbPath } from "./dbConfig.ts";
+import { normalizeDbPath, resolveDbPath } from "./dbConfig.ts";
 import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
 import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
 import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
-import { loadSourceInputConfig } from "./sourceInputConfig.ts";
+import { loadSourceInputConfig, resolveSourceInputConfigPath } from "./sourceInputConfig.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -90,11 +90,15 @@ export interface CliContainer {
   // doctor가 provider 내부(private baseUrl/model)를 안 건드리고 상태 문구를 만들 수 있게
   // llmProvider와 같은 소스(resolveLlmConfig)에서 뽑은 설정을 그대로 노출한다.
   llmConfig: LlmConfig | undefined;
-  // DODODO_DB_PATH 미설정이면 undefined(InMemory 저장소 사용 중) — doctor가 표시한다.
+  // undefined면 InMemory 저장소 사용 중(DODODO_DB_PATH=:memory: 명시)이라는 뜻,
+  // 그 외엔 기본값이든 명시든 SQLite 경로 — doctor가 표시한다.
   dbPath: string | undefined;
   // 실제 Source 설정 파일(dododo.sources.json류)을 찾았으면 그 경로, 없으면 undefined
   // (Fixture Collector로 폴백 중이라는 뜻) — doctor가 표시한다.
   sourcesConfigPath: string | undefined;
+  // sourcesConfigPath가 DODODO_SOURCES_CONFIG_PATH로 명시된 경로인지(true), cwd 기본값
+  // (./dododo.sources.json)에서 우연히 찾은 것인지(false) — doctor가 구분해 표시한다.
+  sourcesConfigPathIsExplicit: boolean;
   // 설정 파일은 있는데 파싱·검증에 실패했을 때의 사유. 이 경우에도 CLI 전체를
   // 죽이지 않고 Fixture로 폴백하되(AGENTS.md: 한 Source의 실패가 전체를 막지 않음),
   // doctor가 원인을 보여줘야 조용히 묻히지 않는다.
@@ -139,12 +143,23 @@ function loadScreenCollector(): Collector {
   return new ScreenCollector("screen-manual", fixturePaths);
 }
 
-export function createCliContainer(env: NodeJS.ProcessEnv = process.env): CliContainer {
-  // DODODO_DB_PATH 미설정이면(.env 기본 상태) 기존 InMemory 그대로 — 회귀 없음.
-  // 설정돼 있으면 같은 SQLite 커넥션을 ContextRepository·RawItemRepository 양쪽에
-  // 공유한다 — 커넥션이 갈리면 saveRawItemAnalysis의 canonical RawItem ID 보정이
-  // 서로 다른 raw_items 테이블 뷰를 보게 돼 깨진다(PR #32 계약 전제).
-  const dbPath = resolveDbPath(env);
+export interface CliContainerOptions {
+  env?: NodeJS.ProcessEnv;
+  // 명시하면 DODODO_DB_PATH보다 우선한다 — 테스트나 다른 진입점이 저장 위치를 직접
+  // 통제해야 할 때 쓴다(#43/#45와 통일한 시그니처, PR #40 리뷰 nit). InMemory를 원하면
+  // dbConfig.ts와 같은 규칙으로 ":memory:"를 넘긴다.
+  databasePath?: string;
+}
+
+export function createCliContainer(options: CliContainerOptions = {}): CliContainer {
+  const env = options.env ?? process.env;
+  // 미설정이면 기본 영속 경로(./.dododo/dododo.db)를 쓴다 — issue #27(빈 저장소에서
+  // 대표 시나리오 재현)이 .env 설정 여부에 안 걸리게 한다(PR #40 리뷰, 김도현 지적).
+  // DODODO_DB_PATH=:memory:를 명시했을 때만 InMemory로 돌아간다. SQLite면 같은 커넥션을
+  // ContextRepository·RawItemRepository 양쪽에 공유한다 — 커넥션이 갈리면
+  // saveRawItemAnalysis의 canonical RawItem ID 보정이 서로 다른 raw_items 테이블 뷰를
+  // 보게 돼 깨진다(PR #32 계약 전제).
+  const dbPath = options.databasePath !== undefined ? normalizeDbPath(options.databasePath) : resolveDbPath(env);
   let repository: ContextRepository;
   let rawItemRepository: RawItemRepository;
   let close: () => void;
@@ -164,13 +179,17 @@ export function createCliContainer(env: NodeJS.ProcessEnv = process.env): CliCon
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
   const screenCollector = loadScreenCollector();
-  const llmConfig = resolveLlmConfig();
-  const llmProvider = createLlmProvider();
+  const llmConfig = resolveLlmConfig(env);
+  const llmProvider = createLlmProvider(env);
 
   // Source 설정 파일(dododo.sources.json류)이 있으면 실제 Collector를, 없으면 기존
   // Fixture Collector를 쓴다(DODODO_DB_PATH와 같은 "설정 없으면 데모 모드" 패턴).
   // 파일이 있는데 파싱·검증에 실패하면 CLI 전체를 죽이지 않고 Fixture로 폴백한다 —
   // 대신 doctor가 사유를 보여줄 수 있게 sourcesConfigError에 남긴다.
+  // DODODO_SOURCES_CONFIG_PATH 유래인지 cwd 기본값 유래인지를 doctor가 성공/실패 양쪽
+  // 결과와 함께 보여줄 수 있게 미리 뽑아 둔다(PR #40 리뷰, 김도현 nit) — "설정한 적
+  // 없는데 우연히 그 이름 파일이 있어서 실제 Source로 전환"과 구분돼야 한다.
+  const sourcesConfigPathIsExplicit = resolveSourceInputConfigPath(env).isExplicit;
   let collectors: Collector[];
   let sourcesConfigPath: string | undefined;
   let sourcesConfigError: string | undefined;
@@ -252,6 +271,7 @@ export function createCliContainer(env: NodeJS.ProcessEnv = process.env): CliCon
     llmConfig,
     dbPath,
     sourcesConfigPath,
+    sourcesConfigPathIsExplicit,
     sourcesConfigError,
     close,
   };
