@@ -11,14 +11,37 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="character-drag-area" aria-label="DoDoDo 캐릭터">
-      <img
-        class="character"
-        src="../../../resources/character/idle.png"
-        alt="DoDoDo 도토리 캐릭터"
-        draggable="false"
-      />
+    <main class="desktop-shell" aria-label="DoDoDo 캐릭터 도우미">
+      <section class="panel" data-panel hidden aria-live="polite">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">DoDoDo</p>
+            <h1 data-panel-title>오늘 할 일</h1>
+          </div>
+          <button class="icon-button" type="button" data-close-panel aria-label="패널 닫기">×</button>
+        </header>
+        <div class="panel-content" data-panel-content></div>
+      </section>
+
+      <nav class="popup-menu" data-popup-menu hidden aria-label="DoDoDo 메뉴">
+        <button type="button" data-view="today"><span>✓</span>오늘 할 일</button>
+        <button type="button" data-view="calendar"><span>▦</span>이번 주</button>
+        <button type="button" data-view="inbox"><span>★</span>추천</button>
+        <button type="button" data-view="ask"><span>?</span>물어보기</button>
+        <button type="button" data-action="sync"><span>↻</span>동기화</button>
+        <button type="button" data-view="settings"><span>⚙</span>설정</button>
+      </nav>
+
+      <div class="character-button" data-character>
+        <img
+          class="character"
+          src="../../../resources/character/idle.png"
+          alt="DoDoDo 도토리 캐릭터"
+          draggable="false"
+        />
+        <button class="menu-toggle" type="button" data-menu-toggle aria-label="DoDoDo 메뉴 열기">☰</button>
+      </div>
     </main>
-    <script src="./mascot.js"></script>
+    <script type="module" src="./mascot.js"></script>
   </body>
 </html>
