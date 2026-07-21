@@ -27,7 +27,7 @@ async function seededContainer() {
   };
 }
 
-test("updateScheduleItem은 Task 필드를 통째로 교체한다", async () => {
+test("updateScheduleItem은 Task 필드를 통째로 교체한다(마감은 deadline에 저장)", async () => {
   const { container, taskId } = await seededContainer();
 
   const result = await updateScheduleItem(container, taskId, {
@@ -40,8 +40,43 @@ test("updateScheduleItem은 Task 필드를 통째로 교체한다", async () => 
   assert.equal(result.ok, true);
   const updated = await container.repository.findContextItem(taskId);
   assert.equal(updated?.title, "운영체제 과제 3(수정)");
-  assert.equal(updated?.startAt, "2026-07-28T18:00:00+09:00");
+  assert.equal(updated?.deadline, "2026-07-28T18:00:00+09:00");
+  assert.equal(updated?.startAt, undefined);
   assert.equal(updated?.metadata.location, "301호");
+});
+
+// doyeonid 리뷰(PR #64): updateScheduleItem이 deadline이 아니라 startAt에 썼을 때
+// API는 성공해도 캘린더·우선순위는 갱신되지 않았다 — 실제 소비자(calendar.ts의
+// scheduledValue, priority.ts의 deadline ?? startAt)까지 반영되는지 함께 검증한다.
+test("Task 마감 수정은 calendar.ts의 scheduledValue에도 새 마감으로 반영된다", async () => {
+  const { container, taskId } = await seededContainer();
+
+  await updateScheduleItem(container, taskId, {
+    title: "운영체제 과제 3(수정)",
+    date: "2026-07-28",
+    time: "18:00",
+  }, NOW);
+
+  const { getWeekSchedule } = await import("../apps/cli/src/commands/calendar.ts");
+  const scheduled = await getWeekSchedule(container, new Date("2026-07-27T00:00:00+09:00"), "Asia/Seoul");
+  const entry = scheduled.find((s) => s.item.id === taskId);
+  assert.ok(entry !== undefined, "수정된 마감이 이번 주 캘린더에 나타나야 함");
+  assert.equal(entry?.at, "2026-07-28T18:00:00+09:00");
+});
+
+test("Task 수정은 endTime을 거절한다(Task는 마감 하나뿐)", async () => {
+  const { container, taskId } = await seededContainer();
+
+  const result = await updateScheduleItem(container, taskId, {
+    title: "제목",
+    date: "2026-07-28",
+    time: "18:00",
+    endTime: "19:00",
+  }, NOW);
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.code, "validation");
 });
 
 test("updateScheduleItem은 Event도 수정할 수 있다", async () => {

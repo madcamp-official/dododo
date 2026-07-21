@@ -29,24 +29,33 @@ export async function updateScheduleItem(
 ): Promise<Result<void>> {
   const resolved = await resolveScheduleItem(container, id);
   if (!resolved.ok) return resolved;
+  const current = resolved.data;
+  const isTask = current.kind === "task";
 
   const title = input.title.trim();
   if (title === "") return fail("validation", "제목을 입력해주세요.");
 
-  const startAt = combineLocalDateTime(input.date, input.time);
-  if (startAt === undefined) return fail("validation", `날짜·시각이 올바르지 않습니다: ${input.date} ${input.time}`);
+  const combined = combineLocalDateTime(input.date, input.time);
+  if (combined === undefined) return fail("validation", `날짜·시각이 올바르지 않습니다: ${input.date} ${input.time}`);
+
+  // doyeonid 리뷰(PR #64): calendar.ts(scheduledValue)와 priority.ts(deadline ?? startAt)는
+  // event는 startAt/endAt, task는 deadline 하나만 읽는다 — Task 수정에서도 종류별로
+  // 다른 필드에 써야 캘린더·우선순위가 실제로 갱신된다. Task는 마감 하나뿐이라
+  // endTime을 아예 받지 않는다(구간 개념이 없음을 명확히 한다).
+  if (isTask && input.endTime !== undefined && input.endTime.trim() !== "") {
+    return fail("validation", "Task는 종료 시각(endTime)을 가질 수 없습니다 — 마감(deadline) 하나만 있습니다.");
+  }
 
   let endAt: string | undefined;
-  if (input.endTime !== undefined && input.endTime.trim() !== "") {
+  if (!isTask && input.endTime !== undefined && input.endTime.trim() !== "") {
     endAt = combineLocalDateTime(input.date, input.endTime);
     if (endAt === undefined) return fail("validation", `종료 시각이 올바르지 않습니다: ${input.endTime}`);
-    if (Date.parse(endAt) <= Date.parse(startAt)) {
+    if (Date.parse(endAt) <= Date.parse(combined)) {
       return fail("validation", "종료 시각은 시작 시각보다 뒤여야 합니다.");
     }
   }
 
   return toResult(async () => {
-    const current = resolved.data;
     const metadata = { ...current.metadata };
     if (input.location !== undefined && input.location.trim() !== "") {
       metadata.location = input.location.trim();
@@ -54,9 +63,16 @@ export async function updateScheduleItem(
       delete metadata.location;
     }
 
-    const updated: ContextItem = { ...current, title, startAt, metadata, updatedAt: now.toISOString() };
-    if (endAt === undefined) delete updated.endAt;
-    else updated.endAt = endAt;
+    const updated: ContextItem = { ...current, title, metadata, updatedAt: now.toISOString() };
+    if (isTask) {
+      updated.deadline = combined;
+      delete updated.startAt;
+      delete updated.endAt;
+    } else {
+      updated.startAt = combined;
+      if (endAt === undefined) delete updated.endAt;
+      else updated.endAt = endAt;
+    }
 
     await container.repository.saveContextItems([updated]);
   });
