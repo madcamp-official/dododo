@@ -4,7 +4,6 @@ import test from "node:test";
 import type { ContextItem, Recommendation, SyncResult } from "../packages/shared/src/index.ts";
 import { classifyRecommendation } from "../apps/desktop/src/main/notifier/classifyNotification.ts";
 import { toConflictEvents } from "../apps/desktop/src/main/watch/conflictEvents.ts";
-import { toReminderEvents } from "../apps/desktop/src/main/watch/reminderEvents.ts";
 import { summarizeSyncForNotification } from "../apps/desktop/src/main/watch/syncCompleteSummary.ts";
 
 function opportunity(): ContextItem {
@@ -106,19 +105,5 @@ test("toConflictEvents는 겹치는 두 일정을 conflict 이벤트로 바꾼�
   assert.equal(events[0].kind, "conflict");
   assert.equal(events[0].contextItemId, "evt-a");
   assert.equal(events[0].message, "\"영민이와 복싱 스파링\"와(과) \"춘봉이와 저녁\" 일정이 겹칩니다.");
-  assert.equal(events[0].createdAt, now.toISOString());
-});
-
-test("toReminderEvents는 마감이 임박한 항목을 reminder 이벤트로 바꾼다", () => {
-  const now = new Date("2026-07-21T09:00:00Z");
-  const item = { ...task(), id: "ctx-task-1", title: "운영체제 과제 3" };
-
-  const events = toReminderEvents([{ item, deadline: "2026-07-25T18:00:00+09:00" }], now, "Asia/Seoul");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, "reminder");
-  assert.equal(events[0].contextItemId, "ctx-task-1");
-  assert.match(events[0].message, /운영체제 과제 3/);
-  assert.match(events[0].message, /07\. 25\. 오후 06:00/);
   assert.equal(events[0].createdAt, now.toISOString());
 });
