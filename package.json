@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env apps/cli/src/index.ts",
+    "desktop": "electron apps/desktop/src/main/index.mjs",
     "gateway:start": "node --env-file-if-exists=.env.gateway apps/inference-gateway/src/index.ts",
     "gateway:activation-code": "node --env-file-if-exists=.env.gateway apps/inference-gateway/src/admin.ts",
     "dev": "node --watch --env-file-if-exists=.env apps/cli/src/index.ts",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@types/mailparser": "^3.4.6",
     "@types/node": "^22.0.0",
+    "electron": "^43.1.1",
     "typescript": "^5.9.3"
   },
   "dependencies": {
