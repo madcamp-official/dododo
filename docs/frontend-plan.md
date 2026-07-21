@@ -187,3 +187,141 @@ apps/desktop/                      # 신규 Electron 앱(기존 apps/cli/와 별
 3. 일정 충돌 경고, 마감 리마인더(2.1, 2.4) — 순수 코드, LLM/Vision 불필요, 임팩트 큼
 4. Source 등록 API(2.3)
 5. 같이 공부하기 세션(2.5, Vision) — 별도 스코프로 분리, 나머지 완료 후 진행
+
+## 6. 공동 계약 제안 (병렬 작업 전 고정)
+
+3번 "공동" 항목의 "IPC 계약을 먼저 고정한다"를 구체화한 초안이다. 박도현(Main)과
+김도연(Renderer)이 이 초안을 기준으로 합의·조정한 뒤 착수한다 — 확정본이 아니라
+논의 시작점이다.
+
+### 6.1 IPC 함수(Renderer → Main, `invoke`/`handle`)
+
+이름 규칙은 `영역:동작`. 모든 함수는 아래 `Result<T>`로 성공·실패를 통일해서 반환한다
+(6.5 참고). 응답에 쓰는 `ContextItemView`/`EvidenceView`/`RecommendationView`는
+`packages/shared`의 `ContextItem`/`Evidence`/`Recommendation`을 그대로 노출한다 —
+Renderer용으로 새 타입을 따로 만들지 않고 기존 계약을 재사용한다.
+
+```ts
+type Result<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
+
+// 조회
+"today:get"    → () => Promise<Result<{ items: ContextItemView[] }>>
+"calendar:get" → () => Promise<Result<{ items: ContextItemView[] }>>   // 이번 주 고정, range 파라미터는 후속
+"inbox:get"    → () => Promise<Result<{ recommendations: RecommendationView[] }>>
+
+// 질문
+"ask:ask" → (input: { question: string }) =>
+  Promise<Result<{ answer: string; evidenceIds: string[] }>>
+
+// 일정 추가(폼 입력, 자연어 파싱 아님 — 1.2 참고)
+"add:submit" → (input: {
+  title: string;
+  date: string;          // YYYY-MM-DD
+  time: string;          // HH:mm
+  endTime?: string;       // HH:mm
+  location?: string;      // metadata.location으로 저장(6.6)
+  reminderOffsetMinutes?: number;
+}) => Promise<Result<{ id: string }>>
+
+// Task 상세·액션
+"task:detail"             → (input: { id: string }) => Promise<Result<{ item: ContextItemView; evidence: EvidenceView[] }>>
+"task:complete"           → (input: { id: string }) => Promise<Result<void>>
+"task:snooze"             → (input: { id: string; until: string }) => Promise<Result<void>>
+"task:setReminderOffset"  → (input: { id: string; offsetMinutes: number }) => Promise<Result<void>>
+
+// Source 등록(2.3)
+"source:list"     → () => Promise<Result<{ sources: SourceView[] }>>
+"source:register" → (input: { type: "school-site" | "school-email" | "lms"; value: string }) => Promise<Result<{ id: string }>>
+"source:remove"   → (input: { id: string }) => Promise<Result<void>>
+
+// 동기화
+"sync:run" → () => Promise<Result<{ collected: number; created: number }>>
+
+// 같이 공부하기 세션(2.5)
+"study:start" → () => Promise<Result<{ sessionId: string }>>
+"study:end"   → (input: { sessionId: string }) => Promise<Result<{ summaryText: string; durationMinutes: number; adviceCount: number }>>
+
+// 프로필(설정 창)
+"profile:get"  → () => Promise<Result<UserProfile | undefined>>
+"profile:save" → (input: UserProfile) => Promise<Result<void>>
+
+// UI 로컬 상태(6.4)
+"ui-state:get" → (input: { key: string }) => Promise<Result<unknown>>
+"ui-state:set" → (input: { key: string; value: unknown }) => Promise<Result<void>>
+```
+
+### 6.2 이벤트(Main → Renderer push)
+
+요청-응답이 아니라 Main이 먼저 보내는 알림·세션 이벤트. 채널 `"notification"` 하나에
+`kind`로 종류를 구분한다 — 종류를 늘릴 땐 이 enum에 추가하고 문서를 같이 갱신한다.
+
+```ts
+type NotificationKind =
+  | "priority"      // 우선순위 역전 감지(2.1)
+  | "conflict"      // 일정 충돌 경고(2.1)
+  | "reminder"      // 마감 리마인더(2.4)
+  | "opportunity"   // Opportunity 능동 푸시
+  | "sync-complete" // 자동 수집 알림
+  | "advice"        // 같이 공부하기 세션 중 화면 조언(2.5)
+  | "distraction";  // 같이 공부하기 세션 중 이탈 감지(2.5)
+
+interface NotificationEvent {
+  kind: NotificationKind;
+  message: string;
+  contextItemId?: string;
+  createdAt: string; // ISO
+}
+
+// channel: "notification", payload: NotificationEvent
+// channel: "error", payload: { code: string; message: string }  — LLM 연결 끊김 등
+//   배경 오류를 캐릭터가 "?" 표시로 알리는 용도(4번 turn에서 논의된 오류 상태 UX)
+```
+
+`priority`/`conflict`/`reminder`/`advice`/`distraction`은 "즉시 알림", `opportunity`/`sync-complete`는
+"조용한 알림"(캐릭터 뱃지만, 클릭해야 내용 표시)로 표현한다 — 지난 논의에서 제안했던
+2단계 구분을 이 enum에 매핑한 것이다.
+
+### 6.3 창 구조
+
+세 개로 나눈다.
+
+1. **캐릭터 창** — 상시 1개. `transparent`/`frameless`/`alwaysOnTop`. 팝업 메뉴와
+   말풍선은 이 창 안 DOM 오버레이로 그린다(별도 창 아님).
+2. **패널 창** — 오늘 할일/캘린더/추천/상세보기/물어보기 공용. 필요할 때 뜨고
+   닫히는 재사용 창 1개(내용만 라우팅으로 전환). 캐릭터 근처에 위치.
+3. **설정 창** — 독립 실행되는 일반 창(alwaysOnTop 아님). 프로필/일정/캘린더/Source
+   관리 탭을 담는다.
+
+### 6.4 로컬 UI 상태 저장
+
+Renderer의 `localStorage`가 아니라 Main이 `app.getPath("userData")`에 작은 JSON
+파일로 관리한다("마지막 인사 날짜" 등). 이유: 창이 3개라 각 Renderer의 저장소
+컨텍스트를 신경 쓰는 것보다 Main 하나가 소유하는 편이 안전하다. `ui-state:get`/
+`ui-state:set`(6.1)으로 읽고 쓴다.
+
+### 6.5 에러 처리 규약
+
+모든 IPC 함수는 `Result<T>`(6.1)로 통일한다. `error.code`는 소문자-kebab 문자열:
+`"llm-unavailable"`, `"network"`, `"not-found"`, `"validation"`, `"unknown"` 등.
+Renderer는 `code`로 분기하고 `message`는 그대로 사용자에게 보여줄 수 있는 문장으로
+만든다(Main이 이미 사람이 읽을 문장으로 가공해서 넘긴다 — 기존 CLI 오류 메시지
+관례와 동일).
+
+### 6.6 `ContextItem.metadata` 키 레지스트리
+
+`metadata`는 자유 형식(`Record<string, unknown>`)이라 키 이름이 여러 곳에서 각자
+정해지면 어긋난다. 지금까지 코드에 있는 키와 이 문서에서 새로 쓰기로 한 키를 한
+곳에 모은다 — 새 키를 추가할 때 이 표도 같이 갱신한다.
+
+| 키 | 용도 | 출처 |
+|---|---|---|
+| `addedViaNaturalLanguage` | `add`로 직접 추가한 항목 표시 | 기존(`add.ts`) |
+| `evidenceQuote` | 자연어 원문 보존 | 기존(`add.ts`) |
+| `parentOpportunityId` | 파생 Task/Event의 원본 Opportunity | 기존(`inbox prepare`) |
+| `preparedFromOpportunity` | prepare로 생성됨 표시 | 기존(`inbox prepare`) |
+| `preparationRequirementKey` | 파생 Task의 요구사항 안정 ID | 기존(`inbox prepare`) |
+| `location` | 사용자가 폼에 입력한 장소(전용 필드 없음) | 신규(6.1 `add:submit`) |
+| `reminderOffsetMinutes` | 이 항목 전용 리마인더 오프셋(없으면 프로필 기본값) | 신규(2.4) |
+| `reminderSentAt` | 이미 보낸 리마인더 시각(중복 알림 방지) | 신규(2.4) |
