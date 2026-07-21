@@ -7,6 +7,7 @@ const desktopFiles = [
   "apps/desktop/src/main/index.mjs",
   "apps/desktop/src/preload/index.cjs",
   "apps/desktop/src/renderer/character/mascot.js",
+  "apps/desktop/src/renderer/character/notification-state.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -122,4 +123,25 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
   assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
   assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
+});
+
+test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보기로 연결한다", async () => {
+  const [main, html, renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(html, /data-notification-bubble/);
+  assert.match(html, /data-notification-badge/);
+  assert.match(renderer, /desktopEvents\?\.onNotification/);
+  assert.match(renderer, /unsubscribeNotifications\?\.\(\)/);
+  assert.match(renderer, /notificationStore\.takeImmediate/);
+  assert.match(renderer, /notificationStore\.markQuietRead/);
+  assert.match(renderer, /openDetail\(event\.contextItemId\)/);
+  assert.match(main, /DODODO_NOTIFICATION_PREVIEW/);
+  assert.match(main, /webContents\.send\(NOTIFICATION_CHANNEL/);
+  assert.match(style, /\.notification-bubble\s*\{/);
+  assert.match(style, /\.notification-badge\s*\{/);
 });

@@ -389,9 +389,9 @@ interface NotificationEvent {
 //   배경 오류를 캐릭터가 "?" 표시로 알리는 용도(4번 turn에서 논의된 오류 상태 UX)
 ```
 
-`priority`/`conflict`/`reminder`/`advice`/`distraction`은 "즉시 알림", `opportunity`/`sync-complete`는
-"조용한 알림"(캐릭터 뱃지만, 클릭해야 내용 표시)로 표현한다 — 지난 논의에서 제안했던
-2단계 구분을 이 enum에 매핑한 것이다.
+모든 NotificationEvent는 도착 시 캐릭터 말풍선으로 순서대로 표시한다.
+`opportunity`/`sync-complete`는 말풍선 표시 후에도 사용자가 다시 확인할 수 있도록
+캐릭터 배지와 알림 목록에 함께 보존한다. 나머지 종류는 즉시 말풍선만 표시한다.
 
 ### 6.3 창 구조
 

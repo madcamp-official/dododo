@@ -81,6 +81,113 @@ button {
   -webkit-app-region: no-drag;
 }
 
+.notification-badge {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  display: grid;
+  min-width: 27px;
+  height: 27px;
+  padding: 0 7px;
+  place-items: center;
+  border: 3px solid #fff9ed;
+  border-radius: 999px;
+  background: #74502f;
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.notification-bubble {
+  position: absolute;
+  z-index: 12;
+  right: 190px;
+  bottom: 55px;
+  width: 270px;
+  padding: 13px 14px;
+  border: 1px solid rgb(103 77 49 / 14%);
+  border-radius: 18px;
+  background: #fffaf0;
+  box-shadow: 0 16px 36px rgb(66 42 24 / 22%);
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+}
+
+.notification-bubble::after {
+  position: absolute;
+  right: -12px;
+  bottom: 28px;
+  width: 22px;
+  height: 22px;
+  background: #fffaf0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.notification-bubble-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8a5d26;
+  font-size: 12px;
+}
+
+.notification-bubble p {
+  position: relative;
+  z-index: 1;
+  margin: 8px 0 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.notification-close {
+  border: 0;
+  background: transparent;
+  color: #746556;
+  cursor: pointer;
+}
+
+.notification-detail {
+  position: relative;
+  z-index: 1;
+  padding: 6px 9px;
+  border: 1px solid #d6c2a1;
+  border-radius: 9px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-list button,
+.notification-list article {
+  display: grid;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e9dcc3;
+  border-radius: 13px;
+  background: #fffdf8;
+  box-sizing: border-box;
+  gap: 4px;
+  text-align: left;
+}
+
+.notification-list button {
+  cursor: pointer;
+}
+
+.notification-list small {
+  color: #746556;
+}
+
 .popup-menu,
 .panel {
   position: absolute;

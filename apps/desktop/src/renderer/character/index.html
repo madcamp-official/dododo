@@ -12,6 +12,15 @@
   </head>
   <body>
     <main class="desktop-shell" aria-label="DoDoDo 캐릭터 도우미">
+      <aside class="notification-bubble" data-notification-bubble hidden aria-live="assertive">
+        <div class="notification-bubble-header">
+          <strong data-notification-kind>알림</strong>
+          <button class="notification-close" type="button" data-dismiss-notification aria-label="알림 닫기">×</button>
+        </div>
+        <p data-notification-message></p>
+        <button class="notification-detail" type="button" data-notification-detail hidden>자세히 보기</button>
+      </aside>
+
       <section class="panel" data-panel hidden aria-live="polite">
         <header class="panel-header">
           <div>
@@ -41,6 +50,7 @@
           draggable="false"
         />
         <button class="menu-toggle" type="button" data-menu-toggle aria-label="DoDoDo 메뉴 열기">☰</button>
+        <button class="notification-badge" type="button" data-notification-badge hidden aria-label="새 알림 보기">0</button>
       </div>
     </main>
     <script type="module" src="./mascot.js"></script>

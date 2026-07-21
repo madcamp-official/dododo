@@ -7,6 +7,10 @@ import {
   tomorrowAtSameTime,
   unwrapResult,
 } from "./desktop-api.mjs";
+import {
+  createNotificationStore,
+  notificationKindLabel,
+} from "./notification-state.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -14,12 +18,21 @@ const popupMenu = document.querySelector("[data-popup-menu]");
 const panel = document.querySelector("[data-panel]");
 const panelTitle = document.querySelector("[data-panel-title]");
 const panelContent = document.querySelector("[data-panel-content]");
+const notificationBubble = document.querySelector("[data-notification-bubble]");
+const notificationKind = document.querySelector("[data-notification-kind]");
+const notificationMessage = document.querySelector("[data-notification-message]");
+const notificationDetail = document.querySelector("[data-notification-detail]");
+const notificationBadge = document.querySelector("[data-notification-badge]");
 const alphaCanvas = document.createElement("canvas");
 const alphaContext = alphaCanvas.getContext("2d", { willReadFrequently: true });
 let isIgnoringMouse = true;
 let draggingPointerId;
 let currentListView = "today";
 const runExclusiveTaskAction = createExclusiveActionRunner();
+const notificationStore = createNotificationStore();
+const NOTIFICATION_DISPLAY_MS = 6_000;
+let activeNotification;
+let notificationTimer;
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -56,7 +69,7 @@ function isOpaquePixel(clientX, clientY) {
 function updateMousePassthrough(event) {
   if (draggingPointerId !== undefined) return;
   const interactive = event.target instanceof Element
-    && event.target.closest("[data-popup-menu], [data-panel], [data-menu-toggle]") !== null;
+    && event.target.closest("[data-popup-menu], [data-panel], [data-menu-toggle], [data-notification-bubble], [data-notification-badge]") !== null;
   const shouldIgnore = !interactive && !isOpaquePixel(event.clientX, event.clientY);
   if (shouldIgnore === isIgnoringMouse) return;
   isIgnoringMouse = shouldIgnore;
@@ -117,6 +130,20 @@ menuToggle?.addEventListener("click", () => {
   popupMenu.hidden = !willOpen;
   panel.hidden = true;
 });
+
+notificationBadge?.addEventListener("click", renderNotificationCenter);
+document.querySelector("[data-dismiss-notification]")?.addEventListener("click", dismissActiveNotification);
+notificationDetail?.addEventListener("click", () => {
+  const contextItemId = activeNotification?.contextItemId;
+  dismissActiveNotification();
+  if (contextItemId !== undefined) openDetail(contextItemId);
+});
+
+const unsubscribeNotifications = window.desktopEvents?.onNotification?.(handleNotification);
+window.addEventListener("beforeunload", () => {
+  if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
+  unsubscribeNotifications?.();
+}, { once: true });
 
 document.querySelector("[data-close-panel]")?.addEventListener("click", closePanel);
 
@@ -290,6 +317,79 @@ async function openDetail(id) {
   } catch (error) {
     renderError(error);
   }
+}
+
+function handleNotification(payload) {
+  const result = notificationStore.push(payload);
+  if (!result.accepted) return;
+  if (result.mode === "quiet") {
+    updateNotificationBadge();
+  }
+  showNextNotification();
+}
+
+function showNextNotification() {
+  if (activeNotification !== undefined) return;
+  const next = notificationStore.takeImmediate();
+  if (next === undefined) return;
+  if (!(notificationBubble instanceof HTMLElement)
+    || !(notificationKind instanceof HTMLElement)
+    || !(notificationMessage instanceof HTMLElement)
+    || !(notificationDetail instanceof HTMLButtonElement)) return;
+
+  activeNotification = next;
+  notificationKind.textContent = notificationKindLabel(next.kind);
+  notificationMessage.textContent = next.message;
+  notificationDetail.hidden = next.contextItemId === undefined;
+  notificationBubble.hidden = false;
+  notificationTimer = window.setTimeout(dismissActiveNotification, NOTIFICATION_DISPLAY_MS);
+}
+
+function dismissActiveNotification() {
+  if (notificationTimer !== undefined) {
+    window.clearTimeout(notificationTimer);
+    notificationTimer = undefined;
+  }
+  activeNotification = undefined;
+  if (notificationBubble instanceof HTMLElement) notificationBubble.hidden = true;
+  showNextNotification();
+}
+
+function updateNotificationBadge() {
+  if (!(notificationBadge instanceof HTMLButtonElement)) return;
+  const unreadCount = notificationStore.unreadQuietCount();
+  notificationBadge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+  notificationBadge.hidden = unreadCount === 0;
+  notificationBadge.setAttribute("aria-label", `새 알림 ${unreadCount}개 보기`);
+}
+
+function renderNotificationCenter() {
+  const notifications = notificationStore.listQuiet();
+  notificationStore.markQuietRead();
+  updateNotificationBadge();
+  popupMenu.hidden = true;
+  panel.hidden = false;
+  panelTitle.textContent = "알림";
+
+  if (notifications.length === 0) {
+    panelContent.innerHTML = '<div class="state-message">새 알림이 없습니다.</div>';
+    return;
+  }
+  panelContent.innerHTML = `<div class="notification-list">${notifications.map((event, index) => {
+    const tag = event.contextItemId === undefined ? "article" : "button";
+    const attributes = event.contextItemId === undefined ? "" : `type="button" data-notification-index="${index}"`;
+    return `<${tag} ${attributes}>
+      <strong>${escapeHtml(notificationKindLabel(event.kind))}</strong>
+      <span>${escapeHtml(event.message)}</span>
+      <small>${escapeHtml(formatDateTime(event.createdAt))}</small>
+    </${tag}>`;
+  }).join("")}</div>`;
+  panelContent.querySelectorAll("[data-notification-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const event = notifications[Number(button.dataset.notificationIndex)];
+      if (event?.contextItemId !== undefined) openDetail(event.contextItemId);
+    });
+  });
 }
 
 function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
