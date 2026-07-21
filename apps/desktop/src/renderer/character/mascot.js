@@ -17,6 +17,7 @@ const panelContent = document.querySelector("[data-panel-content]");
 const alphaCanvas = document.createElement("canvas");
 const alphaContext = alphaCanvas.getContext("2d", { willReadFrequently: true });
 let isIgnoringMouse = true;
+let draggingPointerId;
 let currentListView = "today";
 const runExclusiveTaskAction = createExclusiveActionRunner();
 
@@ -53,6 +54,7 @@ function isOpaquePixel(clientX, clientY) {
 }
 
 function updateMousePassthrough(event) {
+  if (draggingPointerId !== undefined) return;
   const interactive = event.target instanceof Element
     && event.target.closest("[data-popup-menu], [data-panel], [data-menu-toggle]") !== null;
   const shouldIgnore = !interactive && !isOpaquePixel(event.clientX, event.clientY);
@@ -61,14 +63,56 @@ function updateMousePassthrough(event) {
   window.desktopMascot?.setMousePassthrough(shouldIgnore);
 }
 
+function startCharacterDrag(event) {
+  const clickedMenu = event.target instanceof Element
+    && event.target.closest("[data-menu-toggle]") !== null;
+  if (event.button !== 0 || clickedMenu) return;
+  const dragTarget = event.currentTarget;
+  if (!(dragTarget instanceof HTMLElement)) return;
+
+  draggingPointerId = event.pointerId;
+  isIgnoringMouse = false;
+  window.desktopMascot?.setMousePassthrough(false);
+  window.desktopMascot?.startDrag(event.screenX, event.screenY);
+  dragTarget.setPointerCapture(event.pointerId);
+  dragTarget.classList.add("is-dragging");
+  event.preventDefault();
+}
+
+function moveCharacterDrag(event) {
+  if (event.pointerId !== draggingPointerId) return;
+  window.desktopMascot?.moveDrag(event.screenX, event.screenY);
+}
+
+function endCharacterDrag(event) {
+  if (event.pointerId !== draggingPointerId) return;
+  draggingPointerId = undefined;
+  window.desktopMascot?.endDrag();
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.remove("is-dragging");
+  }
+}
+
 if (character instanceof HTMLImageElement) {
   if (character.complete) prepareAlphaMask();
   else character.addEventListener("load", prepareAlphaMask, { once: true });
+  // Main과 Renderer가 각각 초기 mouse-ignore 상태를 쓰면 loadFile 완료 시점에 따라
+  // 실제 창 상태와 isIgnoringMouse가 어긋날 수 있다. Renderer를 단일 소유자로 두고
+  // 투명 여백을 먼저 click-through로 만든 뒤, 전달받은 mousemove로 캐릭터 위에서
+  // false로 전환한다. 그래야 -webkit-app-region: drag가 실제 마우스 입력을 받는다.
+  window.desktopMascot?.setMousePassthrough(isIgnoringMouse);
   window.addEventListener("mousemove", updateMousePassthrough);
 }
 
+const characterButton = document.querySelector("[data-character]");
+characterButton?.addEventListener("pointerdown", startCharacterDrag);
+characterButton?.addEventListener("pointermove", moveCharacterDrag);
+characterButton?.addEventListener("pointerup", endCharacterDrag);
+characterButton?.addEventListener("pointercancel", endCharacterDrag);
+
 menuToggle?.addEventListener("click", () => {
-  popupMenu.hidden = !popupMenu.hidden;
+  const willOpen = popupMenu.hidden;
+  popupMenu.hidden = !willOpen;
   panel.hidden = true;
 });
 

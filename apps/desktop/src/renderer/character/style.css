@@ -35,6 +35,7 @@ button {
 
 .character-button {
   position: absolute;
+  z-index: 10;
   right: 18px;
   bottom: 4px;
   width: 174px;
@@ -43,7 +44,12 @@ button {
   border: 0;
   background: transparent;
   cursor: grab;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+
+.character-button.is-dragging {
+  cursor: grabbing;
 }
 
 .character {
@@ -87,12 +93,17 @@ button {
 }
 
 .popup-menu {
-  right: 128px;
-  bottom: 128px;
+  top: 12px;
+  right: 200px;
+  bottom: auto;
   display: grid;
-  width: 150px;
+  box-sizing: border-box;
+  width: 180px;
+  height: max-content;
+  max-height: calc(100% - 24px);
   padding: 8px;
   gap: 3px;
+  overflow: hidden;
 }
 
 .popup-menu button,
@@ -123,7 +134,7 @@ button {
 }
 
 .panel {
-  inset: 8px;
+  inset: 8px 200px 8px 8px;
   overflow: hidden;
 }
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, screen } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -11,6 +11,11 @@ const preloadPath = path.join(currentDirectory, "../preload/index.cjs");
 const characterWindows = new Set();
 
 const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
+const START_CHARACTER_DRAG = "desktop:start-character-drag";
+const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
+const END_CHARACTER_DRAG = "desktop:end-character-drag";
+const characterDragOrigins = new WeakMap();
+const EXPANDED_SIZE = { width: 680, height: 420 };
 
 ipcMain.on(SET_MOUSE_PASSTHROUGH, (event, shouldIgnore) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
@@ -20,10 +25,45 @@ ipcMain.on(SET_MOUSE_PASSTHROUGH, (event, shouldIgnore) => {
   characterWindow.setIgnoreMouseEvents(shouldIgnore, { forward: true });
 });
 
+ipcMain.on(START_CHARACTER_DRAG, (event, pointer) => {
+  const characterWindow = BrowserWindow.fromWebContents(event.sender);
+  if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
+  const [windowX, windowY] = characterWindow.getPosition();
+  characterDragOrigins.set(characterWindow, { pointerX: pointer.x, pointerY: pointer.y, windowX, windowY });
+  characterWindow.setIgnoreMouseEvents(false);
+});
+
+ipcMain.on(MOVE_CHARACTER_DRAG, (event, pointer) => {
+  const characterWindow = BrowserWindow.fromWebContents(event.sender);
+  if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
+  const origin = characterDragOrigins.get(characterWindow);
+  if (origin === undefined) return;
+  const desiredX = Math.round(origin.windowX + pointer.x - origin.pointerX);
+  const desiredY = Math.round(origin.windowY + pointer.y - origin.pointerY);
+  const workArea = screen.getDisplayNearestPoint(pointer).workArea;
+  const [windowWidth, windowHeight] = characterWindow.getSize();
+  characterWindow.setPosition(
+    Math.min(Math.max(desiredX, workArea.x), workArea.x + workArea.width - windowWidth),
+    Math.min(Math.max(desiredY, workArea.y), workArea.y + workArea.height - windowHeight),
+  );
+});
+
+ipcMain.on(END_CHARACTER_DRAG, (event) => {
+  const characterWindow = BrowserWindow.fromWebContents(event.sender);
+  if (characterWindow !== null) characterDragOrigins.delete(characterWindow);
+});
+
+function isScreenPoint(value) {
+  return value !== null
+    && typeof value === "object"
+    && Number.isFinite(value.x)
+    && Number.isFinite(value.y);
+}
+
 function createCharacterWindow() {
   const characterWindow = new BrowserWindow({
-    width: 320,
-    height: 320,
+    width: EXPANDED_SIZE.width,
+    height: EXPANDED_SIZE.height,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -41,6 +81,7 @@ function createCharacterWindow() {
   characterWindow.setMenuBarVisibility(false);
   characterWindows.add(characterWindow);
   characterWindow.on("closed", () => {
+    characterDragOrigins.delete(characterWindow);
     characterWindows.delete(characterWindow);
   });
   void characterWindow.loadFile(rendererPath).then(() => {
@@ -49,11 +90,7 @@ function createCharacterWindow() {
       // 전달하지 않아 다시 drag 상태로 돌아올 수 없다. 현재 idle 에셋의 불투명 경계를
       // 감싸는 작은 shape만 hit-test 대상으로 두어 투명 여백이 아래 창을 막지 않게 한다.
       characterWindow.setShape([{ x: 76, y: 16, width: 168, height: 272 }]);
-      return;
     }
-    // Windows/macOS는 Renderer가 픽셀 alpha를 검사해 불투명 캐릭터 위에서만 이 값을
-    // false로 되돌린다. 시작은 click-through여야 투명 여백이 다른 앱을 가리지 않는다.
-    characterWindow.setIgnoreMouseEvents(true, { forward: true });
   }).catch((error) => {
     console.error("DoDoDo 데스크톱 Renderer를 열지 못했습니다.", error);
   });
