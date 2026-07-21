@@ -100,7 +100,7 @@ export class ContextPipeline {
     facts: Fact[],
     existing: ContextItem[],
     rawItemsById: Map<string, RawItem>,
-    now: string,
+    analyzedAt: string,
   ): Promise<ResolveResult> {
     const resolver = this.dependencies.contextResolver;
 
@@ -118,7 +118,7 @@ export class ContextPipeline {
     const outcome = await resolver.resolveWithEvidence(facts, existing, {
       rawItemsById,
       existingEvidence,
-      now,
+      analyzedAt,
     });
     return {
       createdItems: outcome.createdItems,
