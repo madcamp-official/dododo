@@ -12,7 +12,6 @@ import {
   ContextPipeline,
   DeterministicContextResolver,
   generateActionAndReason,
-  InterimContextStore,
   LLMFactExtractor,
   resolveConflict,
   RuleBasedRecommendationEngine,
@@ -81,46 +80,6 @@ test("fixture data can pass through the module contracts", async () => {
   assert.equal(result.errors.length, 0);
   assert.equal(result.created, 1);
   assert.equal((await repository.listContextItems("opportunity")).length, 1);
-});
-
-test("InterimContextStore round-trips evidence, history and recommendations", async () => {
-  const store = new InterimContextStore();
-
-  await store.saveEvidence([{
-    id: "ev-1",
-    rawItemId: "raw-1",
-    sourceType: "school-site",
-    location: "fixture://notice/1",
-    quote: "신청 마감은 7월 25일입니다.",
-    observedAt: "2026-07-18T09:00:00+09:00",
-    authority: "official",
-  }]);
-  assert.equal((await store.listEvidence(["ev-1", "missing"])).length, 1);
-
-  await store.saveContextHistory([{
-    id: "hist-1",
-    contextItemId: "ctx-1",
-    changeType: "field_updated",
-    field: "deadline",
-    previousValue: "2026-07-21T18:00:00+09:00",
-    newValue: "2026-07-23T18:00:00+09:00",
-    evidenceId: "ev-1",
-    changedAt: "2026-07-18T10:00:00+09:00",
-  }]);
-  assert.equal((await store.listContextHistory("ctx-1")).length, 1);
-  assert.equal((await store.listContextHistory("ctx-unknown")).length, 0);
-
-  await store.saveRecommendations([{
-    id: "rec-1",
-    contextItemId: "ctx-1",
-    action: "제출 준비를 시작하세요.",
-    reason: "마감이 가까움",
-    score: 80,
-    evidenceIds: ["ev-1"],
-    createdAt: "2026-07-18T10:00:00+09:00",
-  }]);
-  assert.equal((await store.listRecommendations("ctx-1")).length, 1);
-  assert.equal((await store.listRecommendations()).length, 1);
 });
 
 class FakeLLMProvider implements LLMProvider {
@@ -754,7 +713,7 @@ test("RuleBasedRecommendationEngine은 마감이 임박하고 요구사항이 �
 test("RuleBasedRecommendationEngine은 history Provider로 30분 내 재추천을 실제로 억제한다", async () => {
   const now = new Date("2026-07-18T12:00:00+09:00");
   const item = baseItem({ id: "ctx-suppressed" });
-  const history = new InterimContextStore();
+  const history = new InMemoryContextRepository();
   await history.saveRecommendations([{
     id: "rec-prev", contextItemId: "ctx-suppressed", action: "a", reason: "r",
     score: 50, evidenceIds: [], createdAt: "2026-07-18T11:50:00+09:00",
