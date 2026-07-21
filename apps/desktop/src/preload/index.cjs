@@ -36,6 +36,10 @@ const CHANNELS = {
   taskComplete: "task:complete",
   taskSnooze: "task:snooze",
   syncRun: "sync:run",
+  profileGet: "profile:get",
+  profileSave: "profile:save",
+  uiStateGet: "ui-state:get",
+  uiStateSet: "ui-state:set",
 };
 
 // Result<T>({ ok, data } | { ok, error })를 그대로 돌려준다 — Renderer가 .ok로 분기한다
@@ -50,4 +54,8 @@ contextBridge.exposeInMainWorld("desktopApi", {
   completeTask: (id) => ipcRenderer.invoke(CHANNELS.taskComplete, { id }),
   snoozeTask: (id, until) => ipcRenderer.invoke(CHANNELS.taskSnooze, { id, until }),
   sync: () => ipcRenderer.invoke(CHANNELS.syncRun),
+  getProfile: () => ipcRenderer.invoke(CHANNELS.profileGet),
+  saveProfile: (profile) => ipcRenderer.invoke(CHANNELS.profileSave, profile),
+  getUiState: (key) => ipcRenderer.invoke(CHANNELS.uiStateGet, { key }),
+  setUiState: (key, value) => ipcRenderer.invoke(CHANNELS.uiStateSet, { key, value }),
 });
