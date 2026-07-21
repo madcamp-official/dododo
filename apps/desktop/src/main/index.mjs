@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
+import { registerIpcHandlers } from "./ipc/index.ts";
+
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
 const preloadPath = path.join(currentDirectory, "../preload/index.cjs");
@@ -57,6 +60,9 @@ function createCharacterWindow() {
 }
 
 app.whenReady().then(() => {
+  // apps/cli의 createCliContainer를 그대로 재사용한다(container.ts) — CLI 명령마다
+  // 새로 만들고 버리는 것과 달리, 앱 실행 내내 하나만 만들어 모든 IPC 호출이 공유한다.
+  registerIpcHandlers(getDesktopContainer());
   createCharacterWindow();
 
   app.on("activate", () => {
@@ -70,4 +76,11 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+// SQLite를 열었으면(DODODO_DB_PATH가 실제 경로) 앱이 어떻게 종료되든(메뉴 종료,
+// window-all-closed, OS 종료) 파일 잠금을 풀어야 다음 실행이 곧바로 붙을 수 있다
+// (apps/cli/src/index.ts의 try/finally와 같은 이유).
+app.on("before-quit", () => {
+  closeDesktopContainer();
 });

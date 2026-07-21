@@ -1,6 +1,6 @@
-import { emptyProfile, type CliContainer } from "../runtime/container.ts";
+import type { CliContainer } from "../runtime/container.ts";
+import { rankItems } from "../runtime/recommendationRanking.ts";
 import { renderIdLookupFailure, resolveContextItemId } from "../runtime/resolveContextItemId.ts";
-import { isSnoozed } from "../runtime/snooze.ts";
 import {
   isExcludedContextStatus,
   prepareOpportunity,
@@ -55,18 +55,13 @@ export async function renderInbox(container: CliContainer, now: Date = new Date(
     ].join("\n");
   }
 
-  const profile = (await container.profileRepository.get()) ?? emptyProfile();
-  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
-  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const ranked = await rankItems(container, items, now);
 
   const lines = ["Opportunity Inbox", ""];
-  for (const recommendation of recommendations) {
-    const item = itemsById.get(recommendation.contextItemId);
-    if (item === undefined || isSnoozed(item, now)) continue;
-
-    lines.push(`[${item.id}] 관련도 ${Math.round(recommendation.score)}  ${item.title}`);
+  for (const { item, score, reason } of ranked) {
+    lines.push(`[${item.id}] 관련도 ${Math.round(score)}  ${item.title}`);
     if (item.deadline !== undefined) lines.push(`  마감: ${item.deadline}`);
-    lines.push(`  이유: ${recommendation.reason}`);
+    lines.push(`  이유: ${reason}`);
     lines.push(`  준비: npm start -- inbox prepare ${item.id}`);
   }
 
