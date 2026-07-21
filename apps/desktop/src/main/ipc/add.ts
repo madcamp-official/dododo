@@ -72,10 +72,15 @@ export async function submitAdd(
   });
 }
 
-// scheduleIntent.ts(packages/context-engine, 김도현 소유)의 private toLocalIso와 같은
-// 규칙(시스템 로컬 시간 + offset)을 쓰지만, 그 함수는 export되지 않고 상대 날짜 파싱
-// 로직과 얽혀 있어 이 작은 조합 하나 때문에 계약을 확장하지 않는다 — 여기서 독립적으로
-// 다시 구현한다(AGENTS.md: 필요한 최소한만, 이 정도 중복은 계약 변경보다 저렴하다).
+// doyeonid 리뷰(PR #61): 이전엔 new Date(year, month, ...)/getTimezoneOffset()으로
+// 시스템 로컬 시간대에 암묵적으로 의존했다 — 실행 환경이 UTC면 같은 입력도 다른
+// 시각으로 저장돼, Asia/Seoul을 기본으로 쓰는 캘린더 조회(context.ts/calendar.ts)와
+// 어긋났다(AGENTS.md: 시간 로직은 시스템 로컬 시간에 암묵적으로 의존하지 않는다).
+// 데스크톱 앱 전체가 Asia/Seoul(DST 없는 고정 UTC+09:00) 하나만 다루므로, 존재
+// 여부 검증은 Date.UTC(시스템 시간대 영향 없음)로 하고 오프셋은 문자열로 고정
+// 부착한다 — 시스템 Date의 로컬 getter를 전혀 거치지 않아 실행 환경 TZ와 무관하다.
+const FIXED_TIME_ZONE_OFFSET = "+09:00"; // Asia/Seoul
+
 function combineLocalDateTime(dateStr: string, timeStr: string): string | undefined {
   const dateMatch = DATE_PATTERN.exec(dateStr);
   const timeMatch = TIME_PATTERN.exec(timeStr);
@@ -88,22 +93,14 @@ function combineLocalDateTime(dateStr: string, timeStr: string): string | undefi
   const minute = Number(timeMatch[2]);
   if (hour > 23 || minute > 59) return undefined;
 
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  // Date는 "2월 30일" 같은 값을 조용히 3월로 굴린다 — 조합한 결과가 요청한 값과
-  // 같은지 왕복 비교해야 존재하지 않는 날짜를 걸러낼 수 있다.
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+  // Date.UTC는 "2월 30일" 같은 값을 조용히 3월로 굴린다 — 조합한 결과가 요청한 값과
+  // 같은지 왕복 비교해야 존재하지 않는 날짜를 걸러낼 수 있다. UTC getter만 쓰므로
+  // 이 검증 자체는 실행 환경 시간대와 무관하다.
+  const utc = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) {
     return undefined;
   }
 
-  return toLocalIso(date);
-}
-
-function toLocalIso(date: Date): string {
-  const offsetMinutes = -date.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const abs = Math.abs(offsetMinutes);
   const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    + `T${pad(date.getHours())}:${pad(date.getMinutes())}:00`
-    + `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+  return `${dateStr}T${pad(hour)}:${pad(minute)}:00${FIXED_TIME_ZONE_OFFSET}`;
 }
