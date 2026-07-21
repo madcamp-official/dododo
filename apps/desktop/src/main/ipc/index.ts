@@ -11,8 +11,10 @@ import {
   handleProfileSave,
   handleSyncRun,
   handleTaskComplete,
+  handleTaskDelete,
   handleTaskDetail,
   handleTaskSnooze,
+  handleTaskUpdate,
   handleToday,
   handleUiStateGet,
   handleUiStateSet,
@@ -30,6 +32,8 @@ export const IPC_CHANNELS = {
   taskDetail: "task:detail",
   taskComplete: "task:complete",
   taskSnooze: "task:snooze",
+  taskUpdate: "task:update",
+  taskDelete: "task:delete",
   syncRun: "sync:run",
   profileGet: "profile:get",
   profileSave: "profile:save",
@@ -50,6 +54,8 @@ export function registerIpcHandlers(container: CliContainer): void {
   ipcMain.handle(IPC_CHANNELS.taskDetail, (_event, input: unknown) => handleTaskDetail(container, input));
   ipcMain.handle(IPC_CHANNELS.taskComplete, (_event, input: unknown) => handleTaskComplete(container, input));
   ipcMain.handle(IPC_CHANNELS.taskSnooze, (_event, input: unknown) => handleTaskSnooze(container, input));
+  ipcMain.handle(IPC_CHANNELS.taskUpdate, (_event, input: unknown) => handleTaskUpdate(container, input));
+  ipcMain.handle(IPC_CHANNELS.taskDelete, (_event, input: unknown) => handleTaskDelete(container, input));
   ipcMain.handle(IPC_CHANNELS.syncRun, () => handleSyncRun(container));
   ipcMain.handle(IPC_CHANNELS.profileGet, () => handleProfileGet(container));
   ipcMain.handle(IPC_CHANNELS.profileSave, (_event, input: unknown) => handleProfileSave(container, input));
