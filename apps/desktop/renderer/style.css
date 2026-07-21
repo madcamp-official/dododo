@@ -1,0 +1,28 @@
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.character-drag-area {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  -webkit-app-region: drag;
+}
+
+.character {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
