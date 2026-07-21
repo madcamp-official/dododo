@@ -61,6 +61,7 @@ export async function runAdd(
     title: intent.title,
     status: "confirmed",
     startAt: intent.startAt,
+    ...(intent.endAt === undefined ? {} : { endAt: intent.endAt }),
     requirements: [],
     tags: [],
     priority: 0,
@@ -72,5 +73,6 @@ export async function runAdd(
   };
   await container.repository.saveContextItems([event]);
 
-  return `일정을 저장했습니다: ${intent.title} (${intent.startAt})`;
+  const range = intent.endAt === undefined ? intent.startAt : `${intent.startAt} ~ ${intent.endAt}`;
+  return `일정을 저장했습니다: ${intent.title} (${range})`;
 }
