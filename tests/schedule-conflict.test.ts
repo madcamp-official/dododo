@@ -59,8 +59,11 @@ test("findScheduleConflicts는 겹치지 않는 일정은 무시한다", () => {
   assert.deepEqual(findScheduleConflicts([a, b], NOW), []);
 });
 
-test("findScheduleConflicts는 endAt 없는 마감(순간)이 다른 일정 구간 안에 있으면 충돌로 본다", () => {
-  const deadline = scheduleItem({ id: "task", kind: "task", startAt: "2026-07-25T10:30:00+09:00" });
+// 김도현 리뷰(PR #65): 이 테스트가 원래 startAt을 직접 채운 Task fixture로 "통과"했지만,
+// 실제 시스템은 Task 마감을 deadline에 저장한다(startAt이 아니다) — 그래서 실제로는
+// 이 필터를 절대 통과하지 못하는 버그를 테스트가 가리고 있었다. deadline으로 고친다.
+test("findScheduleConflicts는 endAt 없는 마감(순간, Task는 deadline)이 다른 일정 구간 안에 있으면 충돌로 본다", () => {
+  const deadline = scheduleItem({ id: "task", kind: "task", deadline: "2026-07-25T10:30:00+09:00" });
   const event = scheduleItem({ id: "event", kind: "event", startAt: "2026-07-25T10:00:00+09:00", endAt: "2026-07-25T11:00:00+09:00" });
 
   const conflicts = findScheduleConflicts([deadline, event], NOW);
@@ -68,14 +71,27 @@ test("findScheduleConflicts는 endAt 없는 마감(순간)이 다른 일정 구�
   assert.equal(conflicts.length, 1);
 });
 
-test("findScheduleConflicts는 순간끼리는 정확히 같은 시각일 때만 충돌로 본다", () => {
-  const a = scheduleItem({ id: "a", startAt: "2026-07-25T10:00:00+09:00" });
-  const b = scheduleItem({ id: "b", startAt: "2026-07-25T10:00:01+09:00" });
+test("findScheduleConflicts는 순간끼리는 정확히 같은 시각일 때만 충돌로 본다(Task는 deadline)", () => {
+  const a = scheduleItem({ id: "a", deadline: "2026-07-25T10:00:00+09:00" });
+  const b = scheduleItem({ id: "b", deadline: "2026-07-25T10:00:01+09:00" });
 
   assert.deepEqual(findScheduleConflicts([a, b], NOW), []);
 
-  const c = scheduleItem({ id: "c", startAt: "2026-07-25T10:00:00+09:00" });
+  const c = scheduleItem({ id: "c", deadline: "2026-07-25T10:00:00+09:00" });
   assert.equal(findScheduleConflicts([a, c], NOW).length, 1);
+});
+
+// 김도현 리뷰(PR #65)가 직접 지적한 시나리오: 실제 Task ContextItem(startAt 없이
+// deadline만 있는)이 후보 필터를 통과해 다른 Task와도 충돌로 잡히는지 확인한다.
+test("findScheduleConflicts는 Task-Task 충돌도 감지한다(실제 Task는 startAt이 없다)", () => {
+  const a = scheduleItem({ id: "a", kind: "task", deadline: "2026-07-25T10:00:00+09:00" });
+  const b = scheduleItem({ id: "b", kind: "task", deadline: "2026-07-25T10:00:00+09:00" });
+  assert.equal(a.startAt, undefined);
+  assert.equal(b.startAt, undefined);
+
+  const conflicts = findScheduleConflicts([a, b], NOW);
+
+  assert.equal(conflicts.length, 1);
 });
 
 test("findScheduleConflicts는 과거 일정과 cancelled/done 상태는 제외한다", () => {

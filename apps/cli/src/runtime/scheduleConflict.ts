@@ -6,8 +6,17 @@ export interface ScheduleConflict {
   b: ContextItem;
 }
 
+// 김도현 리뷰(PR #65): 이 저장소에서 Task는 마감을 startAt이 아니라 deadline에
+// 저장한다(calendar.ts의 scheduledValue, priority.ts의 deadlineUrgencyScore와 같은
+// 관례 — scheduleItem.ts의 updateScheduleItem도 Task 수정 시 startAt을 항상
+// 지운다). 이전엔 startAt만 읽어서 실제 Task ContextItem이 전부 후보에서 걸러져,
+// Task가 관련된 충돌(Task-Task, Task-Event)이 전혀 감지되지 않았다.
+function scheduledStart(item: ContextItem): string | undefined {
+  return item.kind === "event" ? item.startAt : item.deadline;
+}
+
 function toRange(item: ContextItem): [number, number] {
-  const start = Date.parse(item.startAt as string);
+  const start = Date.parse(scheduledStart(item) ?? "");
   if (item.endAt === undefined) return [start, start];
   const end = Date.parse(item.endAt);
   return Number.isNaN(end) ? [start, start] : [start, end];
@@ -32,9 +41,12 @@ export function findScheduleConflicts(items: ContextItem[], now: Date): Schedule
   const upcoming = items
     .filter((item) => item.kind === "task" || item.kind === "event")
     .filter((item) => !isExcludedContextStatus(item.status))
-    .filter((item) => item.startAt !== undefined && !Number.isNaN(Date.parse(item.startAt)))
+    .filter((item) => {
+      const start = scheduledStart(item);
+      return start !== undefined && !Number.isNaN(Date.parse(start));
+    })
     .filter((item) => isRelevant(item, now))
-    .sort((a, b) => Date.parse(a.startAt as string) - Date.parse(b.startAt as string));
+    .sort((a, b) => Date.parse(scheduledStart(a) as string) - Date.parse(scheduledStart(b) as string));
 
   const conflicts: ScheduleConflict[] = [];
   for (let i = 0; i < upcoming.length; i += 1) {
