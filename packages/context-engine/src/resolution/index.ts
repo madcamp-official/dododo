@@ -19,13 +19,11 @@ export * from "./similarity.ts";
 export interface ResolveContext {
   rawItemsById: Map<string, RawItem>;
   existingEvidence: Evidence[];
-  // 이 분석의 기준 시각(ISO). ContextItem 생성 시각과 변경 이력 changedAt에 쓴다.
-  // ContextPipeline은 saveRawItemAnalysis의 analyzedAt과 같은 값(= RawItem.observedAt)을
-  // 주입한다 — 벽시계 시각을 쓰면 같은 관찰을 재분석할 때 결정적인 History ID
+  // RawItem.observedAt을 그대로 주입한 관찰 시각(ISO). ContextItem 생성 시각과
+  // 변경 이력 changedAt에 쓴다. 벽시계 시각을 쓰면 같은 관찰을 재분석할 때 결정적인 History ID
   // (hist-created-*, hist-merge-* 등)에 매번 다른 changedAt이 붙어 저장소의 append-only
-  // 검증과 충돌한다. 선택 필드로 두면 호출부 하나가 빠뜨렸을 때 그 충돌이 조용히
-  // 되살아나므로 필수로 둔다(김도연님 리뷰 P3).
-  analyzedAt: string;
+  // 검증과 충돌한다. 누락이 조용히 멱등성을 깨지 않도록 필수로 둔다.
+  observedAt: string;
 }
 
 export interface ResolveOutcome {
@@ -72,7 +70,7 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     const outcome = await this.resolveWithEvidence(facts, existing, {
       rawItemsById: new Map(),
       existingEvidence: [],
-      analyzedAt: this.now().toISOString(),
+      observedAt: this.now().toISOString(),
     });
     return [...outcome.createdItems, ...outcome.updatedItems];
   }
@@ -82,7 +80,7 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     existing: ContextItem[],
     context: ResolveContext,
   ): Promise<ResolveOutcome> {
-    const now = context.analyzedAt;
+    const now = context.observedAt;
     const createdItems: ContextItem[] = [];
     const updatedItems: ContextItem[] = [];
     const newEvidence: Evidence[] = [];

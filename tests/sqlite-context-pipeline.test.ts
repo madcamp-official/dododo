@@ -113,9 +113,12 @@ test("Fixture에서 Pipeline을 거친 Context와 Evidence가 SQLite 재시작 �
       const tasks = await repository.listContextItems("task");
       assert.equal(tasks.length, 1);
       assert.equal(tasks[0]?.deadline, "2026-07-25T23:59:00+09:00");
+      assert.equal(tasks[0]?.createdAt, rawItem.observedAt);
       assert.equal((await repository.listFactsByRawItemId(rawItem.id)).length, 1);
       assert.equal((await repository.listEvidenceByContextItemId(tasks[0]!.id)).length, 1);
-      assert.equal((await repository.listContextHistory(tasks[0]!.id)).length, 1);
+      const history = await repository.listContextHistory(tasks[0]!.id);
+      assert.equal(history.length, 1);
+      assert.equal(history[0]?.changedAt, rawItem.observedAt);
     } finally {
       secondDatabase.close();
     }
