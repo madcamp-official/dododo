@@ -353,6 +353,10 @@ h2 {
   color: #ad4838;
 }
 
+.state-message.compact {
+  padding: 12px;
+}
+
 .ask-form,
 .add-form {
   display: grid;
@@ -510,6 +514,43 @@ h2 {
 .settings-list button {
   justify-content: space-between;
   background: #fffdf8;
+}
+
+.source-list { display: grid; margin-bottom: 12px; gap: 7px; }
+
+.source-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid #eadfc9;
+  border-radius: 12px;
+  background: #fffdf8;
+  gap: 10px;
+}
+
+.source-card div, .source-form { display: grid; gap: 5px; }
+.source-card small { overflow-wrap: anywhere; color: #746556; }
+.source-form { padding-top: 12px; border-top: 1px solid #eadfc9; }
+.source-form label { font-size: 13px; font-weight: 700; }
+
+.source-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d9c9ad;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: #2d241d;
+}
+
+.restart-notice {
+  margin: 0 0 10px;
+  padding: 9px;
+  border-radius: 11px;
+  background: #eef4e9;
+  color: #4f7146;
+  font-size: 12px;
 }
 
 @keyframes breathe {

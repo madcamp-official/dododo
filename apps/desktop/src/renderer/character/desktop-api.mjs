@@ -10,6 +10,9 @@ const API_METHODS = {
   update: "updateTask",
   delete: "deleteTask",
   reminder: "setReminderOffset",
+  sourceList: "listSources",
+  sourceRegister: "registerSource",
+  sourceRemove: "removeSource",
   sync: "sync",
 };
 
@@ -40,6 +43,9 @@ export function createDesktopApi(bridgeOrProvider) {
     update: (id, input) => invoke("update", id, input),
     delete: (id) => invoke("delete", id),
     reminder: (id, offsetMinutes) => invoke("reminder", id, offsetMinutes),
+    sourceList: () => invoke("sourceList"),
+    sourceRegister: (type, value) => invoke("sourceRegister", type, value),
+    sourceRemove: (id) => invoke("sourceRemove", id),
     sync: () => invoke("sync"),
   };
 }

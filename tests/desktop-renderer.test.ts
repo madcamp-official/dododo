@@ -10,7 +10,8 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   const bridge = Object.fromEntries([
     "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
-    "deleteTask", "setReminderOffset", "sync",
+    "deleteTask", "setReminderOffset", "listSources", "registerSource",
+    "removeSource", "sync",
   ].map((method) => [method, (...args: unknown[]) => {
     calls.push({ method, args });
     return Promise.resolve(result);
@@ -29,6 +30,9 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.update("task-1", addInput);
   await api.delete("task-1");
   await api.reminder("task-1", 60);
+  await api.sourceList();
+  await api.sourceRegister("school-site", "https://school.example/notices");
+  await api.sourceRemove("school-site");
   await api.sync();
 
   assert.deepEqual(calls, [
@@ -43,6 +47,9 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "updateTask", args: ["task-1", addInput] },
     { method: "deleteTask", args: ["task-1"] },
     { method: "setReminderOffset", args: ["task-1", 60] },
+    { method: "listSources", args: [] },
+    { method: "registerSource", args: ["school-site", "https://school.example/notices"] },
+    { method: "removeSource", args: ["school-site"] },
     { method: "sync", args: [] },
   ]);
 });

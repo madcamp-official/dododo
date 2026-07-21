@@ -590,9 +590,80 @@ function renderSettings() {
     <div class="settings-list">
       <button type="button">프로필 <span>›</span></button>
       <button type="button">일정 관리 <span>›</span></button>
-      <button type="button">Source 관리 <span>›</span></button>
+      <button type="button" data-settings-source>Source 관리 <span>›</span></button>
     </div>
-    <p class="hint">설정 IPC가 준비되면 각 화면을 연결합니다.</p>`;
+    <p class="hint">프로필·전체 일정 관리 화면은 순서대로 연결할 예정입니다.</p>`;
+  panelContent.querySelector("[data-settings-source]")?.addEventListener("click", () => renderSourceSettings());
+}
+
+async function renderSourceSettings(notice) {
+  panelTitle.textContent = "Source 관리";
+  panelContent.innerHTML = '<div class="state-message">등록된 Source를 불러오는 중...</div>';
+  try {
+    const { sources } = unwrapResult(await desktopApi.sourceList());
+    const list = sources.length === 0
+      ? '<p class="state-message compact">등록된 Source가 없습니다.</p>'
+      : `<div class="source-list">${sources.map((source) => `
+          <article class="source-card">
+            <div>
+              <strong>${escapeHtml(sourceTypeLabel(source.id))}</strong>
+              <small>${escapeHtml(source.value)}</small>
+            </div>
+            <button class="danger-button" type="button" data-source-remove="${escapeHtml(source.id)}">삭제</button>
+          </article>`).join("")}</div>`;
+    panelContent.innerHTML = `
+      ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
+      ${list}
+      <form class="source-form" data-source-form>
+        <label for="school-site-url">학교 사이트 URL</label>
+        <input id="school-site-url" name="value" type="url" placeholder="https://school.example/notices" required />
+        <button class="primary-button" type="submit">학교 사이트 등록</button>
+      </form>
+      <p class="hint">학교 이메일과 LMS 등록은 필수 설정값이 확정되지 않아 아직 지원하지 않습니다.</p>`;
+
+    panelContent.querySelector("[data-source-form]")?.addEventListener("submit", runSourceRegister);
+    panelContent.querySelectorAll("[data-source-remove]").forEach((button) => {
+      button.addEventListener("click", () => runSourceRemove(button));
+    });
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+async function runSourceRegister(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!(form instanceof HTMLFormElement)) return;
+  const value = new FormData(form).get("value")?.toString().trim() ?? "";
+  const submit = form.querySelector("button[type='submit']");
+  if (submit instanceof HTMLButtonElement) submit.disabled = true;
+  try {
+    const result = unwrapResult(await desktopApi.sourceRegister("school-site", value));
+    await renderSourceSettings(result.restartRequired ? "등록했습니다. 앱을 재시작하면 Source 설정이 적용됩니다." : undefined);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
+  }
+}
+
+async function runSourceRemove(button) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  const id = button.dataset.sourceRemove;
+  if (id === undefined || !window.confirm(`${sourceTypeLabel(id)} Source를 삭제할까요?`)) return;
+  button.disabled = true;
+  try {
+    const result = unwrapResult(await desktopApi.sourceRemove(id));
+    await renderSourceSettings(result.restartRequired ? "삭제했습니다. 앱을 재시작하면 Source 설정이 적용됩니다." : undefined);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+function sourceTypeLabel(id) {
+  return ({ "school-site": "학교 사이트", "school-email": "학교 이메일", lms: "LMS" })[id] ?? "Source";
 }
 
 async function runSync(button) {
