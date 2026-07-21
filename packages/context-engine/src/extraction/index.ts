@@ -168,15 +168,74 @@ function normalize(text: string): string {
   return text.replaceAll(/\s+/g, "").trim();
 }
 
+// Collector가 이미 구조화된 신호를 metadata에 넣어 준 경우, LLM 추출값보다 우선한다.
+// - canonicalTitle: 같은 공지가 Source마다 제목을 조금씩 다르게 표기해도(예: "[학생지원팀]"
+//   접두사) 정규 제목으로 통일해 병합(resolution/mergeScore의 제목 유사도)이 안정된다.
+//   주제성 Fact(opportunity/task/event)에만 적용하고 requirement/note 같은 세부는 그대로 둔다.
+// - dueAt: LMS처럼 마감을 구조화된 값으로 이미 아는 Source는 LLM이 본문에서 뽑은 마감보다
+//   이 값을 신뢰한다. 마감성 Fact(deadline/task)의 eventTime만 대체하고 event(시험 시각)는
+//   건드리지 않는다.
+//
+// 전제(김도연·박도현 리뷰): 이 두 값은 RawItem 단위라서 그 RawItem에서 나온 주제성/마감성
+// Fact 전부에 같은 값이 적용된다. 즉 "RawItem 하나 = 주제 하나"를 가정한다. Collector가
+// 이 metadata를 채울 때는 그 단위를 지켜야 한다 — 안내문 하나에 마감이 서로 다른 과제가
+// 여러 개 있으면 RawItem을 과제 단위로 쪼개고, 쪼갤 수 없으면 canonicalTitle/dueAt을
+// 아예 채우지 않는다(채우지 않으면 LLM 추출값이 그대로 쓰여 회귀가 없다). Fact 단위로
+// 구조화 값을 붙이려면 RawItem.metadata가 아니라 Fact 계약을 넓혀야 하므로, 그때는
+// packages/shared의 공통 계약 변경 절차를 따른다.
+const SUBJECT_KINDS: ReadonlySet<FactKind> = new Set(["opportunity", "task", "event"]);
+const DEADLINE_KINDS: ReadonlySet<FactKind> = new Set(["deadline", "task"]);
+
 function toFact(raw: RawFact, rawItem: RawItem, index: number): Fact {
+  const canonicalTitle = stringMetadata(rawItem.metadata.canonicalTitle);
+  const dueAt = structuredDueAt(rawItem);
+
   return {
     id: `fact-${rawItem.id}-${rawItem.contentHash}-${index}`,
     rawItemId: rawItem.id,
     kind: raw.kind,
-    subject: raw.subject,
+    subject: canonicalTitle !== undefined && SUBJECT_KINDS.has(raw.kind) ? canonicalTitle : raw.subject,
     value: raw.value,
-    eventTime: raw.eventTime,
+    eventTime: dueAt !== undefined && DEADLINE_KINDS.has(raw.kind) ? dueAt : raw.eventTime,
     confidence: raw.confidence,
     evidenceText: raw.evidenceText,
   };
+}
+
+// LLM이 반환한 eventTime은 Schema의 format: "date-time" 검증을 거치지만, metadata.dueAt은
+// Collector가 HTML 속성값을 그대로 옮겨 담은 신뢰할 수 없는 외부 입력이다. 검증 없이
+// 우선하면 "tomorrow" 같은 값이 Fact와 ContextItem의 마감으로 저장된다(김도연님 리뷰 P1).
+// 파싱되지 않으면 undefined를 반환해 LLM 추출값으로 폴백한다 — 이 RawItem 하나 때문에
+// 다른 Fact 처리를 중단하지 않는다.
+export function structuredDueAt(rawItem: RawItem): string | undefined {
+  const value = stringMetadata(rawItem.metadata.dueAt);
+  if (value === undefined) return undefined;
+  return isIsoDateTime(value) ? value : undefined;
+}
+
+// JSON Schema의 format: "date-time"과 같은 기준(RFC 3339)으로 본다. 세 단계가 모두 필요하다.
+// 1. 형태: Date.parse는 "2026-07-23"(시각 없음)이나 "Jul 23 2026"도 받아들여서, 시각 없는
+//    날짜가 마감 시각으로 둔갑한다. 오프셋 없는 값은 실행 환경 타임존에 따라 달라진다.
+// 2. Date.parse: 범위를 벗어난 월·시·분·오프셋(13월, 25시, +99:00)을 여기서 걸러낸다.
+// 3. 왕복 비교: Date.parse는 "일"만은 조용히 다음 달로 굴린다 — 2026-02-30은 NaN이 아니라
+//    3월 2일로 파싱돼 존재하지 않는 마감이 저장된다(김도연님 리뷰 P1). 파싱 결과의 연·월·일이
+//    입력과 같은지 확인해야 달력에 없는 날짜를 잡을 수 있다.
+const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})$/;
+
+function isIsoDateTime(value: string): boolean {
+  const match = ISO_DATE_TIME.exec(value);
+  if (match === null) return false;
+  if (Number.isNaN(Date.parse(value))) return false;
+
+  const [, year, month, day] = match;
+  // 오프셋이 붙은 값은 파싱하면 다른 날짜(UTC 기준)가 될 수 있으므로, 파싱된 시각이 아니라
+  // 입력의 날짜 구성요소만 떼어 UTC 자정으로 다시 만들어 비교한다.
+  const roundTrip = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return roundTrip.getUTCFullYear() === Number(year)
+    && roundTrip.getUTCMonth() === Number(month) - 1
+    && roundTrip.getUTCDate() === Number(day);
+}
+
+function stringMetadata(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }

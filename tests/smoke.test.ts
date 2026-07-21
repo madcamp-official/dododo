@@ -4,6 +4,7 @@ import test from "node:test";
 import { renderHelp } from "../apps/cli/src/commands/help.ts";
 import { FixtureCollector } from "../packages/collectors/src/index.ts";
 import {
+  buildEvidence,
   classifyConfidenceGate,
   computeMergeScore,
   computePriority,
@@ -1059,4 +1060,146 @@ test("좁은 resolve() 경로는 주입된 시계를 쓴다(new Date() 직접 �
 
   assert.equal(items[0]?.createdAt, fixed.toISOString());
   assert.equal(items[0]?.updatedAt, fixed.toISOString());
+});
+
+test("LLMFactExtractor는 metadata.canonicalTitle을 주제 Fact 제목보다 우선한다", async () => {
+  const raw: RawItem = {
+    id: "raw-canon", sourceId: "school-email", sourceType: "school-email", uri: "u",
+    title: "[학생지원팀] AI 해커톤", content: "AI 해커톤 안내",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { canonicalTitle: "대학생 AI 해커톤" },
+  };
+  const provider: LLMProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { facts: [
+        { kind: "opportunity", subject: "[학생지원팀] AI 해커톤", value: "모집", confidence: 0.9, evidenceText: "AI 해커톤 안내" },
+        { kind: "requirement", subject: "보고서 제출", value: "PDF", confidence: 0.9, evidenceText: "AI 해커톤 안내" },
+      ] };
+      if (!request.validate(value)) throw new Error("invalid");
+      return value;
+    },
+  };
+  const facts = await new LLMFactExtractor(provider).extract(raw);
+
+  const opp = facts.find((f) => f.kind === "opportunity");
+  const req = facts.find((f) => f.kind === "requirement");
+  assert.equal(opp?.subject, "대학생 AI 해커톤", "주제 Fact 제목은 canonicalTitle로 통일된다");
+  assert.equal(req?.subject, "보고서 제출", "requirement 같은 세부 Fact는 그대로 둔다");
+});
+
+test("LLMFactExtractor는 metadata.dueAt을 마감성 Fact의 LLM 추출 마감보다 우선한다", async () => {
+  const raw: RawItem = {
+    id: "raw-due", sourceId: "lms", sourceType: "lms", uri: "u",
+    title: "과제 3", content: "과제 마감 관련",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { course: "운영체제", dueAt: "2026-07-23T18:00:00+09:00" },
+  };
+  const provider: LLMProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { facts: [
+        { kind: "task", subject: "과제 3", value: "제출", eventTime: "2026-07-21T18:00:00+09:00", confidence: 0.9, evidenceText: "과제 마감 관련" },
+      ] };
+      if (!request.validate(value)) throw new Error("invalid");
+      return value;
+    },
+  };
+  const facts = await new LLMFactExtractor(provider).extract(raw);
+  assert.equal(facts[0]?.eventTime, "2026-07-23T18:00:00+09:00", "구조화된 dueAt이 LLM이 뽑은 마감보다 우선한다");
+});
+
+// 김도연님 리뷰 P1: LLM의 eventTime은 Schema의 format: "date-time" 검증을 거치지만
+// metadata.dueAt은 Collector가 HTML 속성값을 그대로 옮긴 신뢰할 수 없는 외부 입력이다.
+function lmsRawItemWithDueAt(dueAt: unknown): RawItem {
+  return {
+    id: "raw-due-invalid", sourceId: "lms", sourceType: "lms", uri: "u",
+    title: "과제 3", content: "과제 마감 관련",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { course: "운영체제", dueAt },
+  };
+}
+
+function taskFactProvider(eventTime: string): LLMProvider {
+  return {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = { facts: [
+        { kind: "task", subject: "과제 3", value: "제출", eventTime, confidence: 0.9, evidenceText: "과제 마감 관련" },
+      ] };
+      if (!request.validate(value)) throw new Error("invalid");
+      return value;
+    },
+  };
+}
+
+test("LLMFactExtractor는 ISO date-time이 아닌 metadata.dueAt을 무시하고 LLM 값으로 폴백한다", async () => {
+  const llmEventTime = "2026-07-21T18:00:00+09:00";
+  const invalidValues = [
+    "tomorrow", "invalid", 20260723, null,
+    "2026-07-23",             // 시각 없음
+    "2026-07-23T18:00:00",    // 오프셋 없음 — 실행 환경 타임존에 따라 달라진다
+    "2026-13-01T18:00:00+09:00", "2026-07-23T25:00:00+09:00", // 범위 초과
+    // Date.parse가 조용히 다음 달로 굴리는 값들(김도연님 리뷰 P1).
+    // 2026-02-30 → 3월 2일, 2026-02-29(평년) → 3월 1일, 2026-04-31 → 5월 1일.
+    "2026-02-30T18:00:00+09:00", "2026-02-29T18:00:00+09:00", "2026-04-31T18:00:00+09:00",
+  ];
+
+  for (const dueAt of invalidValues) {
+    const facts = await new LLMFactExtractor(taskFactProvider(llmEventTime))
+      .extract(lmsRawItemWithDueAt(dueAt));
+    assert.equal(
+      facts[0]?.eventTime,
+      llmEventTime,
+      `유효하지 않은 dueAt(${JSON.stringify(dueAt)})은 마감으로 쓰이면 안 된다`,
+    );
+  }
+});
+
+test("LLMFactExtractor는 윤년의 2월 29일 같은 실제 날짜는 dueAt으로 받아들인다", async () => {
+  const validValues = [
+    "2024-02-29T18:00:00+09:00", // 윤년
+    "2026-12-31T23:59:59+09:00",
+    "2026-07-23T09:00:00Z",
+    "2026-07-23T09:00:00.500Z",
+  ];
+
+  for (const dueAt of validValues) {
+    const facts = await new LLMFactExtractor(taskFactProvider("2026-07-21T18:00:00+09:00"))
+      .extract(lmsRawItemWithDueAt(dueAt));
+    assert.equal(facts[0]?.eventTime, dueAt, `유효한 dueAt(${dueAt})은 그대로 쓰여야 한다`);
+  }
+});
+
+// 김도연님 리뷰 P1: 구조화 값으로 덮어쓴 마감·제목을 원본 인용문만으로는 확인할 수 없다.
+// 구조화 값도 같은 RawItem을 파싱해 얻은 원본 신호이므로 Evidence에 함께 보존한다.
+test("구조화 값으로 대체된 마감·제목은 Evidence quote에 출처와 함께 보존된다", () => {
+  const rawItem: RawItem = {
+    id: "raw-structured", sourceId: "lms", sourceType: "lms", uri: "https://lms.example/a/3",
+    title: "[운영체제] 과제 3", content: "과제 마감 관련",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00",
+    metadata: { canonicalTitle: "운영체제 과제 3", dueAt: "2026-07-23T18:00:00+09:00" },
+  };
+  const fact: Fact = {
+    id: "fact-structured", rawItemId: rawItem.id, kind: "task",
+    subject: "운영체제 과제 3", value: "제출", eventTime: "2026-07-23T18:00:00+09:00",
+    confidence: 0.9, evidenceText: "과제 마감 관련",
+  };
+
+  const evidence = buildEvidence(fact, rawItem);
+
+  assert.match(evidence.quote, /과제 마감 관련/, "LLM이 따온 원문 인용은 그대로 남는다");
+  assert.match(evidence.quote, /\[구조화 필드\] dueAt: 2026-07-23T18:00:00\+09:00/);
+  assert.match(evidence.quote, /\[구조화 필드\] canonicalTitle: 운영체제 과제 3/);
+});
+
+test("구조화 값을 쓰지 않은 Fact의 Evidence quote는 원문 인용 그대로다", () => {
+  const rawItem: RawItem = {
+    id: "raw-plain", sourceId: "school-site", sourceType: "school-site", uri: "u",
+    title: "공지", content: "7월 25일까지 신청하세요.",
+    contentHash: "h", observedAt: "2026-07-18T00:00:00+09:00", metadata: {},
+  };
+  const fact: Fact = {
+    id: "fact-plain", rawItemId: rawItem.id, kind: "opportunity",
+    subject: "신청", value: "모집", confidence: 0.9, evidenceText: "7월 25일까지 신청하세요.",
+  };
+
+  assert.equal(buildEvidence(fact, rawItem).quote, "7월 25일까지 신청하세요.");
 });
