@@ -1,6 +1,6 @@
 import { gateNotification } from "../../../../packages/scheduler/src/index.ts";
 import type { Recommendation, SyncResult } from "../../../../packages/shared/src/index.ts";
-import { checkReminders, type DueReminder } from "./reminderCheck.ts";
+import { findDueReminders, markReminderSent, toReminderRecommendation } from "./reminderCheck.ts";
 import { checkScheduleConflicts, type ScheduleConflict } from "./scheduleConflict.ts";
 import { emptyProfile, type CliContainer } from "./container.ts";
 import { syncIncrementally } from "./incrementalSync.ts";
@@ -8,13 +8,14 @@ import { isSnoozed } from "./snooze.ts";
 
 export interface WatchTickResult {
   syncedSources: SyncResult[];
+  // 일반 추천과 마감 리마인더(reminderCheck.ts의 toReminderRecommendation으로 만든
+  // Recommendation, id가 "reminder-"로 시작)가 함께 담긴다 — 둘 다 같은
+  // gateNotification → notifier.send 파이프라인을 거치므로 반환 shape을 통일했다.
   notified: Recommendation[];
   heldForQuietHours: Recommendation[];
   // docs/frontend-plan.md 2.1 — 이번 tick에서 새로 감지된 일정 충돌만 담는다(이미
   // 알린 쌍은 checkScheduleConflicts가 걸러낸다).
   newConflicts: ScheduleConflict[];
-  // docs/frontend-plan.md 2.4 — 이번 tick에서 오프셋에 도달한 마감 리마인더만 담는다.
-  dueReminders: DueReminder[];
 }
 
 // docs/architecture.md §3 Watch Process 흐름 한 번(수집 스케줄 확인 → 동기화 →
@@ -45,11 +46,6 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
     await container.repository.saveContextItems(conflictCheck.updatedItems);
   }
 
-  const reminderCheck = checkReminders([...tasks, ...events], now);
-  if (reminderCheck.updatedItems.length > 0) {
-    await container.repository.saveContextItems(reminderCheck.updatedItems);
-  }
-
   const profile = (await container.profileRepository.get()) ?? emptyProfile();
   const recommendations = await container.recommendationEngine.recommend(items, profile, now);
 
@@ -71,11 +67,27 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
     }
   }
 
+  // doyeonid 리뷰(PR #66): 리마인더도 일반 추천과 같은 gateNotification(Quiet Hours)
+  // 을 거치고, 실제 전달(notifier.send)이 성공한 뒤에만 "보냄"을 커밋한다 — Quiet
+  // Hours로 보류되거나 전달 중 예외가 나면 markReminderSent를 저장하지 않아 다음
+  // tick에 다시 대상이 된다(전달 전에 먼저 커밋했던 예전 순서의 반대).
+  for (const due of findDueReminders([...tasks, ...events], now)) {
+    const recommendation = toReminderRecommendation(due, now);
+    const gated = gateNotification(recommendation, profile, now);
+    if (!gated.send) {
+      heldForQuietHours.push(gated.recommendation);
+      continue;
+    }
+
+    await container.notifier.send(gated.recommendation);
+    await container.repository.saveContextItems([markReminderSent(due.item, due.deadline, now)]);
+    notified.push(gated.recommendation);
+  }
+
   return {
     syncedSources,
     notified,
     heldForQuietHours,
     newConflicts: conflictCheck.newConflicts,
-    dueReminders: reminderCheck.dueReminders,
   };
 }

@@ -18,8 +18,13 @@ export function isNonEmptyString(value: unknown): value is string {
 // Number.isSafeInteger로 정수·유한·안전 범위를 한 번에 강제한다. IPC 경계(handlers.ts)와
 // 비즈니스 로직(add.ts의 submitAdd, scheduleItem.ts의 setReminderOffset) 양쪽에서
 // 같은 함수를 재사용해 검증이 갈리지 않게 한다.
+//
+// doyeonid 리뷰(PR #66) 3번: 0은 받아들여도 reminderCheck.ts의 판정 순서상(마감이 이미
+// 지나면 대상에서 제외) 실제로는 절대 발동하지 않는 죽은 값이었다 — "마감 시점 알림"은
+// watch의 폴링 간격 특성상 정확히 구현하기 어려워, 지원하는 척하지 않고 최소 1분부터
+// 받는다.
 export function isValidOffsetMinutes(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
 // profile:save 페이로드 검증. 배열 필드는 존재 여부·타입만 확인하고 원소 하나하나는

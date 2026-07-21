@@ -4,7 +4,6 @@ import test from "node:test";
 import type { ContextItem, Recommendation, SyncResult } from "../packages/shared/src/index.ts";
 import { classifyRecommendation } from "../apps/desktop/src/main/notifier/classifyNotification.ts";
 import { toConflictEvents } from "../apps/desktop/src/main/watch/conflictEvents.ts";
-import { toReminderEvents } from "../apps/desktop/src/main/watch/reminderEvents.ts";
 import { summarizeSyncForNotification } from "../apps/desktop/src/main/watch/syncCompleteSummary.ts";
 
 function opportunity(): ContextItem {
@@ -57,6 +56,22 @@ test("classifyRecommendation은 item을 못 찾으면 분류하지 않는다(und
   assert.equal(classifyRecommendation(undefined, recommendation("ctx-missing")), undefined);
 });
 
+// doyeonid 리뷰(PR #66): 리마인더는 reminderCheck.ts의 toReminderRecommendation이
+// 만든 "reminder-" 접두사 id로 온다 — item.kind를 몰라도(심지어 item을 못 찾아도)
+// 분류할 수 있어야 Quiet Hours로 보류되든 성공하든 항상 즉시 알림으로 라우팅된다.
+test("classifyRecommendation은 id가 reminder-로 시작하면 item과 무관하게 즉시 알림으로 분류한다", () => {
+  const reminderRec: Recommendation = {
+    ...recommendation("ctx-task-1"),
+    id: "reminder-ctx-task-1-1784980800000",
+  };
+
+  const event = classifyRecommendation(undefined, reminderRec);
+
+  assert.ok(event !== undefined);
+  assert.equal(event.kind, "reminder");
+  assert.equal(event.contextItemId, "ctx-task-1");
+});
+
 function syncResult(created: number): SyncResult {
   return { sourceId: "school-site-main", collected: created + 1, created, updated: 0, skipped: 0, errors: [] };
 }
@@ -90,19 +105,5 @@ test("toConflictEvents는 겹치는 두 일정을 conflict 이벤트로 바꾼�
   assert.equal(events[0].kind, "conflict");
   assert.equal(events[0].contextItemId, "evt-a");
   assert.equal(events[0].message, "\"영민이와 복싱 스파링\"와(과) \"춘봉이와 저녁\" 일정이 겹칩니다.");
-  assert.equal(events[0].createdAt, now.toISOString());
-});
-
-test("toReminderEvents는 마감이 임박한 항목을 reminder 이벤트로 바꾼다", () => {
-  const now = new Date("2026-07-21T09:00:00Z");
-  const item = { ...task(), id: "ctx-task-1", title: "운영체제 과제 3" };
-
-  const events = toReminderEvents([{ item, deadline: "2026-07-25T18:00:00+09:00" }], now, "Asia/Seoul");
-
-  assert.equal(events.length, 1);
-  assert.equal(events[0].kind, "reminder");
-  assert.equal(events[0].contextItemId, "ctx-task-1");
-  assert.match(events[0].message, /운영체제 과제 3/);
-  assert.match(events[0].message, /07\. 25\. 오후 06:00/);
   assert.equal(events[0].createdAt, now.toISOString());
 });

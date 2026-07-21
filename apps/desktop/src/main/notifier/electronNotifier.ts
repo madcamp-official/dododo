@@ -21,7 +21,8 @@ export class ElectronDesktopNotifier implements Notifier {
     const item = await this.repository.findContextItem(recommendation.contextItemId);
     const event = classifyRecommendation(item, recommendation);
     if (event !== undefined) {
-      // opportunity는 "조용한 알림"(배지만) — OS 토스트 없이 IPC push만 한다.
+      // opportunity(조용한 알림)든 reminder(즉시 알림)든 kind가 분류됐으면 OS 토스트
+      // 없이 IPC push만 한다 — 배지/말풍선 구분은 Renderer가 event.kind로 한다.
       broadcastNotification(event);
       return;
     }
