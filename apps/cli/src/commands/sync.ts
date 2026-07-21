@@ -1,5 +1,26 @@
 import type { CliContainer } from "../runtime/container.ts";
 import { syncIncrementally } from "../runtime/incrementalSync.ts";
+import type { SourceType, SyncResult } from "../../../../packages/shared/src/index.ts";
+
+export interface SourceSyncResult extends SyncResult {
+  sourceType: SourceType;
+}
+
+export interface SyncOutcome {
+  sourcesConfigError: string | undefined;
+  sources: SourceSyncResult[];
+}
+
+export async function runSyncStructured(container: CliContainer, now: Date = new Date()): Promise<SyncOutcome> {
+  const sources: SourceSyncResult[] = [];
+  for (const collector of container.collectors) {
+    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
+    container.syncStatus.record(result, now);
+    sources.push({ ...result, sourceType: collector.sourceType });
+  }
+
+  return { sourcesConfigError: container.sourcesConfigError, sources };
+}
 
 export async function runSync(container: CliContainer, now: Date = new Date()): Promise<string> {
   const lines = ["dododo sync"];
@@ -18,13 +39,11 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
     return lines.join("\n");
   }
 
-  for (const collector of container.collectors) {
-    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
-    container.syncStatus.record(result, now);
-
+  const { sources } = await runSyncStructured(container, now);
+  for (const result of sources) {
     const errorSuffix = result.errors.length > 0 ? ` · 오류: ${result.errors.join(", ")}` : "";
     lines.push(
-      `${collector.sourceId} (${collector.sourceType}): 수집 ${result.collected} · 생성 ${result.created} · 건너뜀 ${result.skipped}${errorSuffix}`,
+      `${result.sourceId} (${result.sourceType}): 수집 ${result.collected} · 생성 ${result.created} · 건너뜀 ${result.skipped}${errorSuffix}`,
     );
   }
 

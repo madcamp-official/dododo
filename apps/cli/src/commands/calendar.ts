@@ -5,17 +5,19 @@ import type { CliContainer } from "../runtime/container.ts";
 const USAGE = "사용법: dododo calendar week";
 const DEFAULT_TIME_ZONE = "Asia/Seoul";
 
-export async function runCalendar(
+export interface ScheduledEntry {
+  item: ContextItem;
+  at: string;
+}
+
+export async function listWeekSchedule(
   container: CliContainer,
-  args: string[],
   now: Date = new Date(),
   timeZone: string = DEFAULT_TIME_ZONE,
-): Promise<string> {
-  if (args.length !== 1 || args[0] !== "week") return USAGE;
-
+): Promise<ScheduledEntry[]> {
   const items = await container.repository.listContextItems();
   const weekKeys = calendarWeekKeys(now, timeZone);
-  const scheduled = items
+  return items
     .flatMap((item) => {
       if (isExcludedContextStatus(item.status)) return [];
       const at = scheduledValue(item);
@@ -24,6 +26,17 @@ export async function runCalendar(
     })
     .filter(({ at }) => weekKeys.has(dateKey(new Date(at), timeZone)))
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+export async function runCalendar(
+  container: CliContainer,
+  args: string[],
+  now: Date = new Date(),
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<string> {
+  if (args.length !== 1 || args[0] !== "week") return USAGE;
+
+  const scheduled = await listWeekSchedule(container, now, timeZone);
 
   const lines = ["Calendar — 이번 주", ""];
   if (scheduled.length === 0) {

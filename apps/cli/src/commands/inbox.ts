@@ -5,6 +5,36 @@ import {
   isExcludedContextStatus,
   prepareOpportunity,
 } from "../../../../packages/context-engine/src/index.ts";
+import type { ContextItem, Recommendation } from "../../../../packages/shared/src/index.ts";
+
+export interface RecommendedEntry {
+  item: ContextItem;
+  recommendation: Recommendation;
+}
+
+export interface InboxResult {
+  // "Opportunity 자체가 없다"와 "있는데 전부 snooze됨"을 구분하는 데 쓴다(today.ts와 동일 이유).
+  items: ContextItem[];
+  entries: RecommendedEntry[];
+}
+
+export async function listInboxEntries(container: CliContainer, now: Date = new Date()): Promise<InboxResult> {
+  const items = await container.repository.listContextItems("opportunity");
+  if (items.length === 0) return { items, entries: [] };
+
+  const profile = (await container.profileRepository.get()) ?? emptyProfile();
+  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+
+  const entries: RecommendedEntry[] = [];
+  for (const recommendation of recommendations) {
+    const item = itemsById.get(recommendation.contextItemId);
+    if (item === undefined || isSnoozed(item, now)) continue;
+    entries.push({ item, recommendation });
+  }
+
+  return { items, entries };
+}
 
 const USAGE = "사용법: dododo inbox [prepare <opportunity-id>]";
 
@@ -45,7 +75,7 @@ export async function runInbox(
 }
 
 export async function renderInbox(container: CliContainer, now: Date = new Date()): Promise<string> {
-  const items = await container.repository.listContextItems("opportunity");
+  const { items, entries } = await listInboxEntries(container, now);
 
   if (items.length === 0) {
     return [
@@ -55,15 +85,8 @@ export async function renderInbox(container: CliContainer, now: Date = new Date(
     ].join("\n");
   }
 
-  const profile = (await container.profileRepository.get()) ?? emptyProfile();
-  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
-  const itemsById = new Map(items.map((item) => [item.id, item]));
-
   const lines = ["Opportunity Inbox", ""];
-  for (const recommendation of recommendations) {
-    const item = itemsById.get(recommendation.contextItemId);
-    if (item === undefined || isSnoozed(item, now)) continue;
-
+  for (const { item, recommendation } of entries) {
     lines.push(`[${item.id}] 관련도 ${Math.round(recommendation.score)}  ${item.title}`);
     if (item.deadline !== undefined) lines.push(`  마감: ${item.deadline}`);
     lines.push(`  이유: ${recommendation.reason}`);

@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
+import { registerIpcHandlers } from "./ipc/register.ts";
+
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
 const preloadPath = path.join(currentDirectory, "../preload/index.cjs");
@@ -57,6 +60,9 @@ function createCharacterWindow() {
 }
 
 app.whenReady().then(() => {
+  // app.getPath("userData")는 app.whenReady() 이전엔 일부 플랫폼에서 값이 없을 수 있어
+  // (Electron 문서 권고), container 생성과 IPC 등록을 whenReady 콜백 안에서 한다.
+  registerIpcHandlers(getDesktopContainer());
   createCharacterWindow();
 
   app.on("activate", () => {
@@ -70,4 +76,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  closeDesktopContainer();
 });
