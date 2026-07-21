@@ -100,6 +100,191 @@ test("parseScheduleIntent는 다음 주를 월요일 시작 달력 주로 계산
   assert.equal(result.startAt, "2026-07-24T15:00:00+09:00");
 });
 
+test("parseScheduleIntent는 시각 뒤에 붙은 조사를 제목에 남기지 않는다", () => {
+  const result = parseScheduleIntent("내일 3시에 치과 예약", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.title, "치과 예약");
+});
+
+test("parseScheduleIntent는 슬래시 날짜(M/D)를 처리한다", () => {
+  const result = parseScheduleIntent("8/15에 스터디 모임", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-08-15T09:00:00+09:00");
+  assert.equal(result.ambiguousField, "time");
+});
+
+test("parseScheduleIntent는 ISO 날짜와 콜론 시각을 처리하고 모호하지 않다고 표시한다", () => {
+  const result = parseScheduleIntent("2026-08-01 14:00 세미나", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-08-01T14:00:00+09:00");
+  assert.equal(result.ambiguousField, undefined);
+});
+
+test("parseScheduleIntent는 다음 달 N일을 처리하고 연도가 바뀌면 롤오버한다", () => {
+  const result = parseScheduleIntent("다음달 3일 워크숍", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-08-03T09:00:00+09:00");
+
+  const yearBoundary = parseScheduleIntent(
+    "다음달 3일 워크숍",
+    new Date("2026-12-20T10:00:00+09:00"),
+  );
+  assert.equal(yearBoundary.kind, "event_draft");
+  if (yearBoundary.kind === "event_draft") {
+    assert.equal(yearBoundary.startAt, "2027-01-03T09:00:00+09:00");
+  }
+});
+
+test("parseScheduleIntent는 주말을 다가오는 토요일로 계산한다", () => {
+  // NOW는 토요일(2026-07-18)이라 오늘이 곧 주말이다.
+  const result = parseScheduleIntent("주말에 등산 가기로 했어", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt.slice(0, 10), "2026-07-18");
+});
+
+test("parseScheduleIntent는 '반'을 30분으로, 구어체 요일(욜)과 담주를 처리한다", () => {
+  const half = parseScheduleIntent("26일 2시 반에 상담", NOW);
+  assert.equal(half.kind, "event_draft");
+  if (half.kind === "event_draft") assert.equal(half.startAt, "2026-07-26T02:30:00+09:00");
+
+  const colloquialWeekday = parseScheduleIntent("화욜 저녁 약속", NOW);
+  assert.equal(colloquialWeekday.kind, "event_draft");
+  if (colloquialWeekday.kind === "event_draft") {
+    assert.equal(colloquialWeekday.startAt.slice(0, 10), "2026-07-21");
+  }
+
+  const damju = parseScheduleIntent("담주 목요일 발표 준비", NOW);
+  assert.equal(damju.kind, "event_draft");
+  if (damju.kind === "event_draft") assert.equal(damju.startAt.slice(0, 10), "2026-07-23");
+});
+
+test("parseScheduleIntent는 '부터~까지' 범위를 endAt으로 채운다", () => {
+  const result = parseScheduleIntent("내일 오후 2시부터 4시까지 스터디", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-07-19T14:00:00+09:00");
+  assert.equal(result.endAt, "2026-07-19T16:00:00+09:00");
+  assert.equal(result.title, "스터디");
+  assert.match(result.clarifyingQuestion, /14:00~16:00/);
+});
+
+test("parseScheduleIntent는 '까지' 없이 '~'만 쓴 범위와 콜론(HH:MM) 범위도 endAt으로 채운다", () => {
+  // "까지"를 필수로 두면 이 두 흔한 표현이 조용히 시작 시각만으로 축소된다
+  // (PR #49 리뷰, doyeonid 지적 — "일반적인 시간 범위 입력의 종료 시각을 조용히 버립니다").
+  const tilde = parseScheduleIntent("내일 오후 2시~4시 스터디", NOW);
+  assert.equal(tilde.kind, "event_draft");
+  if (tilde.kind === "event_draft") {
+    assert.equal(tilde.startAt, "2026-07-19T14:00:00+09:00");
+    assert.equal(tilde.endAt, "2026-07-19T16:00:00+09:00");
+  }
+
+  const colon = parseScheduleIntent("내일 14:00~16:00 회의", NOW);
+  assert.equal(colon.kind, "event_draft");
+  if (colon.kind === "event_draft") {
+    assert.equal(colon.startAt, "2026-07-19T14:00:00+09:00");
+    assert.equal(colon.endAt, "2026-07-19T16:00:00+09:00");
+  }
+
+  const noKkaji = parseScheduleIntent("내일 2시부터 4시 스터디", NOW);
+  assert.equal(noKkaji.kind, "event_draft");
+  if (noKkaji.kind === "event_draft") {
+    assert.equal(noKkaji.startAt, "2026-07-19T02:00:00+09:00");
+    assert.equal(noKkaji.endAt, "2026-07-19T04:00:00+09:00");
+  }
+});
+
+test("parseScheduleIntent는 끝이 시작보다 빠른 범위를 무효로 보고 시작 시각만으로 축소하지 않는다", () => {
+  // 사용자가 명시한 "2시까지"를 조용히 버리고 시작 시각(4시)만 쓰는 event_draft를
+  // 만들면 안 된다 — 해석할 수 없는 범위는 unrecognized로 거부한다(PR #49 리뷰).
+  const result = parseScheduleIntent("내일 오후 4시부터 2시까지 스터디", NOW);
+  assert.equal(result.kind, "unrecognized");
+
+  // "까지" 없는 형태와 콜론 형태에도 같은 무효 판정이 적용돼야 한다 — 형식만 새로
+  // 지원하고 검증은 빼먹으면 새 경로에서 같은 버그가 재발한다.
+  assert.equal(parseScheduleIntent("내일 오후 4시~2시 스터디", NOW).kind, "unrecognized");
+  assert.equal(parseScheduleIntent("내일 16:00~14:00 스터디", NOW).kind, "unrecognized");
+});
+
+test("parseScheduleIntent는 '새벽'을 시간대 단어로 인식해 자정을 넘는 범위를 거부한다", () => {
+  // "새벽"이 메리디엠 목록에 없으면 TIME_RANGE 자체가 매치되지 않아 "범위 없음"으로
+  // 오판되고, resolveTime()이 "밤 11시"만 골라 23:00 단일 일정으로(제목도 "새벽
+  // 1시까지 통화"로 깨진 채) 저장 확인이 떠 버렸다(PR #49 리뷰, dotori235 지적).
+  const overnight = parseScheduleIntent("밤 11시부터 새벽 1시까지 통화", NOW);
+  assert.equal(overnight.kind, "unrecognized");
+
+  // 범위가 아닌 단일 시각으로 쓰일 때도 "새벽"이 시각으로 인식돼야 하고(0~5시대는
+  // 오전/오후 변환이 필요 없다), 제목에서도 깨끗이 걷어내져야 한다.
+  const single = parseScheduleIntent("모레 새벽 4시에 상담", NOW);
+  assert.equal(single.kind, "event_draft");
+  if (single.kind !== "event_draft") return;
+  assert.equal(single.startAt, "2026-07-20T04:00:00+09:00");
+  assert.equal(single.title, "상담");
+});
+
+test("parseScheduleIntent는 날짜 표현이 없어도 명시적 시각이 있으면 오늘로 보되, 이미 지난 시각이면 확인을 받는다", () => {
+  const result = parseScheduleIntent("카페에서 3시에 민수랑 미팅", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt.slice(0, 10), "2026-07-18");
+  assert.match(result.title, /민수/);
+  // NOW가 15:20이라 비-meridiem "3시"(03:00)는 이미 지난 시각이다 — 확신도와 무관하게
+  // 확인을 받아야 한다(PR #49 리뷰, "이따 6시" 사례와 같은 근본 원인).
+  assert.equal(result.ambiguousField, "time");
+  assert.match(result.clarifyingQuestion, /이미 지난 시각/);
+});
+
+test("parseScheduleIntent는 날짜 표현이 무효하면(2월 30일) 오늘로 대체하지 않는다", () => {
+  const result = parseScheduleIntent("2월 30일 오후 3시에 팀 회의 있어", NOW);
+  assert.equal(result.kind, "unrecognized");
+});
+
+test("parseScheduleIntent는 상대 시간 오프셋(N분/시간 뒤)을 now 기준으로 계산한다", () => {
+  const result = parseScheduleIntent("30분 뒤에 전화", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-07-18T15:50:00+09:00");
+  assert.equal(result.ambiguousField, undefined);
+});
+
+test("parseScheduleIntent는 막연한 상대 표현(이따)을 2시간 뒤 모호 시각으로 처리한다", () => {
+  const result = parseScheduleIntent("이따 형이랑 밥", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.startAt, "2026-07-18T17:20:00+09:00");
+  assert.equal(result.ambiguousField, "time");
+});
+
+test("parseScheduleIntent는 막연한 상대 표현 뒤에 명시적 시각이 있으면 그 시각을 우선하되, 이미 지났으면 확인을 받는다", () => {
+  const result = parseScheduleIntent("이따 6시에 형이랑 밥", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  // "이따"는 today로만 쓰이고, 실제 시각은 명시된 6시(비-meridiem이라 06:00)를 따른다 —
+  // +2시간 기본 오프셋(17:20)으로 덮어써지지 않는다. 다만 NOW(15:20) 기준 06:00은
+  // 이미 지난 시각이라 "이따"(미래 의도)와 모순되므로 확인 없이 확정하지 않는다
+  // (PR #49 리뷰, doyeonid 지적 — 과거 시각을 정상 결과로 고정하면 안 됨).
+  assert.equal(result.startAt, "2026-07-18T06:00:00+09:00");
+  assert.equal(result.ambiguousField, "time");
+  assert.match(result.clarifyingQuestion, /이미 지난 시각/);
+});
+
+test("parseScheduleIntent는 과거 표현이 있으면 미래 일정으로 확정하지 않는다", () => {
+  assert.equal(parseScheduleIntent("어제 3시에 회의했어", NOW).kind, "unrecognized");
+  assert.equal(parseScheduleIntent("지난주 금요일에 미팅 있었어", NOW).kind, "unrecognized");
+});
+
+test("parseScheduleIntent는 반복 신호가 있으면 확인 문구에 경고를 남기고 1회성으로 저장한다", () => {
+  const result = parseScheduleIntent("매주 월요일 10시 랩미팅", NOW);
+  assert.equal(result.kind, "event_draft");
+  if (result.kind !== "event_draft") return;
+  assert.equal(result.title, "랩미팅");
+  assert.match(result.clarifyingQuestion, /반복 일정은 아직 지원하지 않아 이번 한 번만 저장/);
+});
+
 function taskItem(overrides: Partial<ContextItem> = {}): ContextItem {
   return {
     id: "ctx-1",

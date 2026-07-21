@@ -1,5 +1,6 @@
 import type { ContextItem } from "../../../../packages/shared/src/index.ts";
 import type { CliContainer } from "../runtime/container.ts";
+import { renderIdLookupFailure, resolveContextItemId } from "../runtime/resolveContextItemId.ts";
 import { isSnoozed, snoozedUntil, withSnooze } from "../runtime/snooze.ts";
 
 const USAGE = "사용법: dododo task <show|done|snooze> <id> [--until <ISO 시각>]";
@@ -21,15 +22,13 @@ export async function runTask(
     return `Task ID가 필요합니다.\n사용법: dododo task ${subcommand} <id>`;
   }
 
-  const item = await container.repository.findContextItem(id);
-  if (item === undefined) {
-    return [
-      `해당 ID의 Task를 찾을 수 없습니다: ${id}`,
-      "`npm start -- today` 또는 `npm start -- inbox`로 먼저 ID를 확인하세요.",
-    ].join("\n");
+  const lookup = await resolveContextItemId(container, id);
+  if (lookup.kind !== "found") {
+    return renderIdLookupFailure(id, lookup);
   }
+  const item = lookup.item;
   if (item.kind !== "task") {
-    return `${id}는 Task가 아니라 ${item.kind}입니다. \`dododo task\`는 Task에만 사용할 수 있습니다.`;
+    return `${item.id}는 Task가 아니라 ${item.kind}입니다. \`dododo task\`는 Task에만 사용할 수 있습니다.`;
   }
 
   if (subcommand === "show") {

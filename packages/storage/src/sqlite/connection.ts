@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 
-import { initializeContextSchema, initializeRawItemSchema } from "./schema.ts";
+import { initializeContextSchema, initializeProfileSchema, initializeRawItemSchema } from "./schema.ts";
 
 export function openRawItemDatabase(path = ":memory:"): DatabaseSync {
   const database = new DatabaseSync(path);
@@ -9,6 +9,7 @@ export function openRawItemDatabase(path = ":memory:"): DatabaseSync {
   database.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   initializeRawItemSchema(database);
   initializeContextSchema(database);
+  initializeProfileSchema(database);
   return database;
 }
 

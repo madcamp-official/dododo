@@ -1,5 +1,6 @@
 import type { CliContainer } from "../runtime/container.ts";
 import type { ContextItem } from "../../../../packages/shared/src/index.ts";
+import { renderIdLookupFailure, resolveContextItemId } from "../runtime/resolveContextItemId.ts";
 
 const USAGE = "사용법: dododo evidence <id>";
 
@@ -14,20 +15,18 @@ export async function runEvidence(container: CliContainer, args: string[]): Prom
     return `Context ID 하나가 필요합니다.\n${USAGE}`;
   }
 
-  const item = await container.repository.findContextItem(id);
-  if (item === undefined) {
-    return [
-      `해당 ID의 Context를 찾을 수 없습니다: ${id}`,
-      "`npm start -- today` 또는 `npm start -- inbox`로 먼저 ID를 확인하세요.",
-    ].join("\n");
+  const lookup = await resolveContextItemId(container, id);
+  if (lookup.kind !== "found") {
+    return renderIdLookupFailure(id, lookup);
   }
+  const item = lookup.item;
 
-  const evidence = await container.repository.listEvidenceByContextItemId(id);
+  const evidence = await container.repository.listEvidenceByContextItemId(item.id);
   if (evidence.length === 0) {
-    return renderNoEvidence(item, id);
+    return renderNoEvidence(item, item.id);
   }
 
-  const lines = [`근거: ${item.title} (${id})`, `총 ${evidence.length}건`];
+  const lines = [`근거: ${item.title} (${item.id})`, `총 ${evidence.length}건`];
   const parentOpportunityId = item.metadata.parentOpportunityId;
   if (typeof parentOpportunityId === "string") {
     lines.push(`부모 Opportunity에서 상속된 근거입니다: ${parentOpportunityId}`);

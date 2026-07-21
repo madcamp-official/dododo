@@ -100,6 +100,39 @@ test("evidence는 직접 추가한 항목(addedViaNaturalLanguage)의 근거가 
   }
 });
 
+test("evidence는 유일하게 일치하는 ID 접두어만으로도 근거를 조회한다(PR #50 리뷰 nit)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  try {
+    await container.repository.saveContextItems([taskItem()]);
+    await container.repository.saveEvidence([evidence()]);
+
+    const output = await runEvidence(container, ["task-o"]);
+
+    assert.match(output, /운영체제 과제 보고서 작성/);
+    assert.match(output, /총 1건/);
+  } finally {
+    container.close();
+  }
+});
+
+test("evidence는 접두어가 여러 항목과 일치하면 후보를 보여주고 아무것도 확정하지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  try {
+    await container.repository.saveContextItems([
+      taskItem({ id: "task-os-alpha" }),
+      taskItem({ id: "task-os-beta" }),
+    ]);
+
+    const output = await runEvidence(container, ["task-os"]);
+
+    assert.match(output, /2개입니다/);
+    assert.match(output, /task-os-alpha/);
+    assert.match(output, /task-os-beta/);
+  } finally {
+    container.close();
+  }
+});
+
 test("evidence는 원본 근거(출처·인용·관찰 시각)를 그대로 보여준다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   try {

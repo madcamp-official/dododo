@@ -143,6 +143,11 @@ Fact의 성격과 출처를 이용해 Opportunity, Task, Event, Note, Activity�
 dododo/
 ├── apps/
 │   ├── inference-gateway/       # 인증·비동기 Job API·Ollama Queue
+│   ├── desktop/                  # Electron 데스크톱 UI(캐릭터 오버레이·팝업 메뉴·설정 창)
+│   │   └── src/
+│   │       ├── main/             # Main 프로세스, IPC, 상시 watch, Notifier, 창 관리
+│   │       ├── preload/          # Renderer 노출 IPC API
+│   │       └── renderer/         # 캐릭터·패널·설정 UI
 │   └── cli/
 │       └── src/
 │           ├── commands/         # 명령 카탈로그, help, doctor
@@ -165,7 +170,7 @@ dododo/
 │   │       ├── resolution/
 │   │       ├── recommendation/
 │   │       └── pipeline.ts
-│   ├── storage/src/              # In-memory 구현, SQLite 예정
+│   ├── storage/src/              # In-memory·SQLite 구현
 │   ├── profile/src/
 │   ├── scheduler/src/
 │   ├── privacy/src/
@@ -210,33 +215,11 @@ Job의 입력은 성공·실패·취소 시 SQLite에서 제거하고 결과·�
 
 ## 7. 팀 경계
 
-### Runtime & CLI
-
-- CLI 명령과 출력
-- Watch Process
-- 화면 캡처
-- OS 알림
-- 실행·중지와 권한 상태
-
-### Data Ingestion & Storage
-
-- 학교 사이트, 학교 이메일과 LMS Collector
-- 이메일 Message-ID·Thread-ID·발신자·수신 시각 보존
-- 파일과 Calendar Parser
-- Hash 기반 변경 감지
-- SQLite와 변경 이력
-- Source 장애 격리
-
-### Context Intelligence & Recommendation
-
-- Fact와 ContextItem 정의
-- LLM 추출 정책
-- 관련도·우선순위·병합·충돌 정책
-- 화면 Activity 연결과 조언
-- 대화 의도와 확인 정책
-- Ground Truth와 Benchmark
-
-세부 일정과 경로별 소유권은 [MVP 범위](mvp-scope.md)의 구현 계획을 따른다.
+경로별 소유권과 현재 담당자는 이 문서가 아니라 `AGENTS.md`의 "팀 역할과 소유권"이
+유일한 기준이다. `apps/desktop/`(Electron 데스크톱 UI)은 Runtime & CLI / Data Ingestion
+& Storage / Context Intelligence 세 영역과 다른 별도 기준으로 나뉘며, 그 배정도
+`AGENTS.md`에 정리되어 있다 — 세부 UI 구성은 [프론트엔드 기획](frontend-plan.md)을,
+원래 7일 계획과 분업 서사는 [MVP 범위](mvp-scope.md)를 참고한다.
 
 ## 8. 학교 이메일 수집 경계
 
@@ -260,31 +243,12 @@ Email Collector는 다음 원칙을 지킨다.
 - Message-ID를 보존해 반복 동기화 중복을 방지한다.
 - 학교 사이트나 LMS와 같은 안내는 하나의 ContextItem으로 병합한다.
 
-## 9. 현재 스켈레톤 상태
-
-바로 실행 가능한 부분:
+## 9. 실행 확인
 
 ```text
-npm start -- help
-npm start -- doctor
-npm run check
+npm start -- help    # 전체 명령과 담당 영역 표시
+npm start -- doctor  # Runtime, 저장소, Source 설정, LLM 연결 상태 표시
+npm run check        # Typecheck + 전체 테스트
 ```
 
-- `help`: 전체 MVP 명령과 담당 영역 표시
-- `doctor`: Runtime, 저장소와 LLM 연결 상태 표시
-- 공통 Domain과 모듈 인터페이스
-- In-memory Repository
-- Fixture Collector와 Source별 Collector 자리
-- 최소 Context Pipeline과 규칙 기반 Resolver·Recommendation 자리
-- 학교 사이트·이메일·LMS·화면 Fixture
-- Smoke Test
-- TypeScript Strict Type Check
-
-아직 구현해야 하는 부분:
-
-- 실제 SQLite Repository
-- 실제 학교 사이트·이메일·LMS Collector
-- LLM Provider와 구조화 Fact 추출
-- 완전한 병합·충돌·우선순위 정책
-- CLI 명령의 Application Service 연결
-- 화면 캡처와 OS 알림
+각 명령의 준비 상태는 `apps/cli/src/commands/catalog.ts`가 담당 영역과 함께 보여준다.

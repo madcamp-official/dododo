@@ -25,6 +25,25 @@ export function initializeRawItemSchema(database: DatabaseSync): void {
   `);
 }
 
+// UserProfile은 기기당 하나뿐이라 id를 1로 고정한 단일 행 테이블로 저장한다
+// (김도현 소유 packages/profile/의 ProfileRepository 계약을 그대로 구현하는
+// SQLiteProfileRepository가 사용). CHECK 제약으로 두 번째 행 삽입 자체를 막는다.
+export function initializeProfileSchema(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      school TEXT NOT NULL,
+      major TEXT NOT NULL,
+      year TEXT NOT NULL,
+      interests_json TEXT NOT NULL,
+      activity_types_json TEXT NOT NULL,
+      preferred_locations_json TEXT NOT NULL,
+      quiet_hours_json TEXT,
+      explicit_constraints_json TEXT NOT NULL
+    );
+  `);
+}
+
 export function initializeContextSchema(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS facts (
