@@ -39,3 +39,18 @@ contextBridge.exposeInMainWorld("desktopApi", {
   snoozeTask: (id, until) => ipcRenderer.invoke(CHANNELS.taskSnooze, { id, until }),
   sync: () => ipcRenderer.invoke(CHANNELS.syncRun),
 });
+
+// apps/desktop/src/main/notifier/notificationEvent.ts의 NOTIFICATION_CHANNEL과 같은
+// 문자열이어야 한다(위 CHANNELS와 같은 이유로 리터럴 중복).
+const NOTIFICATION_CHANNEL = "notification";
+
+// invoke/handle(요청-응답)이 아니라 Main이 먼저 보내는 이벤트라 on()으로 구독한다
+// (docs/frontend-plan.md 6.2). 콜백은 NotificationEvent 하나만 받고, 반환값은
+// 구독 해제 함수 — Renderer가 패널/창을 닫을 때 리스너가 쌓이지 않게 한다.
+contextBridge.exposeInMainWorld("desktopEvents", {
+  onNotification(callback) {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(NOTIFICATION_CHANNEL, listener);
+    return () => ipcRenderer.removeListener(NOTIFICATION_CHANNEL, listener);
+  },
+});
