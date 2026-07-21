@@ -82,7 +82,7 @@ popupMenu?.addEventListener("click", async (event) => {
   if (button.dataset.action === "sync") await runSync(button);
 });
 
-async function openView(view) {
+async function openView(view, { throwOnError = false } = {}) {
   popupMenu.hidden = true;
   panel.hidden = false;
   panelTitle.textContent = viewTitle(view);
@@ -102,6 +102,7 @@ async function openView(view) {
     else if (view === "add") renderAdd();
     else renderSettings();
   } catch (error) {
+    if (throwOnError) throw error;
     renderError(error);
   }
 }
@@ -294,10 +295,18 @@ async function runTaskAction(button, action) {
     const actionButtons = button.closest(".action-row")?.querySelectorAll("button") ?? [button];
     for (const actionButton of actionButtons) actionButton.disabled = true;
     try {
-      unwrapResult(await action());
-      await openView(currentListView);
-    } catch (error) {
-      renderError(error);
+      try {
+        unwrapResult(await action());
+      } catch (error) {
+        renderError(error);
+        return;
+      }
+      try {
+        await openView(currentListView, { throwOnError: true });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "알 수 없는 오류";
+        renderError(new Error(`처리는 완료됐지만 목록 갱신에 실패했습니다. ${detail}`));
+      }
     } finally {
       for (const actionButton of actionButtons) {
         if (actionButton.isConnected) actionButton.disabled = false;

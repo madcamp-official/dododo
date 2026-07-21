@@ -25,10 +25,11 @@ test("desktop mascot Renderer가 기본 idle 에셋과 preload를 함께 배포�
 });
 
 test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화면을 제공한다", async () => {
-  const [html, renderer, adapter] = await Promise.all([
+  const [html, renderer, adapter, style] = await Promise.all([
     readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
     readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
     readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
   ]);
 
   assert.match(html, /data-view="add"/);
@@ -38,5 +39,7 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.add/);
   assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
   assert.match(renderer, /createExclusiveActionRunner/);
+  assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
+  assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
   assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
 });

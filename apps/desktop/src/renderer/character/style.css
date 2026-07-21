@@ -295,6 +295,7 @@ h2 {
   background: #f1e8d7;
   font-size: 13px;
   line-height: 1.5;
+  white-space: pre-line;
 }
 
 .detail-card dl {
