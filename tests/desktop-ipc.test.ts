@@ -185,6 +185,32 @@ test("submitAdd는 종료 시각이 시작 시각보다 빠르면 거절한다",
   assert.equal(result.error.code, "validation");
 });
 
+test("submitAdd는 reminderOffsetMinutes로 0 이상의 정수만 허용한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  const base = { title: "약속", date: "2026-07-25", time: "10:00" };
+
+  const negative = await submitAdd(container, { ...base, reminderOffsetMinutes: -10 }, NOW);
+  assert.equal(negative.ok, false);
+  if (!negative.ok) assert.equal(negative.error.code, "validation");
+
+  const decimal = await submitAdd(container, { ...base, reminderOffsetMinutes: 1.5 }, NOW);
+  assert.equal(decimal.ok, false);
+  if (!decimal.ok) assert.equal(decimal.error.code, "validation");
+
+  const notFinite = await submitAdd(container, { ...base, reminderOffsetMinutes: Number.NaN }, NOW);
+  assert.equal(notFinite.ok, false);
+
+  const infinite = await submitAdd(container, { ...base, reminderOffsetMinutes: Number.POSITIVE_INFINITY }, NOW);
+  assert.equal(infinite.ok, false);
+
+  const valid = await submitAdd(container, { ...base, reminderOffsetMinutes: 30 }, NOW);
+  assert.equal(valid.ok, true);
+  if (valid.ok) {
+    const saved = await container.repository.findContextItem(valid.data.id);
+    assert.equal(saved?.metadata.reminderOffsetMinutes, 30);
+  }
+});
+
 test("runSync(IPC)는 등록된 Source를 동기화하고 수집·생성 건수를 반환한다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
 

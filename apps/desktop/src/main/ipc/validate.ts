@@ -10,3 +10,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
+
+// doyeonid 리뷰(PR #60): typeof === "number"만으로는 음수·NaN·Infinity·소수(1.5분 같은
+// 값)까지 통과해 그대로 저장된다. 리마인더 오프셋은 "분" 단위 정수만 의미가 있어
+// Number.isSafeInteger로 정수·유한·안전 범위를 한 번에 강제한다. IPC 경계(handlers.ts)와
+// 비즈니스 로직(add.ts의 submitAdd, scheduleItem.ts의 setReminderOffset) 양쪽에서
+// 같은 함수를 재사용해 검증이 갈리지 않게 한다.
+export function isValidOffsetMinutes(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ContextItem } from "../../../../../packages/shared/src/index.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { fail, toResult, type Result } from "./result.ts";
+import { isValidOffsetMinutes } from "./validate.ts";
 
 export interface AddSubmitInput {
   title: string;
@@ -38,6 +39,10 @@ export async function submitAdd(
     if (Date.parse(endAt) <= Date.parse(startAt)) {
       return fail("validation", "종료 시각은 시작 시각보다 뒤여야 합니다.");
     }
+  }
+
+  if (input.reminderOffsetMinutes !== undefined && !isValidOffsetMinutes(input.reminderOffsetMinutes)) {
+    return fail("validation", `reminderOffsetMinutes는 0 이상의 정수(분)여야 합니다: ${input.reminderOffsetMinutes}`);
   }
 
   return toResult(async () => {
