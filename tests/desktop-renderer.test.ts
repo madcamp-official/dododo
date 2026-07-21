@@ -11,7 +11,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
     "deleteTask", "setReminderOffset", "listSources", "registerSource",
-    "removeSource", "getProfile", "saveProfile", "sync",
+    "removeSource", "getProfile", "saveProfile", "getUiState", "setUiState", "sync",
   ].map((method) => [method, (...args: unknown[]) => {
     calls.push({ method, args });
     return Promise.resolve(result);
@@ -36,6 +36,8 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   const profile = { school: "KAIST", major: "CS", year: "3", interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [] };
   await api.profileGet();
   await api.profileSave(profile);
+  await api.uiStateGet("lastDailySummaryDate");
+  await api.uiStateSet("lastDailySummaryDate", "2026-07-21");
   await api.sync();
 
   assert.deepEqual(calls, [
@@ -55,6 +57,8 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "removeSource", args: ["school-site"] },
     { method: "getProfile", args: [] },
     { method: "saveProfile", args: [profile] },
+    { method: "getUiState", args: ["lastDailySummaryDate"] },
+    { method: "setUiState", args: ["lastDailySummaryDate", "2026-07-21"] },
     { method: "sync", args: [] },
   ]);
 });

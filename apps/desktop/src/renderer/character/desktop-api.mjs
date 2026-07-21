@@ -15,6 +15,8 @@ const API_METHODS = {
   sourceRemove: "removeSource",
   profileGet: "getProfile",
   profileSave: "saveProfile",
+  uiStateGet: "getUiState",
+  uiStateSet: "setUiState",
   sync: "sync",
 };
 
@@ -50,6 +52,8 @@ export function createDesktopApi(bridgeOrProvider) {
     sourceRemove: (id) => invoke("sourceRemove", id),
     profileGet: () => invoke("profileGet"),
     profileSave: (profile) => invoke("profileSave", profile),
+    uiStateGet: (key) => invoke("uiStateGet", key),
+    uiStateSet: (key, value) => invoke("uiStateSet", key, value),
     sync: () => invoke("sync"),
   };
 }

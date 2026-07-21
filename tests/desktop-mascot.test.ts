@@ -10,6 +10,7 @@ const desktopFiles = [
   "apps/desktop/src/renderer/character/notification-state.mjs",
   "apps/desktop/src/renderer/character/schedule-form.mjs",
   "apps/desktop/src/renderer/character/profile-form.mjs",
+  "apps/desktop/src/renderer/character/daily-summary.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -202,4 +203,20 @@ test("desktop mascot settings connects profile fields and Quiet Hours", async ()
   assert.match(renderer, /data-quiet-hours-toggle/);
   assert.match(style, /\.profile-form\s*\{/);
   assert.match(style, /\.quiet-hours-field\s*\{/);
+});
+
+test("desktop mascot shows a once-per-day summary bubble linked to Today", async () => {
+  const [renderer, adapter, notificationState] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/notification-state.mjs", "utf8"),
+  ]);
+
+  assert.match(adapter, /getUiState/);
+  assert.match(adapter, /setUiState/);
+  assert.match(renderer, /showDailySummaryOnFirstLaunch/);
+  assert.match(renderer, /lastDailySummaryDate/);
+  assert.match(renderer, /targetView === "today"/);
+  assert.match(renderer, /openView\("today"\)/);
+  assert.match(notificationState, /daily-summary/);
 });

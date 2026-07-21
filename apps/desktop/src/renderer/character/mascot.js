@@ -13,6 +13,7 @@ import {
 } from "./notification-state.mjs";
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { profileFromFormData, profileToForm } from "./profile-form.mjs";
+import { buildDailySummary, shouldShowDailySummary } from "./daily-summary.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -137,11 +138,14 @@ notificationBadge?.addEventListener("click", renderNotificationCenter);
 document.querySelector("[data-dismiss-notification]")?.addEventListener("click", dismissActiveNotification);
 notificationDetail?.addEventListener("click", () => {
   const contextItemId = activeNotification?.contextItemId;
+  const targetView = activeNotification?.targetView;
   dismissActiveNotification();
-  if (contextItemId !== undefined) openDetail(contextItemId);
+  if (targetView === "today") openView("today");
+  else if (contextItemId !== undefined) openDetail(contextItemId);
 });
 
 const unsubscribeNotifications = window.desktopEvents?.onNotification?.(handleNotification);
+void showDailySummaryOnFirstLaunch();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   unsubscribeNotifications?.();
@@ -330,6 +334,28 @@ function handleNotification(payload) {
   showNextNotification();
 }
 
+async function showDailySummaryOnFirstLaunch() {
+  const stateKey = "lastDailySummaryDate";
+  try {
+    const [lastShownDate, profile] = await Promise.all([
+      desktopApi.uiStateGet(stateKey).then(unwrapResult),
+      desktopApi.profileGet().then(unwrapResult),
+    ]);
+    const decision = shouldShowDailySummary(lastShownDate, profile);
+    if (!decision.show) return;
+    const { items } = unwrapResult(await desktopApi.today());
+    handleNotification({
+      kind: "daily-summary",
+      message: buildDailySummary(items),
+      targetView: "today",
+      createdAt: new Date().toISOString(),
+    });
+    unwrapResult(await desktopApi.uiStateSet(stateKey, decision.today));
+  } catch (error) {
+    console.warn("일일 요약을 표시하지 못했습니다.", error);
+  }
+}
+
 function showNextNotification() {
   if (activeNotification !== undefined) return;
   const next = notificationStore.takeImmediate();
@@ -342,7 +368,8 @@ function showNextNotification() {
   activeNotification = next;
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
-  notificationDetail.hidden = next.contextItemId === undefined;
+  notificationDetail.hidden = next.contextItemId === undefined && next.targetView === undefined;
+  notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히";
   notificationBubble.hidden = false;
   notificationTimer = window.setTimeout(dismissActiveNotification, NOTIFICATION_DISPLAY_MS);
 }

@@ -1,4 +1,4 @@
-const IMMEDIATE_KINDS = new Set(["priority", "conflict", "reminder", "advice", "distraction"]);
+const IMMEDIATE_KINDS = new Set(["priority", "conflict", "reminder", "advice", "distraction", "daily-summary"]);
 const QUIET_KINDS = new Set(["opportunity", "sync-complete"]);
 const ALL_KINDS = new Set([...IMMEDIATE_KINDS, ...QUIET_KINDS]);
 const MAX_REMEMBERED_KEYS = 100;
@@ -22,12 +22,14 @@ export function normalizeNotification(payload) {
     && (typeof payload.contextItemId !== "string" || payload.contextItemId.trim() === "")) {
     return undefined;
   }
+  if (payload.targetView !== undefined && payload.targetView !== "today") return undefined;
 
   return {
     kind: payload.kind,
     message,
     createdAt: new Date(payload.createdAt).toISOString(),
     ...(payload.contextItemId === undefined ? {} : { contextItemId: payload.contextItemId.trim() }),
+    ...(payload.targetView === undefined ? {} : { targetView: payload.targetView }),
   };
 }
 
@@ -90,5 +92,6 @@ export function notificationKindLabel(kind) {
     "sync-complete": "동기화 완료",
     advice: "조언",
     distraction: "집중 확인",
+    "daily-summary": "오늘 요약",
   })[kind] ?? "알림";
 }
