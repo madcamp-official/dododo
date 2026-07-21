@@ -20,6 +20,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -234,17 +235,20 @@ h2 {
   color: #ad4838;
 }
 
-.ask-form {
+.ask-form,
+.add-form {
   display: grid;
   gap: 8px;
 }
 
-.ask-form label {
+.ask-form label,
+.add-form label {
   font-size: 13px;
   font-weight: 700;
 }
 
-.ask-form textarea {
+.ask-form textarea,
+.add-form input {
   box-sizing: border-box;
   width: 100%;
   padding: 10px;
@@ -253,6 +257,17 @@ h2 {
   border-radius: 12px;
   background: #fffdf8;
   color: #2d241d;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.form-field {
+  display: grid;
+  gap: 5px;
 }
 
 .primary-button,
@@ -300,6 +315,26 @@ h2 {
 .detail-card dd {
   margin: 0;
   font-size: 13px;
+}
+
+.evidence-list {
+  display: grid;
+  padding: 0;
+  gap: 7px;
+  list-style: none;
+}
+
+.evidence-list li {
+  padding: 9px;
+  border-radius: 11px;
+  background: #f1e8d7;
+  font-size: 12px;
+}
+
+.evidence-list small {
+  display: block;
+  margin-top: 4px;
+  color: #746556;
 }
 
 .action-row {

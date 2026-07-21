@@ -3,6 +3,7 @@ import {
   formatDateTime,
   formatSyncSummary,
   statusLabel,
+  tomorrowAtSameTime,
   unwrapResult,
 } from "./desktop-api.mjs";
 
@@ -15,6 +16,7 @@ const panelContent = document.querySelector("[data-panel-content]");
 const alphaCanvas = document.createElement("canvas");
 const alphaContext = alphaCanvas.getContext("2d", { willReadFrequently: true });
 let isIgnoringMouse = true;
+let currentListView = "today";
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -85,13 +87,17 @@ async function openView(view) {
   panelContent.innerHTML = '<div class="state-message">불러오는 중...</div>';
   try {
     if (view === "today") {
+      currentListView = view;
       renderRankedItems(unwrapResult(await desktopApi.today()).items, "오늘 확인할 일이 없습니다.");
     } else if (view === "calendar") {
+      currentListView = view;
       renderScheduledItems(unwrapResult(await desktopApi.calendar()).items);
     } else if (view === "inbox") {
+      currentListView = view;
       renderRecommendations(unwrapResult(await desktopApi.inbox()).items);
     }
     else if (view === "ask") renderAsk();
+    else if (view === "add") renderAdd();
     else renderSettings();
   } catch (error) {
     renderError(error);
@@ -111,9 +117,7 @@ function renderRankedItems(entries, emptyMessage) {
       <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
-    });
+    button.addEventListener("click", () => openDetail(button.dataset.itemId));
   });
 }
 
@@ -130,9 +134,7 @@ function renderScheduledItems(entries) {
       <small>${escapeHtml(statusLabel(item.status))}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
-    });
+    button.addEventListener("click", () => openDetail(button.dataset.itemId));
   });
 }
 
@@ -174,9 +176,91 @@ function renderAsk() {
   });
 }
 
-function renderDetail(item) {
-  if (item === undefined) return;
+function renderAdd() {
+  panelContent.innerHTML = `
+    <form class="add-form" data-add-form>
+      <div class="form-field">
+        <label for="add-title">일정 내용</label>
+        <input id="add-title" name="title" type="text" placeholder="예: 도현님들과 저녁 약속" required />
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="add-date">날짜</label>
+          <input id="add-date" name="date" type="date" required />
+        </div>
+        <div class="form-field">
+          <label for="add-time">시작</label>
+          <input id="add-time" name="time" type="time" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="add-end-time">종료(선택)</label>
+          <input id="add-end-time" name="endTime" type="time" />
+        </div>
+        <div class="form-field">
+          <label for="add-location">장소(선택)</label>
+          <input id="add-location" name="location" type="text" placeholder="예: 궁칼국수" />
+        </div>
+      </div>
+      <button class="primary-button" type="submit">일정 추가</button>
+    </form>`;
+
+  panelContent.querySelector("[data-add-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector("button[type='submit']");
+    const data = new FormData(form);
+    const optional = (name) => data.get(name)?.toString().trim() || undefined;
+    const input = {
+      title: data.get("title")?.toString().trim() ?? "",
+      date: data.get("date")?.toString() ?? "",
+      time: data.get("time")?.toString() ?? "",
+      endTime: optional("endTime"),
+      location: optional("location"),
+    };
+
+    if (submit instanceof HTMLButtonElement) submit.disabled = true;
+    try {
+      unwrapResult(await desktopApi.add(input));
+      panelContent.innerHTML = '<div class="state-message success">일정을 추가했습니다.</div>';
+    } catch (error) {
+      renderError(error);
+    } finally {
+      if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
+    }
+  });
+}
+
+async function openDetail(id) {
+  if (id === undefined) return;
   panelTitle.textContent = "상세보기";
+  panelContent.innerHTML = '<div class="state-message">상세 정보를 불러오는 중...</div>';
+  try {
+    renderDetail(unwrapResult(await desktopApi.detail(id)));
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
+  const requirementsContent = item.requirements.length === 0
+    ? '<p class="evidence-note">등록된 요구사항이 없습니다.</p>'
+    : `<ul class="evidence-list">${item.requirements.map((requirement) => `
+        <li>${escapeHtml(requirement)}</li>`).join("")}</ul>`;
+  const evidenceContent = evidence.length === 0
+    ? '<p class="evidence-note">연결된 근거가 없습니다.</p>'
+    : `<ul class="evidence-list">${evidence.map((entry) => `
+        <li>
+          ${escapeHtml(entry.quote)}
+          <small>${escapeHtml(`${entry.sourceType} · ${entry.location}`)}</small>
+        </li>`).join("")}</ul>`;
+  const actionContent = item.kind === "task" && item.status !== "done"
+    ? `<div class="action-row">
+        <button class="primary-button" type="button" data-complete>완료</button>
+        <button class="secondary-button" type="button" data-snooze>내일 알림</button>
+      </div>`
+    : "";
   panelContent.innerHTML = `
     <article class="detail-card">
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
@@ -184,15 +268,35 @@ function renderDetail(item) {
       <dl>
         <div><dt>시간</dt><dd>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</dd></div>
         <div><dt>상태</dt><dd>${escapeHtml(statusLabel(item.status))}</dd></div>
+        ${isSnoozed ? `<div><dt>미룸</dt><dd>${escapeHtml(formatDateTime(snoozedUntil))}까지</dd></div>` : ""}
       </dl>
-      <p class="evidence-note">근거는 실제 IPC 연결 후 함께 표시됩니다.</p>
-      <div class="action-row">
-        <button class="primary-button" type="button" data-complete>완료</button>
-        <button class="secondary-button" type="button" data-snooze>내일 알림</button>
-      </div>
+      <h2>요구사항</h2>
+      ${requirementsContent}
+      <h2>근거</h2>
+      ${evidenceContent}
+      ${actionContent}
     </article>`;
-  panelContent.querySelector("[data-complete]")?.addEventListener("click", () => showPendingAction("완료 처리"));
-  panelContent.querySelector("[data-snooze]")?.addEventListener("click", () => showPendingAction("Snooze"));
+  panelContent.querySelector("[data-complete]")?.addEventListener("click", (event) => runTaskAction(
+    event.currentTarget,
+    () => desktopApi.complete(item.id),
+  ));
+  panelContent.querySelector("[data-snooze]")?.addEventListener("click", (event) => runTaskAction(
+    event.currentTarget,
+    () => desktopApi.snooze(item.id, tomorrowAtSameTime()),
+  ));
+}
+
+async function runTaskAction(button, action) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  button.disabled = true;
+  try {
+    unwrapResult(await action());
+    await openView(currentListView);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
 }
 
 function renderSettings() {
@@ -223,10 +327,6 @@ async function runSync(button) {
   }
 }
 
-function showPendingAction(name) {
-  panelContent.insertAdjacentHTML("beforeend", `<p class="hint">${escapeHtml(name)}는 Main IPC 연결 후 활성화됩니다.</p>`);
-}
-
 function renderError(error) {
   const message = error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.";
   panelContent.innerHTML = `<div class="state-message error">${escapeHtml(message)}</div>`;
@@ -237,7 +337,7 @@ function closePanel() {
 }
 
 function viewTitle(view) {
-  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", settings: "설정" })[view] ?? "DoDoDo";
+  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가", settings: "설정" })[view] ?? "DoDoDo";
 }
 
 function escapeHtml(value) {

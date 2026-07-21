@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -22,4 +22,19 @@ test("desktop mascot Renderer가 기본 idle 에셋과 preload를 함께 배포�
     access("apps/desktop/resources/character/idle.png"),
     access("apps/desktop/src/preload/index.cjs"),
   ]);
+});
+
+test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화면을 제공한다", async () => {
+  const [html, renderer, adapter] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+  ]);
+
+  assert.match(html, /data-view="add"/);
+  assert.match(renderer, /desktopApi\.detail/);
+  assert.match(renderer, /desktopApi\.complete/);
+  assert.match(renderer, /desktopApi\.snooze/);
+  assert.match(renderer, /desktopApi\.add/);
+  assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
 });
