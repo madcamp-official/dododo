@@ -1,4 +1,5 @@
 import {
+  createExclusiveActionRunner,
   desktopApi,
   formatDateTime,
   formatSyncSummary,
@@ -17,6 +18,7 @@ const alphaCanvas = document.createElement("canvas");
 const alphaContext = alphaCanvas.getContext("2d", { willReadFrequently: true });
 let isIgnoringMouse = true;
 let currentListView = "today";
+const runExclusiveTaskAction = createExclusiveActionRunner();
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -288,15 +290,20 @@ function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
 
 async function runTaskAction(button, action) {
   if (!(button instanceof HTMLButtonElement)) return;
-  button.disabled = true;
-  try {
-    unwrapResult(await action());
-    await openView(currentListView);
-  } catch (error) {
-    renderError(error);
-  } finally {
-    if (button.isConnected) button.disabled = false;
-  }
+  await runExclusiveTaskAction(async () => {
+    const actionButtons = button.closest(".action-row")?.querySelectorAll("button") ?? [button];
+    for (const actionButton of actionButtons) actionButton.disabled = true;
+    try {
+      unwrapResult(await action());
+      await openView(currentListView);
+    } catch (error) {
+      renderError(error);
+    } finally {
+      for (const actionButton of actionButtons) {
+        if (actionButton.isConnected) actionButton.disabled = false;
+      }
+    }
+  });
 }
 
 function renderSettings() {

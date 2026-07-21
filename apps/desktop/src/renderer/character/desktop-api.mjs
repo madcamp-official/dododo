@@ -12,8 +12,12 @@ const API_METHODS = {
 
 // Renderer는 preload가 노출한 API만 사용한다. 팩토리를 따로 export해 테스트에서는
 // Electron 없이 같은 호출 매핑과 인자 전달을 검증할 수 있게 한다.
-export function createDesktopApi(bridge) {
+export function createDesktopApi(bridgeOrProvider) {
+  const resolveBridge = typeof bridgeOrProvider === "function"
+    ? bridgeOrProvider
+    : () => bridgeOrProvider;
   const invoke = (name, ...args) => {
+    const bridge = resolveBridge();
     const method = bridge?.[API_METHODS[name]];
     if (typeof method !== "function") {
       throw new Error("Desktop API를 사용할 수 없습니다. 앱을 다시 실행해주세요.");
@@ -34,7 +38,23 @@ export function createDesktopApi(bridge) {
   };
 }
 
-export const desktopApi = createDesktopApi(globalThis.window?.desktopApi);
+// preload가 Renderer 모듈보다 늦게 준비되는 경우에도 호출 시점의 bridge를 사용한다.
+export const desktopApi = createDesktopApi(() => globalThis.window?.desktopApi);
+
+export function createExclusiveActionRunner() {
+  let isRunning = false;
+
+  return async (action) => {
+    if (isRunning) return false;
+    isRunning = true;
+    try {
+      await action();
+      return true;
+    } finally {
+      isRunning = false;
+    }
+  };
+}
 
 export function unwrapResult(result) {
   if (result?.ok === true) return result.data;

@@ -36,5 +36,7 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.complete/);
   assert.match(renderer, /desktopApi\.snooze/);
   assert.match(renderer, /desktopApi\.add/);
+  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /createExclusiveActionRunner/);
   assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
 });

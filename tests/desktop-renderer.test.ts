@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // @ts-expect-error Renderer는 브라우저에서 직접 실행하는 JavaScript 모듈이다.
-import { createDesktopApi, formatDateTime, formatSyncSummary, statusLabel, tomorrowAtSameTime, unwrapResult } from "../apps/desktop/src/renderer/character/desktop-api.mjs";
+import { createDesktopApi, createExclusiveActionRunner, formatDateTime, formatSyncSummary, statusLabel, tomorrowAtSameTime, unwrapResult } from "../apps/desktop/src/renderer/character/desktop-api.mjs";
 
 test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한다", async () => {
   const calls: Array<{ method: string; args: unknown[] }> = [];
@@ -76,4 +76,34 @@ test("내일 알림 시각은 로컬 날짜 기준 하루 뒤 같은 시각이�
   assert.equal(tomorrow.getDate(), 22);
   assert.equal(tomorrow.getHours(), 15);
   assert.equal(tomorrow.getMinutes(), 30);
+});
+
+test("desktop Renderer API는 호출할 때 preload bridge를 다시 확인한다", async () => {
+  let bridge: { getToday: () => Promise<{ ok: boolean; data: { items: unknown[] } }> } | undefined;
+  const api = createDesktopApi(() => bridge);
+
+  assert.throws(() => api.today());
+  bridge = { getToday: async () => ({ ok: true, data: { items: [] } }) };
+
+  assert.deepEqual(await api.today(), { ok: true, data: { items: [] } });
+});
+
+test("desktop task action은 진행 중인 두 번째 액션을 실행하지 않는다", async () => {
+  const runExclusive = createExclusiveActionRunner();
+  let releaseFirst: (() => void) | undefined;
+  let callCount = 0;
+  const first = runExclusive(async () => {
+    callCount += 1;
+    await new Promise<void>((resolve) => { releaseFirst = () => resolve(); });
+  });
+
+  const secondResult = await runExclusive(async () => { callCount += 1; });
+  assert.equal(secondResult, false);
+  assert.equal(callCount, 1);
+
+  assert.ok(releaseFirst);
+  releaseFirst();
+  assert.equal(await first, true);
+  assert.equal(await runExclusive(async () => { callCount += 1; }), true);
+  assert.equal(callCount, 2);
 });
