@@ -37,6 +37,7 @@ const CHANNELS = {
   taskSnooze: "task:snooze",
   taskUpdate: "task:update",
   taskDelete: "task:delete",
+  taskSetReminderOffset: "task:setReminderOffset",
   syncRun: "sync:run",
   profileGet: "profile:get",
   profileSave: "profile:save",
@@ -57,6 +58,8 @@ contextBridge.exposeInMainWorld("desktopApi", {
   snoozeTask: (id, until) => ipcRenderer.invoke(CHANNELS.taskSnooze, { id, until }),
   updateTask: (id, input) => ipcRenderer.invoke(CHANNELS.taskUpdate, { id, ...input }),
   deleteTask: (id) => ipcRenderer.invoke(CHANNELS.taskDelete, { id }),
+  setReminderOffset: (id, offsetMinutes) =>
+    ipcRenderer.invoke(CHANNELS.taskSetReminderOffset, { id, offsetMinutes }),
   sync: () => ipcRenderer.invoke(CHANNELS.syncRun),
   getProfile: () => ipcRenderer.invoke(CHANNELS.profileGet),
   saveProfile: (profile) => ipcRenderer.invoke(CHANNELS.profileSave, profile),

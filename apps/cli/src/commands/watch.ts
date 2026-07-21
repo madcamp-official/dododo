@@ -83,8 +83,9 @@ function renderTickLine(result: WatchTickResult, iteration: number): string {
   const errorCount = result.syncedSources.reduce((sum, source) => sum + source.errors.length, 0);
   const errorSuffix = errorCount > 0 ? ` · 오류 ${errorCount}건` : "";
   const conflictSuffix = result.newConflicts.length > 0 ? ` · 일정 충돌 ${result.newConflicts.length}건` : "";
+  const reminderSuffix = result.dueReminders.length > 0 ? ` · 리마인더 ${result.dueReminders.length}건` : "";
   return `[tick ${iteration}] 동기화 ${result.syncedSources.length}개 · 알림 ${result.notified.length}건`
-    + ` · Quiet Hours 보류 ${result.heldForQuietHours.length}건${conflictSuffix}${errorSuffix}`;
+    + ` · Quiet Hours 보류 ${result.heldForQuietHours.length}건${conflictSuffix}${reminderSuffix}${errorSuffix}`;
 }
 
 function renderTickErrorLine(error: unknown, iteration: number): string {

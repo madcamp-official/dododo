@@ -9,10 +9,15 @@ import { getCalendar, getInbox, getToday } from "./context.ts";
 import { getProfile, saveProfile } from "./profile.ts";
 import { fail } from "./result.ts";
 import { runSync } from "./sync.ts";
-import { deleteScheduleItem, updateScheduleItem, type ScheduleItemUpdateInput } from "./scheduleItem.ts";
+import {
+  deleteScheduleItem,
+  setReminderOffset,
+  updateScheduleItem,
+  type ScheduleItemUpdateInput,
+} from "./scheduleItem.ts";
 import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
-import { isNonEmptyString, isRecord, isUserProfileShape } from "./validate.ts";
+import { isNonEmptyString, isRecord, isUserProfileShape, isValidOffsetMinutes } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 
 export function handleToday(container: CliContainer) {
@@ -109,6 +114,13 @@ export function handleTaskDelete(container: CliContainer, input: unknown) {
     return Promise.resolve(fail("validation", "id는 문자열이어야 합니다."));
   }
   return deleteScheduleItem(container, input.id);
+}
+
+export function handleTaskSetReminderOffset(container: CliContainer, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.id) || !isValidOffsetMinutes(input.offsetMinutes)) {
+    return Promise.resolve(fail("validation", "id는 문자열, offsetMinutes는 0 이상의 정수(분)여야 합니다."));
+  }
+  return setReminderOffset(container, input.id, input.offsetMinutes);
 }
 
 export function handleSyncRun(container: CliContainer) {

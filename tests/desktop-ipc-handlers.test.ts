@@ -10,6 +10,7 @@ import {
   handleProfileSave,
   handleTaskComplete,
   handleTaskDetail,
+  handleTaskSetReminderOffset,
   handleTaskSnooze,
   handleUiStateGet,
   handleUiStateSet,
@@ -144,4 +145,17 @@ test("handleUiStateGet/handleUiStateSet은 올바른 payload로 값을 왕복 �
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("handleTaskSetReminderOffset은 잘못된 id 또는 offsetMinutes를 거절한다", async () => {
+  const { container, taskId } = await seededContainer();
+
+  assertValidationFailure(await handleTaskSetReminderOffset(container, { id: "", offsetMinutes: 60 }));
+  assertValidationFailure(await handleTaskSetReminderOffset(container, { id: taskId, offsetMinutes: -1 }));
+  assertValidationFailure(await handleTaskSetReminderOffset(container, { id: taskId, offsetMinutes: 1.5 }));
+  assertValidationFailure(await handleTaskSetReminderOffset(container, { id: taskId, offsetMinutes: "60" }));
+  assertValidationFailure(await handleTaskSetReminderOffset(container, { id: taskId }));
+
+  const ok = await handleTaskSetReminderOffset(container, { id: taskId, offsetMinutes: 60 });
+  assert.equal(ok.ok, true);
 });

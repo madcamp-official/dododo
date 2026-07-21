@@ -3,6 +3,7 @@ import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { renderIdLookupFailure, resolveContextItemId } from "../../../../cli/src/runtime/resolveContextItemId.ts";
 import { combineLocalDateTime } from "./add.ts";
 import { fail, ok, toResult, type Result } from "./result.ts";
+import { isValidOffsetMinutes } from "./validate.ts";
 
 export interface ScheduleItemUpdateInput {
   title: string;
@@ -93,6 +94,33 @@ export async function deleteScheduleItem(
 
   return toResult(async () => {
     const updated: ContextItem = { ...resolved.data, status: "cancelled", updatedAt: now.toISOString() };
+    await container.repository.saveContextItems([updated]);
+  });
+}
+
+// docs/frontend-plan.md 1.5/2.4: 상세 패널의 "알림 시간 수정" 진입점. 오프셋은
+// reminderCheck.ts와 같은 metadata 키(reminderOffsetMinutes)를 쓴다 — add:submit이
+// 새 항목 생성 시 이미 같은 키에 쓰고 있다.
+export async function setReminderOffset(
+  container: CliContainer,
+  id: string,
+  offsetMinutes: number,
+  now: Date = new Date(),
+): Promise<Result<void>> {
+  const resolved = await resolveScheduleItem(container, id);
+  if (!resolved.ok) return resolved;
+
+  if (!isValidOffsetMinutes(offsetMinutes)) {
+    return fail("validation", `리마인더 오프셋은 0 이상의 정수(분)여야 합니다: ${offsetMinutes}`);
+  }
+
+  return toResult(async () => {
+    const current = resolved.data;
+    const updated: ContextItem = {
+      ...current,
+      metadata: { ...current.metadata, reminderOffsetMinutes: offsetMinutes },
+      updatedAt: now.toISOString(),
+    };
     await container.repository.saveContextItems([updated]);
   });
 }
