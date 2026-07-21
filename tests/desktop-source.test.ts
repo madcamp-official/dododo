@@ -59,6 +59,22 @@ test("registerSource는 빈 값을 거절한다", async () => {
   });
 });
 
+// 김도현 리뷰(PR #67): URL 형식 오류가 toResult() 안에서 던져지면 "unknown"으로
+// 뭉개졌다 — code가 정확히 "validation"으로 나가는지 확인한다(result.ts 관례).
+test("registerSource는 유효하지 않은 URL을 validation 코드로 거절한다", async () => {
+  await withTempSourceConfig(async () => {
+    const notAUrl = await registerSource({ type: "school-site", value: "not-a-url" });
+    assert.equal(notAUrl.ok, false);
+    if (notAUrl.ok) return;
+    assert.equal(notAUrl.error.code, "validation");
+
+    const wrongProtocol = await registerSource({ type: "school-site", value: "ftp://school.example" });
+    assert.equal(wrongProtocol.ok, false);
+    if (wrongProtocol.ok) return;
+    assert.equal(wrongProtocol.error.code, "validation");
+  });
+});
+
 test("removeSource는 등록된 항목을 지운다", async () => {
   await withTempSourceConfig(async () => {
     await registerSource({ type: "school-site", value: "https://school.example" });

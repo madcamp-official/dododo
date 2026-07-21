@@ -1,3 +1,4 @@
+import { validateSourceInputConfig } from "../../../../../packages/collectors/src/index.ts";
 import {
   listRegisteredSources,
   registerSchoolSiteSource,
@@ -29,6 +30,17 @@ export async function registerSource(
 
   const value = input.value.trim();
   if (value === "") return fail("validation", "URL을 입력해주세요.");
+
+  // 김도현 리뷰(PR #67): URL 형식 오류가 toResult() 안에서 던져지면 전부 "unknown"으로
+  // 뭉개진다 — result.ts의 관례대로(#64의 combineLocalDateTime과 같은 패턴) 검증은
+  // toResult() 밖에서 먼저 하고 fail("validation", ...)로 바로 반환한다.
+  // registerSchoolSiteSource가 내부적으로도 병합된 전체 설정 기준으로 다시 검증하지만,
+  // 여기서는 URL 하나만 미리 같은 함수로 형식 확인해 실패 코드가 정확히 나가게 한다.
+  try {
+    validateSourceInputConfig({ schoolSite: { url: value } });
+  } catch (error) {
+    return fail("validation", error instanceof Error ? error.message : String(error));
+  }
 
   return toResult(async () => {
     registerSchoolSiteSource(value);
