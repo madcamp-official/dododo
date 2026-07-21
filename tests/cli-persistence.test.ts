@@ -122,7 +122,7 @@ test("doctor는 Source 설정 파일이 잘못됐으면 Fixture로 폴백하되 
     await writeFile(configPath, "{ not json");
     const container = createCliContainer({
       databasePath: ":memory:",
-      env: { DODODO_SOURCES_CONFIG_PATH: configPath },
+      env: { DODODO_SOURCE_CONFIG: configPath },
     });
     try {
       assert.match(await renderDoctor(container), /Sources: 설정 오류 — Fixture로 폴백 중/);

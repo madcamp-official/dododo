@@ -96,7 +96,7 @@ export interface CliContainer {
   // 실제 Source 설정 파일(dododo.sources.json류)을 찾았으면 그 경로, 없으면 undefined
   // (Fixture Collector로 폴백 중이라는 뜻) — doctor가 표시한다.
   sourcesConfigPath: string | undefined;
-  // sourcesConfigPath가 DODODO_SOURCES_CONFIG_PATH로 명시된 경로인지(true), cwd 기본값
+  // sourcesConfigPath가 DODODO_SOURCE_CONFIG로 명시된 경로인지(true), cwd 기본값
   // (./dododo.sources.json)에서 우연히 찾은 것인지(false) — doctor가 구분해 표시한다.
   sourcesConfigPathIsExplicit: boolean;
   // 설정 파일은 있는데 파싱·검증에 실패했을 때의 사유. 이 경우에도 CLI 전체를
@@ -186,7 +186,7 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
   // Fixture Collector를 쓴다(DODODO_DB_PATH와 같은 "설정 없으면 데모 모드" 패턴).
   // 파일이 있는데 파싱·검증에 실패하면 CLI 전체를 죽이지 않고 Fixture로 폴백한다 —
   // 대신 doctor가 사유를 보여줄 수 있게 sourcesConfigError에 남긴다.
-  // DODODO_SOURCES_CONFIG_PATH 유래인지 cwd 기본값 유래인지를 doctor가 성공/실패 양쪽
+  // DODODO_SOURCE_CONFIG 유래인지 cwd 기본값 유래인지를 doctor가 성공/실패 양쪽
   // 결과와 함께 보여줄 수 있게 미리 뽑아 둔다(PR #40 리뷰, 김도현 nit) — "설정한 적
   // 없는데 우연히 그 이름 파일이 있어서 실제 Source로 전환"과 구분돼야 한다.
   const sourcesConfigPathIsExplicit = resolveSourceInputConfigPath(env).isExplicit;

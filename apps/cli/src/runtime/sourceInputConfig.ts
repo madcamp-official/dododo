@@ -7,7 +7,7 @@ const DEFAULT_RELATIVE_PATH = "./dododo.sources.json";
 
 export interface ResolvedSourceInputConfigPath {
   path: string;
-  // false면 DODODO_SOURCES_CONFIG_PATH 미설정 상태의 기본 경로(cwd 기준 ./dododo.sources.json)라는
+  // false면 DODODO_SOURCE_CONFIG 미설정 상태의 기본 경로(cwd 기준 ./dododo.sources.json)라는
   // 뜻이다 — doctor가 "환경변수로 지정함"과 "그 이름 파일이 cwd에 우연히 있어서 주움"을 구분해
   // 보여줄 수 있게 한다(PR #40 리뷰, 김도현 nit).
   isExplicit: boolean;
@@ -21,7 +21,7 @@ export function resolveSourceInputConfigPath(
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd(),
 ): ResolvedSourceInputConfigPath {
-  const raw = env.DODODO_SOURCES_CONFIG_PATH?.trim();
+  const raw = env.DODODO_SOURCE_CONFIG?.trim();
   const isExplicit = raw !== undefined && raw !== "";
   const path = isExplicit ? raw : DEFAULT_RELATIVE_PATH;
   return { path: isAbsolute(path) ? path : resolve(cwd, path), isExplicit };
@@ -33,7 +33,7 @@ export interface LoadedSourceInputConfig {
 }
 
 // 파일이 없으면(가장 흔한 경우, 데모/테스트 환경) 조용히 undefined를 반환한다 — 단, 이건
-// 기본 경로(DODODO_SOURCES_CONFIG_PATH 미설정)에서 못 찾았을 때만이다. 사용자가 환경변수로
+// 기본 경로(DODODO_SOURCE_CONFIG 미설정)에서 못 찾았을 때만이다. 사용자가 환경변수로
 // 경로를 명시했는데 그 파일이 없으면(오타·이동·삭제) 절대 조용히 Fixture로 넘기지 않고
 // Error를 던진다 — 안 그러면 "실제 학교 데이터를 수집 중"이라 믿는 상태에서 실제로는
 // Fixture 데모 데이터가 저장된다(doyeonid, PR #40 리뷰 P1).
@@ -52,7 +52,7 @@ export function loadSourceInputConfig(
   } catch (error) {
     if (isFileNotFoundError(error)) {
       if (!isExplicit) return undefined;
-      throw new Error(`DODODO_SOURCES_CONFIG_PATH로 지정한 설정 파일을 찾을 수 없습니다(${path})`);
+      throw new Error(`DODODO_SOURCE_CONFIG로 지정한 설정 파일을 찾을 수 없습니다(${path})`);
     }
     throw new Error(`Source 설정 파일을 읽을 수 없습니다(${path}): ${errorMessage(error)}`);
   }

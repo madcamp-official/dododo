@@ -12,21 +12,21 @@ test("loadSourceInputConfig는 설정 파일이 없으면 undefined를 반환한
   assert.equal(loaded, undefined);
 });
 
-test("resolveSourceInputConfigPath는 DODODO_SOURCES_CONFIG_PATH 미설정이면 기본 파일명을 cwd 기준으로 쓴다", () => {
+test("resolveSourceInputConfigPath는 DODODO_SOURCE_CONFIG 미설정이면 기본 파일명을 cwd 기준으로 쓴다", () => {
   const resolved = resolveSourceInputConfigPath({}, "/repo");
   assert.match(resolved.path, /dododo\.sources\.json$/);
   assert.equal(resolved.isExplicit, false);
 });
 
-test("resolveSourceInputConfigPath는 DODODO_SOURCES_CONFIG_PATH가 설정되면 isExplicit을 true로 표시한다", () => {
-  const resolved = resolveSourceInputConfigPath({ DODODO_SOURCES_CONFIG_PATH: "./custom.json" }, "/repo");
+test("resolveSourceInputConfigPath는 DODODO_SOURCE_CONFIG가 설정되면 isExplicit을 true로 표시한다", () => {
+  const resolved = resolveSourceInputConfigPath({ DODODO_SOURCE_CONFIG: "./custom.json" }, "/repo");
   assert.equal(resolved.isExplicit, true);
 });
 
 test("loadSourceInputConfig는 명시한 경로의 파일이 없으면 조용히 폴백하지 않고 Error를 던진다(doyeonid, PR #40 리뷰)", () => {
   const cwd = join(tmpdir(), "dododo-no-such-config-dir");
   assert.throws(
-    () => loadSourceInputConfig({ DODODO_SOURCES_CONFIG_PATH: "./missing.dododo.sources.json" }, cwd),
+    () => loadSourceInputConfig({ DODODO_SOURCE_CONFIG: "./missing.dododo.sources.json" }, cwd),
     /찾을 수 없습니다/,
   );
 });
@@ -42,7 +42,7 @@ test("loadSourceInputConfig는 유효한 JSON 설정 파일을 파싱한다", as
       },
     }));
 
-    const loaded = loadSourceInputConfig({ DODODO_SOURCES_CONFIG_PATH: configPath }, directory);
+    const loaded = loadSourceInputConfig({ DODODO_SOURCE_CONFIG: configPath }, directory);
     assert.equal(loaded?.path, configPath);
     assert.deepEqual(loaded?.config.schoolEmail?.allowedSenderDomains, ["school.example"]);
     assert.equal(loaded?.config.schoolEmail?.inputDirectory, join(directory, "mail"));
@@ -65,10 +65,10 @@ test("loadSourceInputConfig는 상대경로를 실행 cwd가 아니라 설정 �
       },
     }));
 
-    // DODODO_SOURCES_CONFIG_PATH는 절대경로로 주지만 실행 cwd는 설정 파일과 무관한
+    // DODODO_SOURCE_CONFIG는 절대경로로 주지만 실행 cwd는 설정 파일과 무관한
     // 디렉터리다 — cwd 기준으로 풀리면 실제 존재하지 않는 경로를 가리키게 된다
     // (PR #40 리뷰, 김도현 — 설정 파일을 다른 디렉터리에서 실행하면 대상이 달라지는 문제).
-    const loaded = loadSourceInputConfig({ DODODO_SOURCES_CONFIG_PATH: configPath }, unrelatedCwd);
+    const loaded = loadSourceInputConfig({ DODODO_SOURCE_CONFIG: configPath }, unrelatedCwd);
     assert.equal(loaded?.config.schoolEmail?.inputDirectory, join(configDirectory, "mail"));
     assert.deepEqual(loaded?.config.lms?.inputPaths, [
       join(configDirectory, "html", "a.html"),
@@ -87,7 +87,7 @@ test("loadSourceInputConfig는 잘못된 JSON이면 경로를 포함한 오류�
     await writeFile(configPath, "{ not json");
 
     try {
-      loadSourceInputConfig({ DODODO_SOURCES_CONFIG_PATH: configPath }, directory);
+      loadSourceInputConfig({ DODODO_SOURCE_CONFIG: configPath }, directory);
       assert.fail("should have thrown");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -106,7 +106,7 @@ test("loadSourceInputConfig는 최상위가 배열이면 거부한다", async ()
     await writeFile(configPath, "[]");
 
     assert.throws(
-      () => loadSourceInputConfig({ DODODO_SOURCES_CONFIG_PATH: configPath }, directory),
+      () => loadSourceInputConfig({ DODODO_SOURCE_CONFIG: configPath }, directory),
       /객체여야 합니다/,
     );
   } finally {
