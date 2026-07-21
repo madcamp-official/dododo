@@ -61,30 +61,46 @@ export function parseScheduleIntent(utterance: string, now: Date): ScheduleInten
   }
   if (date === undefined) return { kind: "unrecognized" };
 
+  // 범위 표현을 시도했는데 무효한 경우(끝이 시작보다 빠름, 자정을 넘는 범위)는
+  // "범위 없음"과 구분해야 한다 — 구분하지 않으면 상위 로직이 resolveTime()으로
+  // 문장 전체를 다시 훑어 범위의 시작 시각만 골라내고, 사용자가 명시한 끝 시각은
+  // 조용히 버려진다(PR #49 리뷰, doyeonid 지적).
   const range = resolveTimeRange(utterance);
+  if (range.kind === "invalid") return { kind: "unrecognized" };
+
   const time = relative !== undefined
     ? { hour: relative.at.getHours(), minute: relative.at.getMinutes(), ambiguous: relative.ambiguous }
-    : (range?.start ?? resolveTime(utterance));
+    : (range.kind === "valid" ? range.start : resolveTime(utterance));
   if (time === undefined) return { kind: "unrecognized" };
 
   const startAt = combineDateTime(date, time.hour, time.minute);
-  const endAt = range?.end !== undefined ? combineDateTime(date, range.end.hour, range.end.minute) : undefined;
+  const endAt = range.kind === "valid" ? combineDateTime(date, range.end.hour, range.end.minute) : undefined;
   const title = extractTitle(utterance);
+
+  // 날짜가 없어 오늘로 기본 처리했거나("3시에 미팅") 막연한 미래 표현("이따") 뒤에
+  // 비-meridiem 시각("6시")이 오면, 그 시각이 이미 지난 시각일 수 있다("이따 6시"가
+  // 오후 15:20 시점에 06:00으로 풀리는 식). 이미 지난 시각을 모호 표시 없이 확정하면
+  // "이따"의 미래 의도와 모순되므로, 이미 지났으면 확신도와 무관하게 확인을 받는다
+  // (PR #49 리뷰, doyeonid 지적).
+  const isAlreadyPast = new Date(startAt).getTime() < now.getTime();
+  const ambiguous = time.ambiguous || isAlreadyPast;
 
   const readable = formatReadable(startAt, endAt);
   const recurrenceNote = RECURRENCE_SIGNAL.test(utterance)
     ? " 반복 일정은 아직 지원하지 않아 이번 한 번만 저장합니다."
     : "";
 
-  if (time.ambiguous) {
+  if (ambiguous) {
+    const reason = isAlreadyPast
+      ? "이미 지난 시각일 수 있어 확인이 필요합니다."
+      : "시각이 정확하지 않다면 알려주세요.";
     return {
       kind: "event_draft",
       title,
       startAt,
       ...(endAt === undefined ? {} : { endAt }),
       ambiguousField: "time",
-      clarifyingQuestion:
-        `${title}을(를) ${readable}으로 저장할까요? 시각이 정확하지 않다면 알려주세요.${recurrenceNote} [y/N/edit]`,
+      clarifyingQuestion: `${title}을(를) ${readable}으로 저장할까요? ${reason}${recurrenceNote} [y/N/edit]`,
       evidenceQuote: utterance,
     };
   }
@@ -286,9 +302,18 @@ const TIME_RANGE = new RegExp(
   `${EXPLICIT_TIME.source}\\s*(?:부터|~)\\s*${EXPLICIT_TIME.source}\\s*까지`,
 );
 
-function resolveTimeRange(utterance: string): { start: ResolvedTime; end: ResolvedTime } | undefined {
+// "범위 표현이 아예 없음"(none)과 "범위 표현은 있었지만 해석할 수 없음"(invalid)을
+// 구분한다. 후자를 그냥 undefined로 뭉뚱그리면 호출부가 "범위 없음"으로 오인해
+// resolveTime()으로 문장 전체를 다시 훑어 시작 시각만 골라내고, 사용자가 명시한 끝
+// 시각은 조용히 사라진다(PR #49 리뷰).
+type TimeRangeResolution =
+  | { kind: "none" }
+  | { kind: "invalid" }
+  | { kind: "valid"; start: ResolvedTime; end: ResolvedTime };
+
+function resolveTimeRange(utterance: string): TimeRangeResolution {
   const match = TIME_RANGE.exec(utterance);
-  if (match === null) return undefined;
+  if (match === null) return { kind: "none" };
 
   const start = interpretExplicitTime({
     meridiem: match[1],
@@ -303,13 +328,16 @@ function resolveTimeRange(utterance: string): { start: ResolvedTime; end: Resolv
     minuteText: match[7],
     half: match[8] !== undefined,
   });
-  if (start === undefined || end === undefined) return undefined;
+  if (start === undefined || end === undefined) return { kind: "invalid" };
 
   const startMinutes = start.hour * 60 + start.minute;
   const endMinutes = end.hour * 60 + end.minute;
-  if (endMinutes <= startMinutes) return undefined;
+  // 자정을 넘는 범위("밤 11시부터 1시까지")도 여기서 끝<=시작으로 걸린다 — 지원하지
+  // 않는 범위이므로 "범위 없음"이 아니라 "무효한 범위"로 다뤄 unrecognized로
+  // 떨어뜨린다(끝 시각을 조용히 버리고 시작 시각만 쓰지 않는다).
+  if (endMinutes <= startMinutes) return { kind: "invalid" };
 
-  return { start: { ...start, ambiguous: false }, end: { ...end, ambiguous: false } };
+  return { kind: "valid", start: { ...start, ambiguous: false }, end: { ...end, ambiguous: false } };
 }
 
 // 날짜·시각·범위·반복 표현과 흔한 어미를 걷어낸 나머지를 제목으로 쓴다.

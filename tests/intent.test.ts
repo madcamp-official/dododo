@@ -173,20 +173,23 @@ test("parseScheduleIntent는 '부터~까지' 범위를 endAt으로 채운다", (
   assert.match(result.clarifyingQuestion, /14:00~16:00/);
 });
 
-test("parseScheduleIntent는 끝 시각이 시작보다 빠르면 범위를 포기하고 시작 시각만 쓴다", () => {
+test("parseScheduleIntent는 끝이 시작보다 빠른 범위를 무효로 보고 시작 시각만으로 축소하지 않는다", () => {
+  // 사용자가 명시한 "2시까지"를 조용히 버리고 시작 시각(4시)만 쓰는 event_draft를
+  // 만들면 안 된다 — 해석할 수 없는 범위는 unrecognized로 거부한다(PR #49 리뷰).
   const result = parseScheduleIntent("내일 오후 4시부터 2시까지 스터디", NOW);
-  assert.equal(result.kind, "event_draft");
-  if (result.kind !== "event_draft") return;
-  assert.equal(result.startAt, "2026-07-19T16:00:00+09:00");
-  assert.equal(result.endAt, undefined);
+  assert.equal(result.kind, "unrecognized");
 });
 
-test("parseScheduleIntent는 날짜 표현이 없어도 명시적 시각이 있으면 오늘로 본다", () => {
+test("parseScheduleIntent는 날짜 표현이 없어도 명시적 시각이 있으면 오늘로 보되, 이미 지난 시각이면 확인을 받는다", () => {
   const result = parseScheduleIntent("카페에서 3시에 민수랑 미팅", NOW);
   assert.equal(result.kind, "event_draft");
   if (result.kind !== "event_draft") return;
   assert.equal(result.startAt.slice(0, 10), "2026-07-18");
   assert.match(result.title, /민수/);
+  // NOW가 15:20이라 비-meridiem "3시"(03:00)는 이미 지난 시각이다 — 확신도와 무관하게
+  // 확인을 받아야 한다(PR #49 리뷰, "이따 6시" 사례와 같은 근본 원인).
+  assert.equal(result.ambiguousField, "time");
+  assert.match(result.clarifyingQuestion, /이미 지난 시각/);
 });
 
 test("parseScheduleIntent는 날짜 표현이 무효하면(2월 30일) 오늘로 대체하지 않는다", () => {
@@ -210,14 +213,17 @@ test("parseScheduleIntent는 막연한 상대 표현(이따)을 2시간 뒤 모�
   assert.equal(result.ambiguousField, "time");
 });
 
-test("parseScheduleIntent는 막연한 상대 표현 뒤에 명시적 시각이 있으면 그 시각을 우선한다", () => {
+test("parseScheduleIntent는 막연한 상대 표현 뒤에 명시적 시각이 있으면 그 시각을 우선하되, 이미 지났으면 확인을 받는다", () => {
   const result = parseScheduleIntent("이따 6시에 형이랑 밥", NOW);
   assert.equal(result.kind, "event_draft");
   if (result.kind !== "event_draft") return;
   // "이따"는 today로만 쓰이고, 실제 시각은 명시된 6시(비-meridiem이라 06:00)를 따른다 —
-  // +2시간 기본 오프셋(17:20)으로 덮어써지지 않는다.
+  // +2시간 기본 오프셋(17:20)으로 덮어써지지 않는다. 다만 NOW(15:20) 기준 06:00은
+  // 이미 지난 시각이라 "이따"(미래 의도)와 모순되므로 확인 없이 확정하지 않는다
+  // (PR #49 리뷰, doyeonid 지적 — 과거 시각을 정상 결과로 고정하면 안 됨).
   assert.equal(result.startAt, "2026-07-18T06:00:00+09:00");
-  assert.equal(result.ambiguousField, undefined);
+  assert.equal(result.ambiguousField, "time");
+  assert.match(result.clarifyingQuestion, /이미 지난 시각/);
 });
 
 test("parseScheduleIntent는 과거 표현이 있으면 미래 일정으로 확정하지 않는다", () => {
