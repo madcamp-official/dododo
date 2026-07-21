@@ -11,11 +11,11 @@ import { computePriority, findTodayEvents } from "./priority.ts";
 export * from "./phrasing.ts";
 export * from "./priority.ts";
 
-// 최근 추천 이력을 조회하는 최소 인터페이스. packages/context-engine/src/store의
-// InterimContextStore가 이 모양을 그대로 만족한다(구조적 타이핑이라 별도 어댑터가
-// 필요 없다). packages/shared/src/contracts.ts의 RecommendationEngine에는 아직
-// 이 입력이 없어(docs/proposals/context-repository-contract-extension.md) 생성자
-// 주입으로 해결한다 — recommend(items, profile, now)의 좁은 시그니처는 그대로 유지된다.
+// 최근 추천 이력을 조회하는 최소 인터페이스. ContextRepository가 이 모양을 그대로
+// 만족한다(구조적 타이핑이라 별도 어댑터가 필요 없다). packages/shared/src/contracts.ts의
+// RecommendationEngine 계약 자체는 넓히지 않고 생성자 주입으로 해결하기로 확정했다 —
+// recommend(items, profile, now)의 좁은 시그니처를 그대로 유지해 계약 변경 없이
+// 이력 조회를 옵션으로 추가할 수 있기 때문이다.
 export interface RecommendationHistoryProvider {
   listRecommendations(contextItemId?: string): Promise<Recommendation[]>;
 }

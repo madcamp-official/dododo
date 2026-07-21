@@ -1,8 +1,9 @@
 import type { ContextItem } from "../../../../packages/shared/src/index.ts";
 
 // domain.ts에 snooze 전용 필드가 없어서 ContextItem.metadata에 ISO 문자열로 보관한다.
-// context-repository-contract-extension.md 제안이 합의되면 Recommendation.suppressedUntil
-// 기반 억제로 옮길 수 있다.
+// 같은 관례를 packages/context-engine/src/recommendation/priority.ts와
+// packages/context-engine/src/intent/qa.ts도 독립적으로 읽는다 — 도메인 필드로
+// 승격하면(공동 소유 계약 변경 절차 필요) 세 곳을 한 번에 정리할 수 있다.
 const SNOOZED_UNTIL_KEY = "snoozedUntil";
 
 export function isSnoozed(item: ContextItem, now: Date): boolean {

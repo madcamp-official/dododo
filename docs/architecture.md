@@ -165,7 +165,7 @@ dododo/
 │   │       ├── resolution/
 │   │       ├── recommendation/
 │   │       └── pipeline.ts
-│   ├── storage/src/              # In-memory 구현, SQLite 예정
+│   ├── storage/src/              # In-memory·SQLite 구현
 │   ├── profile/src/
 │   ├── scheduler/src/
 │   ├── privacy/src/
@@ -260,31 +260,12 @@ Email Collector는 다음 원칙을 지킨다.
 - Message-ID를 보존해 반복 동기화 중복을 방지한다.
 - 학교 사이트나 LMS와 같은 안내는 하나의 ContextItem으로 병합한다.
 
-## 9. 현재 스켈레톤 상태
-
-바로 실행 가능한 부분:
+## 9. 실행 확인
 
 ```text
-npm start -- help
-npm start -- doctor
-npm run check
+npm start -- help    # 전체 명령과 담당 영역 표시
+npm start -- doctor  # Runtime, 저장소, Source 설정, LLM 연결 상태 표시
+npm run check        # Typecheck + 전체 테스트
 ```
 
-- `help`: 전체 MVP 명령과 담당 영역 표시
-- `doctor`: Runtime, 저장소와 LLM 연결 상태 표시
-- 공통 Domain과 모듈 인터페이스
-- In-memory Repository
-- Fixture Collector와 Source별 Collector 자리
-- 최소 Context Pipeline과 규칙 기반 Resolver·Recommendation 자리
-- 학교 사이트·이메일·LMS·화면 Fixture
-- Smoke Test
-- TypeScript Strict Type Check
-
-아직 구현해야 하는 부분:
-
-- 실제 SQLite Repository
-- 실제 학교 사이트·이메일·LMS Collector
-- LLM Provider와 구조화 Fact 추출
-- 완전한 병합·충돌·우선순위 정책
-- CLI 명령의 Application Service 연결
-- 화면 캡처와 OS 알림
+각 명령의 준비 상태는 `apps/cli/src/commands/catalog.ts`가 담당 영역과 함께 보여준다.

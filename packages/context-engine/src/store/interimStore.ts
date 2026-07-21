@@ -1,10 +1,10 @@
 import type { ContextChangeEvent, Evidence, Recommendation } from "../../../shared/src/index.ts";
 
-// Stage 0 임시 저장소: packages/shared/src/contracts.ts의 ContextRepository에
-// Evidence·변경 이력·Recommendation 저장 메서드가 아직 없어 팀 합의 전까지
-// context-engine 내부에서만 사용하는 자리 표시자다. 메서드 시그니처는
-// docs/proposals/context-repository-contract-extension.md의 제안과 동일하게
-// 맞춰 두어, 합의 후에는 실제 ContextRepository 구현으로 교체(리네임 수준)한다.
+// Stage 0 임시 저장소였다. packages/shared/src/contracts.ts의 ContextRepository에
+// Evidence·변경 이력·Recommendation 저장 메서드가 이미 반영되었고(saveEvidence 등),
+// ContextPipeline도 InterimContextStore가 아니라 실제 ContextRepository를
+// evidenceStore로 직접 쓴다(pipeline.ts 참고). 이 클래스는 더 이상 프로덕션 경로에서
+// 쓰이지 않는다 — tests/smoke.test.ts의 자체 라운드트립 테스트만 남아 있어 삭제 대상이다.
 export class InterimContextStore {
   private readonly evidence = new Map<string, Evidence>();
   private readonly history = new Map<string, ContextChangeEvent[]>();
