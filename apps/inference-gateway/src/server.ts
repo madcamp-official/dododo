@@ -81,28 +81,27 @@ async function route(
   if (ownerTokenHash === undefined) throw httpError(401, "unauthorized", "유효한 Bearer Token이 필요합니다");
 
   if (method === "POST" && path === "/v1/inference/jobs") {
-    if (dependencies.store.activeJobCount() >= dependencies.config.maxQueueSize) {
-      throw httpError(503, "queue_full", "LLM 작업 대기열이 가득 찼습니다", true);
-    }
     const body = await readJson(request, dependencies.config.maxBodyBytes);
     const inferenceRequest = validateInferenceRequest(body, dependencies.config);
     const current = dependencies.now();
-    if (!dependencies.store.reserveDailyQuota(
-      ownerTokenHash,
-      current.toISOString().slice(0, 10),
-      dependencies.config.maxJobAttemptsPerDay,
-    )) {
-      throw httpError(429, "daily_quota_exceeded", "오늘의 LLM 작업 한도를 초과했습니다", true);
-    }
-    const job = dependencies.store.createJob(
+    const admission = dependencies.store.admitJob(
       ownerTokenHash,
       inferenceRequest,
       current.toISOString(),
       new Date(current.getTime() + dependencies.config.jobTtlMs).toISOString(),
+      dependencies.config.maxQueueSize,
+      current.toISOString().slice(0, 10),
+      dependencies.config.maxJobAttemptsPerDay,
     );
+    if (admission.status === "queue_full") {
+      throw httpError(503, "queue_full", "LLM 작업 대기열이 가득 찼습니다", true);
+    }
+    if (admission.status === "daily_quota_exceeded") {
+      throw httpError(429, "daily_quota_exceeded", "오늘의 LLM 작업 한도를 초과했습니다", true);
+    }
     dependencies.queue.notifyJobCreated();
     sendJson(response, 202, {
-      jobId: job.id,
+      jobId: admission.job.id,
       status: "queued",
       pollAfterMs: dependencies.config.pollAfterMs,
     });

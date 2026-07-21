@@ -24,6 +24,11 @@ export type ActivationResult =
   | { status: "activated"; token: string }
   | { status: "already_used" };
 
+export type JobAdmissionResult =
+  | { status: "created"; job: StoredInferenceJob }
+  | { status: "queue_full" }
+  | { status: "daily_quota_exceeded" };
+
 export class GatewayStore {
   private readonly database: DatabaseSync;
 
@@ -87,39 +92,52 @@ export class GatewayStore {
     }
   }
 
-  activeJobCount(): number {
-    const row = this.database.prepare(`
-      SELECT COUNT(*) AS count FROM gateway_jobs WHERE status IN ('queued', 'running')
-    `).get() as { count: number };
-    return Number(row.count);
-  }
-
-  reserveDailyQuota(ownerTokenHash: string, day: string, limit: number): boolean {
+  admitJob(
+    ownerTokenHash: string,
+    request: RemoteInferenceRequest,
+    createdAt: string,
+    expiresAt: string,
+    maxActiveJobs: number,
+    usageDay: string,
+    dailyLimit: number,
+  ): JobAdmissionResult {
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const row = this.database.prepare(`
+      const active = this.database.prepare(`
+        SELECT COUNT(*) AS count
+        FROM gateway_jobs
+        WHERE status IN ('queued', 'running')
+      `).get() as { count: number };
+      if (Number(active.count) >= maxActiveJobs) {
+        this.database.exec("ROLLBACK");
+        return { status: "queue_full" };
+      }
+
+      const usage = this.database.prepare(`
         SELECT jobs_created FROM gateway_daily_usage
         WHERE owner_token_hash = ? AND usage_day = ?
-      `).get(ownerTokenHash, day) as { jobs_created: number } | undefined;
-      if ((row?.jobs_created ?? 0) >= limit) {
+      `).get(ownerTokenHash, usageDay) as { jobs_created: number } | undefined;
+      if ((usage?.jobs_created ?? 0) >= dailyLimit) {
         this.database.exec("ROLLBACK");
-        return false;
+        return { status: "daily_quota_exceeded" };
       }
       this.database.prepare(`
         INSERT INTO gateway_daily_usage(owner_token_hash, usage_day, jobs_created)
         VALUES (?, ?, 1)
         ON CONFLICT(owner_token_hash, usage_day)
         DO UPDATE SET jobs_created = jobs_created + 1
-      `).run(ownerTokenHash, day);
+      `).run(ownerTokenHash, usageDay);
+
+      const job = this.insertJob(ownerTokenHash, request, createdAt, expiresAt);
       this.database.exec("COMMIT");
-      return true;
+      return { status: "created", job };
     } catch (error) {
       if (this.database.isTransaction) this.database.exec("ROLLBACK");
       throw error;
     }
   }
 
-  createJob(
+  private insertJob(
     ownerTokenHash: string,
     request: RemoteInferenceRequest,
     createdAt: string,

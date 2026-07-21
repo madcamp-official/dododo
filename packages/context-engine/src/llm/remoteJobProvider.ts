@@ -34,9 +34,8 @@ export class RemoteJobLLMProvider implements LLMProvider {
   private readonly sleepImplementation: (milliseconds: number) => Promise<void>;
 
   constructor(config: RemoteJobLLMProviderConfig) {
-    const baseUrl = config.baseUrl.trim().replace(/\/+$/, "");
+    const baseUrl = normalizeRemoteGatewayBaseUrl(config.baseUrl);
     const token = config.token.trim();
-    if (baseUrl === "") throw clientError("Remote Gateway baseUrl이 비어 있습니다");
     if (token === "") throw clientError("Remote Gateway token이 비어 있습니다");
 
     this.defaultTimeoutMs = positiveTimeout(
@@ -162,6 +161,25 @@ export class RemoteJobLLMProvider implements LLMProvider {
       });
     }
   }
+}
+
+export function normalizeRemoteGatewayBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/\/+$/, "");
+  if (normalized === "") throw clientError("Remote Gateway baseUrl이 비어 있습니다");
+
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw clientError("Remote Gateway baseUrl이 올바른 URL이 아닙니다");
+  }
+
+  const isLocalHttp = url.protocol === "http:"
+    && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  if (url.protocol !== "https:" && !isLocalHttp) {
+    throw clientError("원격 Gateway는 HTTPS URL이어야 합니다 (로컬 개발 주소만 HTTP 허용)");
+  }
+  return normalized;
 }
 
 function toRemoteRequest<T>(request: LLMJSONRequest<T>): RemoteInferenceRequest {

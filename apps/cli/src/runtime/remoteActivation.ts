@@ -2,6 +2,7 @@ import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 
 import {
+  normalizeRemoteGatewayBaseUrl,
   RemoteJobLLMProvider,
   type ActivateDeviceResponse,
   type GatewayErrorResponse,
@@ -144,17 +145,7 @@ function serializeEnvValue(value: string): string {
 }
 
 function normalizeBaseUrl(value: string): string {
-  const normalized = requiredSingleLine(value, "Gateway URL").replace(/\/+$/, "");
-  let url: URL;
-  try {
-    url = new URL(normalized);
-  } catch {
-    throw new Error("Gateway URL이 올바르지 않습니다");
-  }
-  if (url.protocol !== "https:" && url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
-    throw new Error("원격 Gateway는 HTTPS URL이어야 합니다");
-  }
-  return normalized;
+  return normalizeRemoteGatewayBaseUrl(requiredSingleLine(value, "Gateway URL"));
 }
 
 function requiredSingleLine(value: string, field: string): string {

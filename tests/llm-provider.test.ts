@@ -45,6 +45,34 @@ test("remote-job 설정은 RemoteJobLLMProvider를 만든다", () => {
   assert.ok(provider instanceof RemoteJobLLMProvider);
 });
 
+test("RemoteJobLLMProvider는 외부 HTTP Gateway를 거부한다", () => {
+  assert.throws(
+    () => new RemoteJobLLMProvider({
+      baseUrl: "http://llm.example.test",
+      token: "device-token",
+    }),
+    /HTTPS URL/,
+  );
+});
+
+test("RemoteJobLLMProvider는 로컬 개발 주소에만 HTTP를 허용한다", () => {
+  assert.doesNotThrow(() => new RemoteJobLLMProvider({
+    baseUrl: "http://localhost:18080",
+    token: "device-token",
+  }));
+  assert.doesNotThrow(() => new RemoteJobLLMProvider({
+    baseUrl: "http://127.0.0.1:18080/",
+    token: "device-token",
+  }));
+  assert.throws(
+    () => new RemoteJobLLMProvider({
+      baseUrl: "ftp://localhost:18080",
+      token: "device-token",
+    }),
+    /HTTPS URL/,
+  );
+});
+
 test("remote-job Token이 없으면 Provider를 만들지 않고 설정 오류를 보존한다", () => {
   const env = {
     DODODO_LLM_PROVIDER: "remote-job",

@@ -102,6 +102,45 @@ test("Gateway는 허용하지 않는 모델 종류와 잘못된 Schema를 거부
   });
 });
 
+test("Gateway는 동시 요청에서도 활성 Job 수가 Queue 상한을 넘지 않는다", async () => {
+  let releaseProvider!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    releaseProvider = resolve;
+  });
+  const blockingProvider: LLMProvider = {
+    async completeJSON<T>(): Promise<T> {
+      await gate;
+      return { answer: "ok" } as T;
+    },
+  };
+  const config = { ...testConfig(), maxQueueSize: 2 };
+
+  await withGateway(blockingProvider, async (baseUrl) => {
+    try {
+      const responses = await Promise.all(Array.from({ length: 12 }, () => (
+        fetch(`${baseUrl}/v1/inference/jobs`, {
+          method: "POST",
+          headers: {
+            authorization: "Bearer bootstrap-token",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(remoteRequest()),
+        })
+      )));
+
+      assert.equal(responses.filter((response) => response.status === 202).length, 2);
+      const rejected = responses.filter((response) => response.status === 503);
+      assert.equal(rejected.length, 10);
+      for (const response of rejected) {
+        const payload = await response.json() as { error: { code: string } };
+        assert.equal(payload.error.code, "queue_full");
+      }
+    } finally {
+      releaseProvider();
+    }
+  }, config);
+});
+
 test("Gateway의 재시도 가능 LLM 오류가 RemoteJobLLMProvider까지 보존된다", async () => {
   const failing: LLMProvider = {
     async completeJSON(): Promise<never> {
@@ -199,8 +238,9 @@ function returningProvider(value: unknown): LLMProvider {
 async function withGateway(
   provider: LLMProvider,
   run: (baseUrl: string) => Promise<void>,
+  config: GatewayConfig = testConfig(),
 ): Promise<void> {
-  const runtime = createGatewayRuntime(testConfig(), { provider });
+  const runtime = createGatewayRuntime(config, { provider });
   const address = await runtime.listen();
   try {
     await run(`http://127.0.0.1:${address.port}`);
