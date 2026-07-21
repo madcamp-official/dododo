@@ -65,6 +65,40 @@ test("inbox prepare는 종료·취소·Dismiss·만료 Opportunity를 다시 활
   }
 });
 
+test("inbox prepare는 유일하게 일치하는 ID 접두어만으로도 Opportunity를 준비한다(PR #50 리뷰 nit)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  try {
+    await container.repository.saveContextItems([opportunityItem()]);
+
+    const output = await runInbox(container, ["prepare", "opportunity"], NOW);
+
+    assert.match(output, /준비를 시작했습니다/);
+    assert.equal((await container.repository.findContextItem("opportunity-1"))?.status, "preparing");
+  } finally {
+    container.close();
+  }
+});
+
+test("inbox prepare는 접두어가 여러 Opportunity와 일치하면 후보를 보여주고 아무것도 준비하지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  try {
+    await container.repository.saveContextItems([
+      opportunityItem({ id: "opportunity-alpha" }),
+      opportunityItem({ id: "opportunity-beta" }),
+    ]);
+
+    const output = await runInbox(container, ["prepare", "opportunity"], NOW);
+
+    assert.match(output, /2개입니다/);
+    assert.match(output, /opportunity-alpha/);
+    assert.match(output, /opportunity-beta/);
+    assert.equal((await container.repository.findContextItem("opportunity-alpha"))?.status, "new");
+    assert.equal((await container.repository.findContextItem("opportunity-beta"))?.status, "new");
+  } finally {
+    container.close();
+  }
+});
+
 test("준비 Task ID는 requirements 순서가 바뀌어도 같은 요구사항을 가리킨다", () => {
   const original = opportunityItem({ requirements: ["참가 신청서", "개인정보 동의서"] });
   const reordered = opportunityItem({ requirements: ["개인정보 동의서", "참가 신청서"] });
