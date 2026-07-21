@@ -9,6 +9,9 @@ import {
   handleInbox,
   handleProfileGet,
   handleProfileSave,
+  handleSourceList,
+  handleSourceRegister,
+  handleSourceRemove,
   handleSyncRun,
   handleTaskComplete,
   handleTaskDelete,
@@ -36,6 +39,9 @@ export const IPC_CHANNELS = {
   taskUpdate: "task:update",
   taskDelete: "task:delete",
   taskSetReminderOffset: "task:setReminderOffset",
+  sourceList: "source:list",
+  sourceRegister: "source:register",
+  sourceRemove: "source:remove",
   syncRun: "sync:run",
   profileGet: "profile:get",
   profileSave: "profile:save",
@@ -62,6 +68,9 @@ export function registerIpcHandlers(container: CliContainer): void {
     IPC_CHANNELS.taskSetReminderOffset,
     (_event, input: unknown) => handleTaskSetReminderOffset(container, input),
   );
+  ipcMain.handle(IPC_CHANNELS.sourceList, () => handleSourceList());
+  ipcMain.handle(IPC_CHANNELS.sourceRegister, (_event, input: unknown) => handleSourceRegister(input));
+  ipcMain.handle(IPC_CHANNELS.sourceRemove, (_event, input: unknown) => handleSourceRemove(input));
   ipcMain.handle(IPC_CHANNELS.syncRun, () => handleSyncRun(container));
   ipcMain.handle(IPC_CHANNELS.profileGet, () => handleProfileGet(container));
   ipcMain.handle(IPC_CHANNELS.profileSave, (_event, input: unknown) => handleProfileSave(container, input));

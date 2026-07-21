@@ -8,6 +8,7 @@ import { askQuestion } from "./ask.ts";
 import { getCalendar, getInbox, getToday } from "./context.ts";
 import { getProfile, saveProfile } from "./profile.ts";
 import { fail } from "./result.ts";
+import { listSources, registerSource, removeSource } from "./source.ts";
 import { runSync } from "./sync.ts";
 import {
   deleteScheduleItem,
@@ -19,6 +20,7 @@ import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
 import { isNonEmptyString, isRecord, isUserProfileShape, isValidOffsetMinutes } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
+import { isRegisteredSourceType } from "../../../../cli/src/runtime/sourceRegistration.ts";
 
 export function handleToday(container: CliContainer) {
   return getToday(container);
@@ -121,6 +123,26 @@ export function handleTaskSetReminderOffset(container: CliContainer, input: unkn
     return Promise.resolve(fail("validation", "id는 문자열, offsetMinutes는 0 이상의 정수(분)여야 합니다."));
   }
   return setReminderOffset(container, input.id, input.offsetMinutes);
+}
+
+export function handleSourceList() {
+  return listSources();
+}
+
+export function handleSourceRegister(input: unknown) {
+  if (!isRecord(input) || !isRegisteredSourceType(input.type) || typeof input.value !== "string") {
+    return Promise.resolve(
+      fail("validation", "type은 school-site/school-email/lms 중 하나, value는 문자열이어야 합니다."),
+    );
+  }
+  return registerSource({ type: input.type, value: input.value });
+}
+
+export function handleSourceRemove(input: unknown) {
+  if (!isRecord(input) || !isRegisteredSourceType(input.id)) {
+    return Promise.resolve(fail("validation", "id는 school-site/school-email/lms 중 하나여야 합니다."));
+  }
+  return removeSource(input.id);
 }
 
 export function handleSyncRun(container: CliContainer) {
