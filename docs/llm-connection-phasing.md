@@ -57,6 +57,16 @@ Issue #27이 지적한, 대표 시나리오를 CLI에서 끝까지 돌리기 위
 - Cloudflare Tunnel: 인바운드 포트 없이 Gateway(18080)만 HTTPS로 노출. 비동기 Job + polling(Cloudflare 120초 timeout 회피).
 - `RemoteJobLLMProvider`: 사용자 PC에서 `LLMProvider`를 구현, 설치 코드로 기기 토큰 발급 후 OS Keychain 저장.
 
+#### 2026-07-21 구현 결정
+
+사용자 요청으로 Phase 3의 MVP 구현을 앞당겼다. 기존 엔진과 CLI를 재작성하지 않기 위해 아래 표의
+옵션 (b), 즉 클라이언트가 Prompt·Schema를 전달하는 구조로 Gateway와
+`RemoteJobLLMProvider`를 먼저 구현한다. 대신 Gateway가 인증, 기기별 Job 소유권, 모델 종류
+allowlist, 본문·이미지·Schema 크기, Queue, 일일 사용량과 TTL을 통제한다.
+
+서버 operation 기반 옵션 (a)는 Prompt를 Gateway로 실제 이관할 때만 적용한다. 이름만 operation으로
+감싼 뒤 여전히 임의 Prompt를 받는 형태는 보안 효과가 없으므로 구현하지 않는다.
+
 ## LLMProvider 통합 결정 (Phase 3 전에 확정)
 
 Gateway로 갈 때 반드시 미리 정해야 하는 것이다. 제안의 operation 기반 API는 **서버가 프롬프트·스키마를 갖고** 클라이언트는 operation만 보낸다. 그런데 현재 `LLMProvider.completeJSON()`은 **클라이언트가 systemPrompt·schema를 보내는** 구조다(프롬프트가 지금 `extraction`/`recommendation/phrasing`/`intent`에 있음).

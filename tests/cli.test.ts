@@ -87,7 +87,13 @@ test("doctor는 DODODO_LLM_BASE_URL 미설정이면 미설정 문구를 보여�
 
 test("doctor는 baseUrl 설정+연결 성공이면 연결 OK를 보여준다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  container.llmConfig = {
+    provider: "ollama",
+    baseUrl: "http://vm:11434",
+    textModel: "gemma3:12b",
+    visionModel: "gemma3:4b",
+    timeoutMs: 1_200_000,
+  };
   const fakeFetch = (async () => new Response(null, { status: 200 })) as typeof fetch;
 
   const doctor = await renderDoctor(container, fakeFetch);
@@ -96,7 +102,13 @@ test("doctor는 baseUrl 설정+연결 성공이면 연결 OK를 보여준다", a
 
 test("doctor는 연결 실패 응답이면 HTTP 상태코드를 보여준다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  container.llmConfig = {
+    provider: "ollama",
+    baseUrl: "http://vm:11434",
+    textModel: "gemma3:12b",
+    visionModel: "gemma3:4b",
+    timeoutMs: 1_200_000,
+  };
   const fakeFetch = (async () => new Response(null, { status: 500 })) as typeof fetch;
 
   const doctor = await renderDoctor(container, fakeFetch);
@@ -105,13 +117,41 @@ test("doctor는 연결 실패 응답이면 HTTP 상태코드를 보여준다", a
 
 test("doctor는 fetch가 실패해도 죽지 않고 실패 사유를 보여준다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  container.llmConfig = { baseUrl: "http://vm:11434", textModel: "gemma3:12b", visionModel: "gemma3:4b" };
+  container.llmConfig = {
+    provider: "ollama",
+    baseUrl: "http://vm:11434",
+    textModel: "gemma3:12b",
+    visionModel: "gemma3:4b",
+    timeoutMs: 1_200_000,
+  };
   const fakeFetch = (async () => {
     throw new Error("connect ECONNREFUSED");
   }) as typeof fetch;
 
   const doctor = await renderDoctor(container, fakeFetch);
   assert.match(doctor, /연결 실패\(connect ECONNREFUSED\)/);
+});
+
+test("doctor는 remote-job Provider에서 공개 health endpoint를 확인한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.llmConfig = {
+    provider: "remote-job",
+    baseUrl: "https://llm.example.test",
+    textModel: "gemma3:12b",
+    visionModel: "gemma3:4b",
+    token: "secret-not-rendered",
+    timeoutMs: 1_200_000,
+  };
+  let requestedUrl = "";
+  const fakeFetch = (async (input: string | URL | Request) => {
+    requestedUrl = String(input);
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  const doctor = await renderDoctor(container, fakeFetch);
+  assert.equal(requestedUrl, "https://llm.example.test/health");
+  assert.match(doctor, /LLM: remote-job https:\/\/llm\.example\.test · 연결 OK/);
+  assert.doesNotMatch(doctor, /secret-not-rendered/);
 });
 
 test("setup saves a profile collected from scripted stdin", async () => {

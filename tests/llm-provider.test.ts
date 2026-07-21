@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createLlmProvider } from "../apps/cli/src/runtime/llmProvider.ts";
+import { RemoteJobLLMProvider } from "../packages/context-engine/src/index.ts";
+import { createLlmProvider, resolveLlmConfig } from "../apps/cli/src/runtime/llmProvider.ts";
 
 test("createLlmProvider는 DODODO_LLM_BASE_URL이 없으면 undefined를 반환한다", () => {
   assert.equal(createLlmProvider({}), undefined);
@@ -32,4 +33,23 @@ test("createLlmProvider는 process.env를 기본값으로 쓴다(인자 생략 �
     if (original === undefined) delete process.env.DODODO_LLM_BASE_URL;
     else process.env.DODODO_LLM_BASE_URL = original;
   }
+});
+
+test("remote-job 설정은 RemoteJobLLMProvider를 만든다", () => {
+  const provider = createLlmProvider({
+    DODODO_LLM_PROVIDER: "remote-job",
+    DODODO_LLM_BASE_URL: "https://llm.example.test",
+    DODODO_LLM_TOKEN: "device-token",
+    DODODO_LLM_TIMEOUT_MS: "1200000",
+  });
+  assert.ok(provider instanceof RemoteJobLLMProvider);
+});
+
+test("remote-job Token이 없으면 Provider를 만들지 않고 설정 오류를 보존한다", () => {
+  const env = {
+    DODODO_LLM_PROVIDER: "remote-job",
+    DODODO_LLM_BASE_URL: "https://llm.example.test",
+  };
+  assert.equal(createLlmProvider(env), undefined);
+  assert.match(resolveLlmConfig(env)?.configurationError ?? "", /DODODO_LLM_TOKEN/);
 });

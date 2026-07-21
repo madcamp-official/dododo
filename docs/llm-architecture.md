@@ -39,6 +39,22 @@
 | Embedding / RAG | X | X | Intelligence |
 | 백그라운드 Job Queue | X | X | 공동 |
 
+### 원격 Gateway 구현 상태 (2026-07-21)
+
+- `apps/inference-gateway/`: Bearer Token·일회용 설치 코드, 요청 검증, SQLite Job Queue,
+  동시 실행 제한, 일일 사용량 제한, TTL 삭제, Ollama 호출을 구현했다.
+- `RemoteJobLLMProvider`: 기존 `LLMProvider.completeJSON()`을 유지하면서 Job 생성 → polling →
+  결과 Schema 재검증을 수행한다.
+- CLI는 `DODODO_LLM_PROVIDER=remote-job`일 때 원격 Provider를 선택하고 `doctor`는 공개
+  `/health`를 확인한다.
+- Ollama의 실제 모델명은 Gateway 환경변수로만 정하며 클라이언트는 `text` 또는 `vision`만
+  요청한다.
+
+현재 Prompt와 Schema는 Context Engine이 소유하므로 인증된 클라이언트가 Gateway로 전달한다.
+이는 기존 Provider 계약을 유지하기 위한 MVP 결정이다. 공개 토큰이 유출되면 제한 범위 안에서
+임의 Prompt가 가능하므로, Gateway는 긴 설치 코드·기기별 Token·일일 한도·본문 크기 제한을
+반드시 적용한다. 장기 서비스에서는 Prompt를 서버 operation으로 옮기는 별도 계약 변경이 필요하다.
+
 ## 4. 가장 큰 병목 (성능보다 먼저)
 
 1. **LLM이 런타임에 연결 안 됨** — `apps/cli/src/runtime/container.ts`가 `OllamaProvider`를 만들어 `LLMFactExtractor`/`RecommendationEngine`/화면 조언에 주입해야 한다. (CLI 담당)

@@ -36,6 +36,23 @@ flowchart LR
     TEXT["사용자 입력"] --> CORE
 ```
 
+LLM Provider는 같은 `LLMProvider.completeJSON()` 계약 아래 두 배치 방식을 지원한다.
+
+```mermaid
+flowchart LR
+    ENGINE["Context Engine"] --> PRIVACY["Privacy Gateway"]
+    PRIVACY --> CONTRACT["LLMProvider"]
+    CONTRACT --> LOCAL["OllamaProvider\n로컬·SSH 터널"]
+    CONTRACT --> REMOTE["RemoteJobLLMProvider\nHTTPS Job+Polling"]
+    REMOTE --> TUNNEL["Cloudflare Tunnel"]
+    TUNNEL --> GATEWAY["Inference Gateway\n인증·검증·SQLite Queue"]
+    GATEWAY --> OLLAMA["Ollama\n127.0.0.1:11434"]
+```
+
+Inference Gateway는 `127.0.0.1:18080`에만 바인딩한다. 공개 HTTPS 주소는 Cloudflare
+Tunnel이 Gateway에 연결하며, Ollama API는 직접 공개하지 않는다. Gateway는 실제 모델명을
+서버 설정으로 선택하고 클라이언트에는 `text`/`vision` 종류만 허용한다.
+
 ## 3. 런타임 구성
 
 ### 단발성 CLI
@@ -106,6 +123,7 @@ Fact의 성격과 출처를 이용해 Opportunity, Task, Event, Note, Activity�
 ```text
 dododo/
 ├── apps/
+│   ├── inference-gateway/       # 인증·비동기 Job API·Ollama Queue
 │   └── cli/
 │       └── src/
 │           ├── commands/         # 명령 카탈로그, help, doctor
@@ -156,6 +174,20 @@ dododo/
 | Recommendation Engine | `recommend(items, profile, now)` | CLI, Scheduler |
 
 모든 모듈은 `packages/shared/src`의 계약만 공유한다. Collector가 SQLite에 직접 쓰거나 CLI가 LLM Provider를 직접 호출하지 않는다.
+
+### 원격 추론 API 계약
+
+| Endpoint | 인증 | 역할 |
+|---|---|---|
+| `GET /health` | 없음 | Tunnel과 프로세스 생존 확인 |
+| `POST /v1/auth/activate` | 일회용 설치 코드 | 기기별 Bearer Token을 한 번 발급 |
+| `POST /v1/inference/jobs` | Bearer Token | 검증된 비동기 추론 Job 생성 |
+| `GET /v1/inference/jobs/:id` | Bearer Token | 자기 Job 상태와 결과 조회 |
+| `DELETE /v1/inference/jobs/:id` | Bearer Token | 대기·실행 Job 취소 표시 |
+
+Job 상태는 `queued → running → succeeded|failed`이며 사용자 취소 시 `cancelled`가 된다.
+Job의 입력은 성공·실패·취소 시 SQLite에서 제거하고 결과·오류는 TTL 이후 삭제한다. 서버
+재시작 때 `running` Job은 `queued`로 복구한다.
 
 ## 7. 팀 경계
 

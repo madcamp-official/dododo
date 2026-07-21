@@ -31,10 +31,16 @@ async function renderLlmStatus(container: CliContainer, fetchImpl: typeof fetch)
   }
 
   const { baseUrl, textModel, visionModel } = container.llmConfig;
-  const base = `LLM: ${baseUrl} · text=${textModel} vision=${visionModel}`;
+  if (container.llmConfig.configurationError !== undefined) {
+    return `LLM: 설정 오류(${container.llmConfig.configurationError})`;
+  }
+  const remote = container.llmConfig.provider === "remote-job";
+  const base = remote
+    ? `LLM: remote-job ${baseUrl}`
+    : `LLM: ${baseUrl} · text=${textModel} vision=${visionModel}`;
 
   try {
-    const response = await fetchImpl(`${baseUrl}/api/tags`, {
+    const response = await fetchImpl(`${baseUrl}${remote ? "/health" : "/api/tags"}`, {
       signal: AbortSignal.timeout(LLM_STATUS_TIMEOUT_MS),
     });
     return response.ok ? `${base} · 연결 OK` : `${base} · 연결 실패(HTTP ${response.status})`;
