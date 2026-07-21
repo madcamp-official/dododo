@@ -6,11 +6,14 @@
 import { submitAdd, type AddSubmitInput } from "./add.ts";
 import { askQuestion } from "./ask.ts";
 import { getCalendar, getInbox, getToday } from "./context.ts";
+import { getProfile, saveProfile } from "./profile.ts";
 import { fail } from "./result.ts";
 import { runSync } from "./sync.ts";
 import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
-import { isNonEmptyString, isRecord } from "./validate.ts";
+import { getUiState, setUiState } from "./uiState.ts";
+import { isNonEmptyString, isRecord, isUserProfileShape } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
+import type { UserProfile } from "../../../../../packages/shared/src/index.ts";
 
 export function handleToday(container: CliContainer) {
   return getToday(container);
@@ -79,4 +82,32 @@ export function handleTaskSnooze(container: CliContainer, input: unknown) {
 
 export function handleSyncRun(container: CliContainer) {
   return runSync(container);
+}
+
+export function handleProfileGet(container: CliContainer) {
+  return getProfile(container);
+}
+
+export function handleProfileSave(container: CliContainer, input: unknown) {
+  if (!isUserProfileShape(input)) {
+    return Promise.resolve(fail("validation", "profile 형식이 올바르지 않습니다."));
+  }
+  return saveProfile(container, input as unknown as UserProfile);
+}
+
+// uiState는 container가 필요 없고 대신 저장 파일 경로가 필요하다 — index.ts가
+// app.getPath("userData")로 계산한 경로를 등록 시점에 주입한다(uiState.ts 참고,
+// electron 미의존 유지).
+export function handleUiStateGet(uiStatePath: string, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.key)) {
+    return Promise.resolve(fail("validation", "key는 문자열이어야 합니다."));
+  }
+  return getUiState(uiStatePath, input.key);
+}
+
+export function handleUiStateSet(uiStatePath: string, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.key) || !("value" in input)) {
+    return Promise.resolve(fail("validation", "key/value가 필요합니다."));
+  }
+  return setUiState(uiStatePath, input.key, input.value);
 }

@@ -19,3 +19,26 @@ export function isNonEmptyString(value: unknown): value is string {
 export function isValidOffsetMinutes(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
+
+// profile:save 페이로드 검증. 배열 필드는 존재 여부·타입만 확인하고 원소 하나하나는
+// 검증하지 않는다 — add:submit 등 다른 핸들러의 얕은 검증 수준과 맞춘다.
+export function isUserProfileShape(value: unknown): boolean {
+  if (
+    !isRecord(value)
+    || typeof value.school !== "string"
+    || typeof value.major !== "string"
+    || typeof value.year !== "string"
+    || !Array.isArray(value.interests)
+    || !Array.isArray(value.activityTypes)
+    || !Array.isArray(value.preferredLocations)
+    || !Array.isArray(value.explicitConstraints)
+  ) {
+    return false;
+  }
+  if (value.quietHours === undefined) return true;
+  return (
+    isRecord(value.quietHours)
+    && typeof value.quietHours.start === "string"
+    && typeof value.quietHours.end === "string"
+  );
+}
