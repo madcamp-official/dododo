@@ -79,9 +79,11 @@ export async function submitAdd(
 // 데스크톱 앱 전체가 Asia/Seoul(DST 없는 고정 UTC+09:00) 하나만 다루므로, 존재
 // 여부 검증은 Date.UTC(시스템 시간대 영향 없음)로 하고 오프셋은 문자열로 고정
 // 부착한다 — 시스템 Date의 로컬 getter를 전혀 거치지 않아 실행 환경 TZ와 무관하다.
+// scheduleItem.ts(task:update)가 같은 조합 규칙을 재사용한다 — 날짜·시간 폼 입력을
+// ISO로 합치는 로직은 add/update 양쪽에서 동일해야 한다.
 const FIXED_TIME_ZONE_OFFSET = "+09:00"; // Asia/Seoul
 
-function combineLocalDateTime(dateStr: string, timeStr: string): string | undefined {
+export function combineLocalDateTime(dateStr: string, timeStr: string): string | undefined {
   const dateMatch = DATE_PATTERN.exec(dateStr);
   const timeMatch = TIME_PATTERN.exec(timeStr);
   if (dateMatch === null || timeMatch === null) return undefined;

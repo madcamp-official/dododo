@@ -9,6 +9,7 @@ import { getCalendar, getInbox, getToday } from "./context.ts";
 import { getProfile, saveProfile } from "./profile.ts";
 import { fail } from "./result.ts";
 import { runSync } from "./sync.ts";
+import { deleteScheduleItem, updateScheduleItem, type ScheduleItemUpdateInput } from "./scheduleItem.ts";
 import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
 import { isNonEmptyString, isRecord, isUserProfileShape } from "./validate.ts";
@@ -77,6 +78,37 @@ export function handleTaskSnooze(container: CliContainer, input: unknown) {
     return Promise.resolve(fail("validation", "id/until은 문자열이어야 합니다."));
   }
   return snoozeTask(container, input.id, input.until);
+}
+
+export function handleTaskUpdate(container: CliContainer, input: unknown) {
+  if (
+    !isRecord(input)
+    || !isNonEmptyString(input.id)
+    || typeof input.title !== "string"
+    || typeof input.date !== "string"
+    || typeof input.time !== "string"
+    || (input.endTime !== undefined && typeof input.endTime !== "string")
+    || (input.location !== undefined && typeof input.location !== "string")
+  ) {
+    return Promise.resolve(
+      fail("validation", "id/title/date/time은 문자열이어야 하고, 나머지 필드는 형식이 맞아야 합니다."),
+    );
+  }
+  const update: ScheduleItemUpdateInput = {
+    title: input.title,
+    date: input.date,
+    time: input.time,
+    endTime: input.endTime,
+    location: input.location,
+  };
+  return updateScheduleItem(container, input.id, update);
+}
+
+export function handleTaskDelete(container: CliContainer, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.id)) {
+    return Promise.resolve(fail("validation", "id는 문자열이어야 합니다."));
+  }
+  return deleteScheduleItem(container, input.id);
 }
 
 export function handleSyncRun(container: CliContainer) {
