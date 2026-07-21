@@ -11,7 +11,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
     "deleteTask", "setReminderOffset", "listSources", "registerSource",
-    "removeSource", "sync",
+    "removeSource", "getProfile", "saveProfile", "sync",
   ].map((method) => [method, (...args: unknown[]) => {
     calls.push({ method, args });
     return Promise.resolve(result);
@@ -33,6 +33,9 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.sourceList();
   await api.sourceRegister("school-site", "https://school.example/notices");
   await api.sourceRemove("school-site");
+  const profile = { school: "KAIST", major: "CS", year: "3", interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [] };
+  await api.profileGet();
+  await api.profileSave(profile);
   await api.sync();
 
   assert.deepEqual(calls, [
@@ -50,6 +53,8 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "listSources", args: [] },
     { method: "registerSource", args: ["school-site", "https://school.example/notices"] },
     { method: "removeSource", args: ["school-site"] },
+    { method: "getProfile", args: [] },
+    { method: "saveProfile", args: [profile] },
     { method: "sync", args: [] },
   ]);
 });

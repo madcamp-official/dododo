@@ -13,6 +13,8 @@ const API_METHODS = {
   sourceList: "listSources",
   sourceRegister: "registerSource",
   sourceRemove: "removeSource",
+  profileGet: "getProfile",
+  profileSave: "saveProfile",
   sync: "sync",
 };
 
@@ -46,6 +48,8 @@ export function createDesktopApi(bridgeOrProvider) {
     sourceList: () => invoke("sourceList"),
     sourceRegister: (type, value) => invoke("sourceRegister", type, value),
     sourceRemove: (id) => invoke("sourceRemove", id),
+    profileGet: () => invoke("profileGet"),
+    profileSave: (profile) => invoke("profileSave", profile),
     sync: () => invoke("sync"),
   };
 }
