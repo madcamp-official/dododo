@@ -60,12 +60,12 @@
 
 ## 4. 남은 병목 (성능·확장 관점)
 
-LLM 런타임 연결(`OllamaProvider`/`RemoteJobLLMProvider` 주입), Context SQLite 영속화, LLM 실패와
-"결과 없음"의 구분(`extractWithStatus`/`RetryAwareFactExtractor`)은 모두 완료되었다. 남은 것:
+LLM 런타임 연결(`OllamaProvider`/`RemoteJobLLMProvider` 주입), Context SQLite 영속화, 사용자 프로필
+SQLite 영속화(`SQLiteProfileRepository`, `apps/cli/src/runtime/container.ts`에서 SQLite 모드일 때 배선됨),
+LLM 실패와 "결과 없음"의 구분(`extractWithStatus`/`RetryAwareFactExtractor`)은 모두 완료되었다. 남은 것:
 
 1. **`watch`가 단순 반복문**이라 재시도·Backoff·Dead Letter가 없다 — 아래 §5의 Job Queue 도입 전제. (CLI + 공동)
 2. **`today`/`inbox`/`watch`가 항목마다 LLM 문장 생성을 순차 호출**한다(`RuleBasedRecommendationEngine.recommend`). 항목 수만큼 직렬 대기 시간이 늘어난다 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화가 필요하다. (Intelligence)
-3. **사용자 프로필이 영속화되지 않는다** — `InMemoryProfileRepository`만 있어 `setup`으로 저장한 프로필이 프로세스 종료와 함께 사라지고, `today`/`inbox`/`watch`는 항상 빈 프로필로 관련도를 계산한다. SQLite `ProfileRepository`가 필요하다. (Storage + Intelligence 공유 계약)
 
 ## 5. 확장 구조: 이벤트 기반 비동기 작업 파이프라인
 
@@ -121,12 +121,12 @@ Collectors → RawItem Store → Job Queue
 
 ## 10. 권장 구현 순서
 
-CLI 연결과 Context SQLite 영속화는 완료되었다. 남은 순서:
+CLI 연결, Context SQLite 영속화, 사용자 프로필 SQLite 영속화, `InterimContextStore` 제거는 완료되었다.
+남은 순서:
 
-1. **`InterimContextStore` 제거** (Intelligence): `ContextRepository`가 이미 Evidence·History·Recommendation을 저장하므로 더 이상 쓰이지 않는다(tests/smoke.test.ts의 자체 테스트만 참조).
-2. **지속성 Job Queue** (공동): `watch`에서 Job 조회·실행, 재시도·Backoff·Lease·Dead Letter, Heavy/Fast 분리, Source별 격리.
-3. **LLM 활용 확대** (Intelligence): 2단계 추출, 실제 Vision, Embedding 후보 검색, 애매한 병합 검토, `ask` RAG.
-4. **능동적 백그라운드 비서**: 아침 일일 계획, 마감 변경 알림, 준비 지연 Opportunity 감지, 활동-Task 연결, 집중 모드·피드백 기반 침묵, 야간 저우선 재분석.
+1. **지속성 Job Queue** (공동): `watch`에서 Job 조회·실행, 재시도·Backoff·Lease·Dead Letter, Heavy/Fast 분리, Source별 격리.
+2. **LLM 활용 확대** (Intelligence): 2단계 추출, 실제 Vision, Embedding 후보 검색, 애매한 병합 검토, `ask` RAG.
+3. **능동적 백그라운드 비서**: 아침 일일 계획, 마감 변경 알림, 준비 지연 Opportunity 감지, 활동-Task 연결, 집중 모드·피드백 기반 침묵, 야간 저우선 재분석.
 
 가장 현실적인 다음 목표는 "더 자율적인 에이전트"가 아니라 아래 흐름의 완성이다.
 

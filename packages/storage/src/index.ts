@@ -166,4 +166,3 @@ function isStructurallyEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-// TODO(Data & Storage): 같은 ContextRepository 계약을 구현하는 SQLiteRepository를 추가한다.
