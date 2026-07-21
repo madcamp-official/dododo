@@ -173,11 +173,41 @@ test("parseScheduleIntent는 '부터~까지' 범위를 endAt으로 채운다", (
   assert.match(result.clarifyingQuestion, /14:00~16:00/);
 });
 
+test("parseScheduleIntent는 '까지' 없이 '~'만 쓴 범위와 콜론(HH:MM) 범위도 endAt으로 채운다", () => {
+  // "까지"를 필수로 두면 이 두 흔한 표현이 조용히 시작 시각만으로 축소된다
+  // (PR #49 리뷰, doyeonid 지적 — "일반적인 시간 범위 입력의 종료 시각을 조용히 버립니다").
+  const tilde = parseScheduleIntent("내일 오후 2시~4시 스터디", NOW);
+  assert.equal(tilde.kind, "event_draft");
+  if (tilde.kind === "event_draft") {
+    assert.equal(tilde.startAt, "2026-07-19T14:00:00+09:00");
+    assert.equal(tilde.endAt, "2026-07-19T16:00:00+09:00");
+  }
+
+  const colon = parseScheduleIntent("내일 14:00~16:00 회의", NOW);
+  assert.equal(colon.kind, "event_draft");
+  if (colon.kind === "event_draft") {
+    assert.equal(colon.startAt, "2026-07-19T14:00:00+09:00");
+    assert.equal(colon.endAt, "2026-07-19T16:00:00+09:00");
+  }
+
+  const noKkaji = parseScheduleIntent("내일 2시부터 4시 스터디", NOW);
+  assert.equal(noKkaji.kind, "event_draft");
+  if (noKkaji.kind === "event_draft") {
+    assert.equal(noKkaji.startAt, "2026-07-19T02:00:00+09:00");
+    assert.equal(noKkaji.endAt, "2026-07-19T04:00:00+09:00");
+  }
+});
+
 test("parseScheduleIntent는 끝이 시작보다 빠른 범위를 무효로 보고 시작 시각만으로 축소하지 않는다", () => {
   // 사용자가 명시한 "2시까지"를 조용히 버리고 시작 시각(4시)만 쓰는 event_draft를
   // 만들면 안 된다 — 해석할 수 없는 범위는 unrecognized로 거부한다(PR #49 리뷰).
   const result = parseScheduleIntent("내일 오후 4시부터 2시까지 스터디", NOW);
   assert.equal(result.kind, "unrecognized");
+
+  // "까지" 없는 형태와 콜론 형태에도 같은 무효 판정이 적용돼야 한다 — 형식만 새로
+  // 지원하고 검증은 빼먹으면 새 경로에서 같은 버그가 재발한다.
+  assert.equal(parseScheduleIntent("내일 오후 4시~2시 스터디", NOW).kind, "unrecognized");
+  assert.equal(parseScheduleIntent("내일 16:00~14:00 스터디", NOW).kind, "unrecognized");
 });
 
 test("parseScheduleIntent는 날짜 표현이 없어도 명시적 시각이 있으면 오늘로 보되, 이미 지난 시각이면 확인을 받는다", () => {

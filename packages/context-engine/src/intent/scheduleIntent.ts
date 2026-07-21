@@ -294,12 +294,17 @@ function interpretExplicitTime(groups: ExplicitTimeGroups): { hour: number; minu
   return { hour, minute };
 }
 
-// "오후 2시부터 4시까지"처럼 시작·끝 시각을 함께 표현하면 endAt까지 채운다. 끝 시각에
-// 별도 오전/오후 표기가 없으면(흔한 구어체) 시작 시각의 시간대를 그대로 물려받는다 —
-// "오후 2시부터 4시까지"의 4시가 새벽 4시일 리는 없기 때문이다. 자정을 넘기는 범위
-// (예: "밤 11시부터 새벽 1시까지")는 지원하지 않고 unrecognized로 떨어뜨린다.
+// "오후 2시부터 4시까지"처럼 시작·끝 시각을 함께 표현하면 endAt까지 채운다.
+// 시작·끝 각각 한국어(N시, 오전/오후 N시, N시 반, N시 M분) 또는 콜론(HH:MM) 형식을
+// 허용하고, 구분자는 "부터" 또는 "~"이며 "까지"는 있어도 없어도 된다 — "까지"를
+// 필수로 두면 "오후 2시~4시", "14:00~16:00"처럼 흔한 표현이 범위로 인식되지 않고
+// 조용히 시작 시각만으로 축소된다(PR #49 리뷰, doyeonid 지적: "일반적인 시간 범위
+// 입력의 종료 시각을 조용히 버립니다"). 자정을 넘기는 범위(예: "밤 11시부터
+// 새벽 1시까지")는 지원하지 않고 unrecognized로 떨어뜨린다.
+const TIME_TOKEN_SOURCE =
+  String.raw`(?:오전|오후|아침|저녁|밤|낮)?\s*(?:\d{1,2}\s*시(?:\s*\d{1,2}\s*분|\s*반)?|\d{1,2}:\d{2})`;
 const TIME_RANGE = new RegExp(
-  `${EXPLICIT_TIME.source}\\s*(?:부터|~)\\s*${EXPLICIT_TIME.source}\\s*까지`,
+  `(${TIME_TOKEN_SOURCE})\\s*(?:부터|~)\\s*(${TIME_TOKEN_SOURCE})\\s*(?:까지)?`,
 );
 
 // "범위 표현이 아예 없음"(none)과 "범위 표현은 있었지만 해석할 수 없음"(invalid)을
@@ -315,19 +320,21 @@ function resolveTimeRange(utterance: string): TimeRangeResolution {
   const match = TIME_RANGE.exec(utterance);
   if (match === null) return { kind: "none" };
 
-  const start = interpretExplicitTime({
-    meridiem: match[1],
-    hourText: match[2]!,
-    minuteText: match[3],
-    half: match[4] !== undefined,
-  });
-  // 끝 시각에 별도 오전/오후 표기가 없으면 시작 시각의 시간대를 물려받는다(주석 참고).
-  const end = interpretExplicitTime({
-    meridiem: match[5] ?? match[1],
-    hourText: match[6]!,
-    minuteText: match[7],
-    half: match[8] !== undefined,
-  });
+  const startText = match[1]!;
+  let endText = match[2]!;
+
+  // 끝 시각에 별도 오전/오후 표기가 없고 콜론 형식(이미 24시간제라 모호하지 않음)도
+  // 아니면 시작 시각의 시간대를 물려받는다 — "오후 2시~4시"의 4시가 새벽 4시일 리는
+  // 없기 때문이다.
+  const startMeridiem = /^(오전|오후|아침|저녁|밤|낮)/.exec(startText)?.[1];
+  const endHasOwnMeridiem = /^(오전|오후|아침|저녁|밤|낮)/.test(endText);
+  const endIsColon = endText.includes(":");
+  if (startMeridiem !== undefined && !endHasOwnMeridiem && !endIsColon) {
+    endText = `${startMeridiem} ${endText}`;
+  }
+
+  const start = parseTimeToken(startText);
+  const end = parseTimeToken(endText);
   if (start === undefined || end === undefined) return { kind: "invalid" };
 
   const startMinutes = start.hour * 60 + start.minute;
@@ -338,6 +345,23 @@ function resolveTimeRange(utterance: string): TimeRangeResolution {
   if (endMinutes <= startMinutes) return { kind: "invalid" };
 
   return { kind: "valid", start: { ...start, ambiguous: false }, end: { ...end, ambiguous: false } };
+}
+
+function parseTimeToken(text: string): { hour: number; minute: number } | undefined {
+  const colon = /(\d{1,2}):(\d{2})/.exec(text);
+  if (colon !== null) {
+    const hour = Number(colon[1]);
+    const minute = Number(colon[2]);
+    return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? { hour, minute } : undefined;
+  }
+  const explicit = EXPLICIT_TIME.exec(text);
+  if (explicit === null) return undefined;
+  return interpretExplicitTime({
+    meridiem: explicit[1],
+    hourText: explicit[2]!,
+    minuteText: explicit[3],
+    half: explicit[4] !== undefined,
+  });
 }
 
 // 날짜·시각·범위·반복 표현과 흔한 어미를 걷어낸 나머지를 제목으로 쓴다.
