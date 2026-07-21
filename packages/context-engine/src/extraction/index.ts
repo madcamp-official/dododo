@@ -213,14 +213,27 @@ export function structuredDueAt(rawItem: RawItem): string | undefined {
   return isIsoDateTime(value) ? value : undefined;
 }
 
-// JSON Schema의 format: "date-time"과 같은 기준(RFC 3339)으로 본다. Date.parse만으로는
-// "2026-07-23"이나 "Jul 23 2026" 같은 값도 통과해, 시각 없는 날짜가 마감 시각으로
-// 둔갑한다.
+// JSON Schema의 format: "date-time"과 같은 기준(RFC 3339)으로 본다. 세 단계가 모두 필요하다.
+// 1. 형태: Date.parse는 "2026-07-23"(시각 없음)이나 "Jul 23 2026"도 받아들여서, 시각 없는
+//    날짜가 마감 시각으로 둔갑한다. 오프셋 없는 값은 실행 환경 타임존에 따라 달라진다.
+// 2. Date.parse: 범위를 벗어난 월·시·분·오프셋(13월, 25시, +99:00)을 여기서 걸러낸다.
+// 3. 왕복 비교: Date.parse는 "일"만은 조용히 다음 달로 굴린다 — 2026-02-30은 NaN이 아니라
+//    3월 2일로 파싱돼 존재하지 않는 마감이 저장된다(김도연님 리뷰 P1). 파싱 결과의 연·월·일이
+//    입력과 같은지 확인해야 달력에 없는 날짜를 잡을 수 있다.
+const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})$/;
+
 function isIsoDateTime(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})$/.test(value)) {
-    return false;
-  }
-  return !Number.isNaN(Date.parse(value));
+  const match = ISO_DATE_TIME.exec(value);
+  if (match === null) return false;
+  if (Number.isNaN(Date.parse(value))) return false;
+
+  const [, year, month, day] = match;
+  // 오프셋이 붙은 값은 파싱하면 다른 날짜(UTC 기준)가 될 수 있으므로, 파싱된 시각이 아니라
+  // 입력의 날짜 구성요소만 떼어 UTC 자정으로 다시 만들어 비교한다.
+  const roundTrip = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return roundTrip.getUTCFullYear() === Number(year)
+    && roundTrip.getUTCMonth() === Number(month) - 1
+    && roundTrip.getUTCDate() === Number(day);
 }
 
 function stringMetadata(value: unknown): string | undefined {

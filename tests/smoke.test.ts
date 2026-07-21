@@ -1132,7 +1132,15 @@ function taskFactProvider(eventTime: string): LLMProvider {
 
 test("LLMFactExtractor는 ISO date-time이 아닌 metadata.dueAt을 무시하고 LLM 값으로 폴백한다", async () => {
   const llmEventTime = "2026-07-21T18:00:00+09:00";
-  const invalidValues = ["tomorrow", "invalid", "2026-07-23", "2026-07-23T18:00:00", 20260723, null];
+  const invalidValues = [
+    "tomorrow", "invalid", 20260723, null,
+    "2026-07-23",             // 시각 없음
+    "2026-07-23T18:00:00",    // 오프셋 없음 — 실행 환경 타임존에 따라 달라진다
+    "2026-13-01T18:00:00+09:00", "2026-07-23T25:00:00+09:00", // 범위 초과
+    // Date.parse가 조용히 다음 달로 굴리는 값들(김도연님 리뷰 P1).
+    // 2026-02-30 → 3월 2일, 2026-02-29(평년) → 3월 1일, 2026-04-31 → 5월 1일.
+    "2026-02-30T18:00:00+09:00", "2026-02-29T18:00:00+09:00", "2026-04-31T18:00:00+09:00",
+  ];
 
   for (const dueAt of invalidValues) {
     const facts = await new LLMFactExtractor(taskFactProvider(llmEventTime))
@@ -1142,6 +1150,21 @@ test("LLMFactExtractor는 ISO date-time이 아닌 metadata.dueAt을 무시하고
       llmEventTime,
       `유효하지 않은 dueAt(${JSON.stringify(dueAt)})은 마감으로 쓰이면 안 된다`,
     );
+  }
+});
+
+test("LLMFactExtractor는 윤년의 2월 29일 같은 실제 날짜는 dueAt으로 받아들인다", async () => {
+  const validValues = [
+    "2024-02-29T18:00:00+09:00", // 윤년
+    "2026-12-31T23:59:59+09:00",
+    "2026-07-23T09:00:00Z",
+    "2026-07-23T09:00:00.500Z",
+  ];
+
+  for (const dueAt of validValues) {
+    const facts = await new LLMFactExtractor(taskFactProvider("2026-07-21T18:00:00+09:00"))
+      .extract(lmsRawItemWithDueAt(dueAt));
+    assert.equal(facts[0]?.eventTime, dueAt, `유효한 dueAt(${dueAt})은 그대로 쓰여야 한다`);
   }
 });
 
