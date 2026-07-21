@@ -210,6 +210,22 @@ test("parseScheduleIntent는 끝이 시작보다 빠른 범위를 무효로 보�
   assert.equal(parseScheduleIntent("내일 16:00~14:00 스터디", NOW).kind, "unrecognized");
 });
 
+test("parseScheduleIntent는 '새벽'을 시간대 단어로 인식해 자정을 넘는 범위를 거부한다", () => {
+  // "새벽"이 메리디엠 목록에 없으면 TIME_RANGE 자체가 매치되지 않아 "범위 없음"으로
+  // 오판되고, resolveTime()이 "밤 11시"만 골라 23:00 단일 일정으로(제목도 "새벽
+  // 1시까지 통화"로 깨진 채) 저장 확인이 떠 버렸다(PR #49 리뷰, dotori235 지적).
+  const overnight = parseScheduleIntent("밤 11시부터 새벽 1시까지 통화", NOW);
+  assert.equal(overnight.kind, "unrecognized");
+
+  // 범위가 아닌 단일 시각으로 쓰일 때도 "새벽"이 시각으로 인식돼야 하고(0~5시대는
+  // 오전/오후 변환이 필요 없다), 제목에서도 깨끗이 걷어내져야 한다.
+  const single = parseScheduleIntent("모레 새벽 4시에 상담", NOW);
+  assert.equal(single.kind, "event_draft");
+  if (single.kind !== "event_draft") return;
+  assert.equal(single.startAt, "2026-07-20T04:00:00+09:00");
+  assert.equal(single.title, "상담");
+});
+
 test("parseScheduleIntent는 날짜 표현이 없어도 명시적 시각이 있으면 오늘로 보되, 이미 지난 시각이면 확인을 받는다", () => {
   const result = parseScheduleIntent("카페에서 3시에 민수랑 미팅", NOW);
   assert.equal(result.kind, "event_draft");

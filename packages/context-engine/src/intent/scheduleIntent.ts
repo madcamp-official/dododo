@@ -261,6 +261,7 @@ function resolveTime(utterance: string): ResolvedTime | undefined {
   if (/저녁/.test(utterance)) return { hour: 19, minute: 0, ambiguous: true };
   if (/점심|정오/.test(utterance)) return { hour: 12, minute: 0, ambiguous: true };
   if (/아침/.test(utterance)) return { hour: 9, minute: 0, ambiguous: true };
+  if (/새벽/.test(utterance)) return { hour: 5, minute: 0, ambiguous: true };
   if (/오후/.test(utterance)) return { hour: 15, minute: 0, ambiguous: true };
   if (/오전/.test(utterance)) return { hour: 10, minute: 0, ambiguous: true };
   if (/밤/.test(utterance)) return { hour: 21, minute: 0, ambiguous: true };
@@ -269,8 +270,17 @@ function resolveTime(utterance: string): ResolvedTime | undefined {
   return { hour: 9, minute: 0, ambiguous: true };
 }
 
+// 시간대 단어를 여기 한 곳에서만 정의한다. EXPLICIT_TIME·TIME_TOKEN_SOURCE·
+// resolveTimeRange의 시간대 상속 판정·extractTitle이 전부 이 상수를 공유한다 —
+// 예전에는 이 목록이 4곳에 따로 하드코딩돼 있었고, 그중 EXPLICIT_TIME/TIME_TOKEN_SOURCE
+// 두 곳에만 "새벽"이 빠져 있어서 "밤 11시부터 새벽 1시까지"가 범위로 전혀 인식되지
+// 않고(TIME_RANGE 매치 자체가 실패해 "범위 없음"으로 오판) 자정 넘는 범위 거부 로직을
+// 아예 타지 못하는 버그가 있었다(PR #49 리뷰, dotori235 지적). 하나로 합쳐서 같은
+// 종류의 누락이 다시 생기지 않게 한다.
+const MERIDIEM_SOURCE = "오전|오후|아침|새벽|저녁|밤|낮";
+
 // meridiem, hour, minuteDigits, half("반") 네 그룹.
-const EXPLICIT_TIME = /(오전|오후|아침|저녁|밤|낮)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분|\s*(반))?/;
+const EXPLICIT_TIME = new RegExp(`(${MERIDIEM_SOURCE})?\\s*(\\d{1,2})\\s*시(?:\\s*(\\d{1,2})\\s*분|\\s*(반))?`);
 
 interface ExplicitTimeGroups {
   meridiem: string | undefined;
@@ -302,7 +312,7 @@ function interpretExplicitTime(groups: ExplicitTimeGroups): { hour: number; minu
 // 입력의 종료 시각을 조용히 버립니다"). 자정을 넘기는 범위(예: "밤 11시부터
 // 새벽 1시까지")는 지원하지 않고 unrecognized로 떨어뜨린다.
 const TIME_TOKEN_SOURCE =
-  String.raw`(?:오전|오후|아침|저녁|밤|낮)?\s*(?:\d{1,2}\s*시(?:\s*\d{1,2}\s*분|\s*반)?|\d{1,2}:\d{2})`;
+  `(?:${MERIDIEM_SOURCE})?\\s*(?:\\d{1,2}\\s*시(?:\\s*\\d{1,2}\\s*분|\\s*반)?|\\d{1,2}:\\d{2})`;
 const TIME_RANGE = new RegExp(
   `(${TIME_TOKEN_SOURCE})\\s*(?:부터|~)\\s*(${TIME_TOKEN_SOURCE})\\s*(?:까지)?`,
 );
@@ -326,8 +336,8 @@ function resolveTimeRange(utterance: string): TimeRangeResolution {
   // 끝 시각에 별도 오전/오후 표기가 없고 콜론 형식(이미 24시간제라 모호하지 않음)도
   // 아니면 시작 시각의 시간대를 물려받는다 — "오후 2시~4시"의 4시가 새벽 4시일 리는
   // 없기 때문이다.
-  const startMeridiem = /^(오전|오후|아침|저녁|밤|낮)/.exec(startText)?.[1];
-  const endHasOwnMeridiem = /^(오전|오후|아침|저녁|밤|낮)/.test(endText);
+  const startMeridiem = new RegExp(`^(${MERIDIEM_SOURCE})`).exec(startText)?.[1];
+  const endHasOwnMeridiem = new RegExp(`^(${MERIDIEM_SOURCE})`).test(endText);
   const endIsColon = endText.includes(":");
   if (startMeridiem !== undefined && !endHasOwnMeridiem && !endIsColon) {
     endText = `${startMeridiem} ${endText}`;
@@ -384,7 +394,7 @@ function extractTitle(utterance: string): string {
     .replace(/\d{1,2}:\d{2}/g, " ")
     // 시간대 표현이 조사 "에"와 함께 오면(날짜를 수식하는 부사구) 제거한다. "저녁 약속"처럼
     // 조사 없이 명사를 수식하는 경우는 제목의 일부이므로 남긴다.
-    .replace(/(오전|오후|아침|점심|저녁|밤|낮|정오)\s*에/g, " ")
+    .replace(new RegExp(`(${MERIDIEM_SOURCE}|점심|정오)\\s*에`, "g"), " ")
     // 위 패턴들을 제거하고 나면 "3시에 치과 예약"의 "에"처럼 문장 중간에 조사만 홀로
     // 남는 경우가 있다. 공백으로 둘러싸인 단독 "에/에는/까지/부터"는 남은 조사로 보고
     // 제거한다(제목 중간에 "카페" 같은 단어의 일부로 걸리지 않도록 경계를 둔다).
