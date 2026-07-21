@@ -218,17 +218,17 @@ Gateway VM의 `/opt/dododo`에서 사용자마다 코드를 하나씩 발급한�
 cd /opt/dododo
 
 # 사용자별 코드 발급·등록
-sudo GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
   npm run gateway:activation-code -- issue \
   --label "홍길동 MacBook" \
   --expires-days 7
 
 # 발급 상태 확인(원문은 표시하지 않음)
-sudo GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
   npm run gateway:activation-code -- list
 
 # 아직 사용하지 않은 코드 취소
-sudo GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
   npm run gateway:activation-code -- revoke --id ac_발급된_ID
 ```
 
