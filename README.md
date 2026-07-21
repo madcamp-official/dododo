@@ -15,9 +15,9 @@
 
 | 이름 | GitHub | 역할 |
 |---|---|---|
-| 김도연(팀장) | [doyeonid](https://github.com/doyeonid) | Data Ingestion & Local Storage |
-| 김도현 | [GitHub ID](https://github.com/) | Context Intelligence & Recommendation |
-| 박도현 | [dotori235](https://github.com/dotori235) | Runtime & CLI |
+| 김도연(팀장) | [doyeonid](https://github.com/doyeonid) | 프론트엔드(Desktop UI) — Renderer |
+| 김도현 | [KimDoDohyeon](https://github.com/KimDoDohyeon) | 백엔드 전체(Runtime & CLI, Data Ingestion & Storage, Context Intelligence & Recommendation) |
+| 박도현 | [dotori235](https://github.com/dotori235) | 프론트엔드(Desktop UI) — Electron Main |
 
 역할별 담당 경로와 책임 상세는 [`AGENTS.md`](AGENTS.md#팀-역할과-소유권)와
 [MVP 범위의 3인 분업](docs/mvp-scope.md#9-3인-분업-상세)을 따른다.
