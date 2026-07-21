@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
   handleAddSubmit,
   handleAsk,
+  handleProfileSave,
   handleTaskComplete,
   handleTaskDetail,
   handleTaskSnooze,
+  handleUiStateGet,
+  handleUiStateSet,
 } from "../apps/desktop/src/main/ipc/handlers.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
@@ -85,4 +91,57 @@ test("handleTaskSnooze는 잘못된 id 또는 until을 거절한다", async () =
 
   const ok = await handleTaskSnooze(container, { id: taskId, until: "2026-07-25T00:00:00+09:00" });
   assert.equal(ok.ok, true);
+});
+
+const validProfile = {
+  school: "테스트대", major: "컴퓨터공학", year: "3",
+  interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [],
+};
+
+test("handleProfileSave는 null/필수 필드 누락/잘못된 타입 payload를 모두 validation으로 거절한다", async () => {
+  const { container } = await seededContainer();
+
+  assertValidationFailure(await handleProfileSave(container, null));
+  assertValidationFailure(await handleProfileSave(container, {}));
+  assertValidationFailure(await handleProfileSave(container, { ...validProfile, school: 1 }));
+  assertValidationFailure(await handleProfileSave(container, { ...validProfile, interests: "AI" }));
+});
+
+test("handleProfileSave는 올바른 payload는 정상 처리한다", async () => {
+  const { container } = await seededContainer();
+
+  const result = await handleProfileSave(container, validProfile);
+
+  assert.equal(result.ok, true);
+});
+
+test("handleUiStateGet/handleUiStateSet은 잘못된 payload를 validation으로 거절한다", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dododo-ui-state-handlers-"));
+  const filePath = join(dir, "ui-state.json");
+  try {
+    assertValidationFailure(await handleUiStateGet(filePath, undefined));
+    assertValidationFailure(await handleUiStateGet(filePath, {}));
+    assertValidationFailure(await handleUiStateGet(filePath, { key: 1 }));
+
+    assertValidationFailure(await handleUiStateSet(filePath, undefined));
+    assertValidationFailure(await handleUiStateSet(filePath, { key: "lastGreetingDate" })); // value 누락
+    assertValidationFailure(await handleUiStateSet(filePath, { key: "" , value: 1 }));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("handleUiStateGet/handleUiStateSet은 올바른 payload로 값을 왕복 저장한다", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dododo-ui-state-handlers-"));
+  const filePath = join(dir, "ui-state.json");
+  try {
+    const setResult = await handleUiStateSet(filePath, { key: "lastGreetingDate", value: "2026-07-21" });
+    assert.equal(setResult.ok, true);
+
+    const getResult = await handleUiStateGet(filePath, { key: "lastGreetingDate" });
+    assert.equal(getResult.ok, true);
+    if (getResult.ok) assert.equal(getResult.data, "2026-07-21");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

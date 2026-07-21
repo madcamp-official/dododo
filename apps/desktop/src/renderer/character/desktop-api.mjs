@@ -1,65 +1,60 @@
-const mockItems = [
-  {
-    id: "mock-task-os-report",
-    kind: "task",
-    title: "운영체제 과제 3",
-    status: "todo",
-    deadline: "2026-07-22T18:00:00+09:00",
-  },
-  {
-    id: "mock-event-team-meeting",
-    kind: "event",
-    title: "팀 회의",
-    status: "confirmed",
-    startAt: "2026-07-21T15:00:00+09:00",
-  },
-];
-
-const mockOpportunity = {
-  id: "mock-opportunity-ai-hackathon",
-  kind: "opportunity",
-  title: "대학생 AI 해커톤",
-  status: "new",
-  deadline: "2026-07-25T18:00:00+09:00",
+const API_METHODS = {
+  today: "getToday",
+  calendar: "getCalendar",
+  inbox: "getInbox",
+  ask: "ask",
+  add: "addSubmit",
+  detail: "getTaskDetail",
+  complete: "completeTask",
+  snooze: "snoozeTask",
+  sync: "sync",
 };
 
-// Main/Preload 공동 IPC 계약이 연결되기 전 Renderer 개발용 어댑터다. UI에서는 이 객체만
-// 호출하므로 실제 window.desktopApi가 준비되면 구현을 교체하고 화면 코드는 유지한다.
-export const desktopApi = {
-  async today() {
-    return ok({
-      items: mockItems.map((item, index) => ({
-        item,
-        score: index === 0 ? 82 : 55,
-        reason: index === 0 ? "내일 마감" : "오늘 예정된 일정",
-      })),
-    });
-  },
-  async calendar() {
-    return ok({
-      items: mockItems.map((item) => ({ item, at: item.startAt ?? item.deadline })),
-    });
-  },
-  async inbox() {
-    return ok({
-      items: [{
-        item: mockOpportunity,
-        score: 70,
-        reason: "AI 관심 분야와 관련된 새로운 공지예요.",
-      }],
-    });
-  },
-  async ask(question) {
-    return ok({
-      answer: `“${question}”에 대한 답변은 실제 IPC 연결 후 로컬 Context에서 찾습니다.`,
-      evidenceIds: [],
-      evidence: [],
-    });
-  },
-  async sync() {
-    return ok({ collected: 3, created: 1 });
-  },
-};
+// Renderer는 preload가 노출한 API만 사용한다. 팩토리를 따로 export해 테스트에서는
+// Electron 없이 같은 호출 매핑과 인자 전달을 검증할 수 있게 한다.
+export function createDesktopApi(bridgeOrProvider) {
+  const resolveBridge = typeof bridgeOrProvider === "function"
+    ? bridgeOrProvider
+    : () => bridgeOrProvider;
+  const invoke = (name, ...args) => {
+    const bridge = resolveBridge();
+    const method = bridge?.[API_METHODS[name]];
+    if (typeof method !== "function") {
+      throw new Error("Desktop API를 사용할 수 없습니다. 앱을 다시 실행해주세요.");
+    }
+    return method(...args);
+  };
+
+  return {
+    today: () => invoke("today"),
+    calendar: () => invoke("calendar"),
+    inbox: () => invoke("inbox"),
+    ask: (question) => invoke("ask", question),
+    add: (input) => invoke("add", input),
+    detail: (id) => invoke("detail", id),
+    complete: (id) => invoke("complete", id),
+    snooze: (id, until) => invoke("snooze", id, until),
+    sync: () => invoke("sync"),
+  };
+}
+
+// preload가 Renderer 모듈보다 늦게 준비되는 경우에도 호출 시점의 bridge를 사용한다.
+export const desktopApi = createDesktopApi(() => globalThis.window?.desktopApi);
+
+export function createExclusiveActionRunner() {
+  let isRunning = false;
+
+  return async (action) => {
+    if (isRunning) return false;
+    isRunning = true;
+    try {
+      await action();
+      return true;
+    } finally {
+      isRunning = false;
+    }
+  };
+}
 
 export function unwrapResult(result) {
   if (result?.ok === true) return result.data;
@@ -89,6 +84,8 @@ export function statusLabel(status) {
   return ({ todo: "할 일", confirmed: "예정", preparing: "준비 중", done: "완료" })[status] ?? "확인 필요";
 }
 
-function ok(data) {
-  return { ok: true, data };
+export function tomorrowAtSameTime(now = new Date()) {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.toISOString();
 }

@@ -1,8 +1,10 @@
 import {
+  createExclusiveActionRunner,
   desktopApi,
   formatDateTime,
   formatSyncSummary,
   statusLabel,
+  tomorrowAtSameTime,
   unwrapResult,
 } from "./desktop-api.mjs";
 
@@ -15,6 +17,9 @@ const panelContent = document.querySelector("[data-panel-content]");
 const alphaCanvas = document.createElement("canvas");
 const alphaContext = alphaCanvas.getContext("2d", { willReadFrequently: true });
 let isIgnoringMouse = true;
+let draggingPointerId;
+let currentListView = "today";
+const runExclusiveTaskAction = createExclusiveActionRunner();
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -49,6 +54,7 @@ function isOpaquePixel(clientX, clientY) {
 }
 
 function updateMousePassthrough(event) {
+  if (draggingPointerId !== undefined) return;
   const interactive = event.target instanceof Element
     && event.target.closest("[data-popup-menu], [data-panel], [data-menu-toggle]") !== null;
   const shouldIgnore = !interactive && !isOpaquePixel(event.clientX, event.clientY);
@@ -57,14 +63,58 @@ function updateMousePassthrough(event) {
   window.desktopMascot?.setMousePassthrough(shouldIgnore);
 }
 
+function startCharacterDrag(event) {
+  const clickedMenu = event.target instanceof Element
+    && event.target.closest("[data-menu-toggle]") !== null;
+  if (event.button !== 0 || clickedMenu) return;
+  const dragTarget = event.currentTarget;
+  if (!(dragTarget instanceof HTMLElement)) return;
+
+  draggingPointerId = event.pointerId;
+  isIgnoringMouse = false;
+  window.desktopMascot?.setMousePassthrough(false);
+  window.desktopMascot?.startDrag(event.screenX, event.screenY);
+  dragTarget.setPointerCapture(event.pointerId);
+  dragTarget.classList.add("is-dragging");
+  event.preventDefault();
+}
+
+function moveCharacterDrag(event) {
+  if (event.pointerId !== draggingPointerId) return;
+  window.desktopMascot?.moveDrag(event.screenX, event.screenY);
+}
+
+function endCharacterDrag(event) {
+  if (event.pointerId !== draggingPointerId) return;
+  draggingPointerId = undefined;
+  window.desktopMascot?.endDrag();
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.classList.remove("is-dragging");
+  }
+}
+
 if (character instanceof HTMLImageElement) {
   if (character.complete) prepareAlphaMask();
   else character.addEventListener("load", prepareAlphaMask, { once: true });
+  // Main과 Renderer가 각각 초기 mouse-ignore 상태를 쓰면 loadFile 완료 시점에 따라
+  // 실제 창 상태와 isIgnoringMouse가 어긋날 수 있다. Renderer를 단일 소유자로 두고
+  // 투명 여백을 먼저 click-through로 만든 뒤, mousemove로 캐릭터(불투명 픽셀)나
+  // 메뉴·패널 위에서 false로 전환한다. 그래야 pointerdown이 characterButton까지
+  // 도달해 startCharacterDrag가 실행된다(더 이상 CSS -webkit-app-region: drag가
+  // 아니라 Pointer Event 기반 드래그다 — Main.setPosition으로 창을 옮긴다).
+  window.desktopMascot?.setMousePassthrough(isIgnoringMouse);
   window.addEventListener("mousemove", updateMousePassthrough);
 }
 
+const characterButton = document.querySelector("[data-character]");
+characterButton?.addEventListener("pointerdown", startCharacterDrag);
+characterButton?.addEventListener("pointermove", moveCharacterDrag);
+characterButton?.addEventListener("pointerup", endCharacterDrag);
+characterButton?.addEventListener("pointercancel", endCharacterDrag);
+
 menuToggle?.addEventListener("click", () => {
-  popupMenu.hidden = !popupMenu.hidden;
+  const willOpen = popupMenu.hidden;
+  popupMenu.hidden = !willOpen;
   panel.hidden = true;
 });
 
@@ -78,22 +128,27 @@ popupMenu?.addEventListener("click", async (event) => {
   if (button.dataset.action === "sync") await runSync(button);
 });
 
-async function openView(view) {
+async function openView(view, { throwOnError = false } = {}) {
   popupMenu.hidden = true;
   panel.hidden = false;
   panelTitle.textContent = viewTitle(view);
   panelContent.innerHTML = '<div class="state-message">불러오는 중...</div>';
   try {
     if (view === "today") {
+      currentListView = view;
       renderRankedItems(unwrapResult(await desktopApi.today()).items, "오늘 확인할 일이 없습니다.");
     } else if (view === "calendar") {
+      currentListView = view;
       renderScheduledItems(unwrapResult(await desktopApi.calendar()).items);
     } else if (view === "inbox") {
+      currentListView = view;
       renderRecommendations(unwrapResult(await desktopApi.inbox()).items);
     }
     else if (view === "ask") renderAsk();
+    else if (view === "add") renderAdd();
     else renderSettings();
   } catch (error) {
+    if (throwOnError) throw error;
     renderError(error);
   }
 }
@@ -111,9 +166,7 @@ function renderRankedItems(entries, emptyMessage) {
       <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
-    });
+    button.addEventListener("click", () => openDetail(button.dataset.itemId));
   });
 }
 
@@ -130,9 +183,7 @@ function renderScheduledItems(entries) {
       <small>${escapeHtml(statusLabel(item.status))}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
-    });
+    button.addEventListener("click", () => openDetail(button.dataset.itemId));
   });
 }
 
@@ -174,9 +225,91 @@ function renderAsk() {
   });
 }
 
-function renderDetail(item) {
-  if (item === undefined) return;
+function renderAdd() {
+  panelContent.innerHTML = `
+    <form class="add-form" data-add-form>
+      <div class="form-field">
+        <label for="add-title">일정 내용</label>
+        <input id="add-title" name="title" type="text" placeholder="예: 도현님들과 저녁 약속" required />
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="add-date">날짜</label>
+          <input id="add-date" name="date" type="date" required />
+        </div>
+        <div class="form-field">
+          <label for="add-time">시작</label>
+          <input id="add-time" name="time" type="time" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="add-end-time">종료(선택)</label>
+          <input id="add-end-time" name="endTime" type="time" />
+        </div>
+        <div class="form-field">
+          <label for="add-location">장소(선택)</label>
+          <input id="add-location" name="location" type="text" placeholder="예: 궁칼국수" />
+        </div>
+      </div>
+      <button class="primary-button" type="submit">일정 추가</button>
+    </form>`;
+
+  panelContent.querySelector("[data-add-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector("button[type='submit']");
+    const data = new FormData(form);
+    const optional = (name) => data.get(name)?.toString().trim() || undefined;
+    const input = {
+      title: data.get("title")?.toString().trim() ?? "",
+      date: data.get("date")?.toString() ?? "",
+      time: data.get("time")?.toString() ?? "",
+      endTime: optional("endTime"),
+      location: optional("location"),
+    };
+
+    if (submit instanceof HTMLButtonElement) submit.disabled = true;
+    try {
+      unwrapResult(await desktopApi.add(input));
+      panelContent.innerHTML = '<div class="state-message success">일정을 추가했습니다.</div>';
+    } catch (error) {
+      renderError(error);
+    } finally {
+      if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
+    }
+  });
+}
+
+async function openDetail(id) {
+  if (id === undefined) return;
   panelTitle.textContent = "상세보기";
+  panelContent.innerHTML = '<div class="state-message">상세 정보를 불러오는 중...</div>';
+  try {
+    renderDetail(unwrapResult(await desktopApi.detail(id)));
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
+  const requirementsContent = item.requirements.length === 0
+    ? '<p class="evidence-note">등록된 요구사항이 없습니다.</p>'
+    : `<ul class="evidence-list">${item.requirements.map((requirement) => `
+        <li>${escapeHtml(requirement)}</li>`).join("")}</ul>`;
+  const evidenceContent = evidence.length === 0
+    ? '<p class="evidence-note">연결된 근거가 없습니다.</p>'
+    : `<ul class="evidence-list">${evidence.map((entry) => `
+        <li>
+          ${escapeHtml(entry.quote)}
+          <small>${escapeHtml(`${entry.sourceType} · ${entry.location}`)}</small>
+        </li>`).join("")}</ul>`;
+  const actionContent = item.kind === "task" && item.status !== "done"
+    ? `<div class="action-row">
+        <button class="primary-button" type="button" data-complete>완료</button>
+        <button class="secondary-button" type="button" data-snooze>내일 알림</button>
+      </div>`
+    : "";
   panelContent.innerHTML = `
     <article class="detail-card">
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
@@ -184,15 +317,51 @@ function renderDetail(item) {
       <dl>
         <div><dt>시간</dt><dd>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</dd></div>
         <div><dt>상태</dt><dd>${escapeHtml(statusLabel(item.status))}</dd></div>
+        ${isSnoozed ? `<div><dt>미룸</dt><dd>${escapeHtml(formatDateTime(snoozedUntil))}까지</dd></div>` : ""}
       </dl>
-      <p class="evidence-note">근거는 실제 IPC 연결 후 함께 표시됩니다.</p>
-      <div class="action-row">
-        <button class="primary-button" type="button" data-complete>완료</button>
-        <button class="secondary-button" type="button" data-snooze>내일 알림</button>
-      </div>
+      <h2>요구사항</h2>
+      ${requirementsContent}
+      <h2>근거</h2>
+      ${evidenceContent}
+      ${actionContent}
     </article>`;
-  panelContent.querySelector("[data-complete]")?.addEventListener("click", () => showPendingAction("완료 처리"));
-  panelContent.querySelector("[data-snooze]")?.addEventListener("click", () => showPendingAction("Snooze"));
+  panelContent.querySelector("[data-complete]")?.addEventListener("click", (event) => runTaskAction(
+    event.currentTarget,
+    () => desktopApi.complete(item.id),
+  ));
+  panelContent.querySelector("[data-snooze]")?.addEventListener("click", (event) => runTaskAction(
+    event.currentTarget,
+    () => desktopApi.snooze(item.id, tomorrowAtSameTime()),
+  ));
+}
+
+async function runTaskAction(button, action) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  await runExclusiveTaskAction(async () => {
+    const actionButtons = button.closest(".action-row")?.querySelectorAll("button") ?? [button];
+    for (const actionButton of actionButtons) actionButton.disabled = true;
+    try {
+      try {
+        unwrapResult(await action());
+      } catch (error) {
+        renderError(error);
+        return;
+      }
+      try {
+        await openView(currentListView, { throwOnError: true });
+      } catch (error) {
+        // openView가 실패하기 전에 이미 panelTitle을 목록 뷰 제목으로 바꿔놨다 —
+        // 이 안내는 목록이 아니라 처리 결과이므로 제목도 내용에 맞게 다시 맞춘다.
+        const detail = error instanceof Error ? error.message : "알 수 없는 오류";
+        panelTitle.textContent = "처리 완료";
+        renderError(new Error(`처리는 완료됐지만 목록 갱신에 실패했습니다. ${detail}`));
+      }
+    } finally {
+      for (const actionButton of actionButtons) {
+        if (actionButton.isConnected) actionButton.disabled = false;
+      }
+    }
+  });
 }
 
 function renderSettings() {
@@ -223,10 +392,6 @@ async function runSync(button) {
   }
 }
 
-function showPendingAction(name) {
-  panelContent.insertAdjacentHTML("beforeend", `<p class="hint">${escapeHtml(name)}는 Main IPC 연결 후 활성화됩니다.</p>`);
-}
-
 function renderError(error) {
   const message = error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.";
   panelContent.innerHTML = `<div class="state-message error">${escapeHtml(message)}</div>`;
@@ -237,7 +402,7 @@ function closePanel() {
 }
 
 function viewTitle(view) {
-  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", settings: "설정" })[view] ?? "DoDoDo";
+  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가", settings: "설정" })[view] ?? "DoDoDo";
 }
 
 function escapeHtml(value) {
