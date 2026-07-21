@@ -72,6 +72,11 @@ export async function updateScheduleItem(
       updated.startAt = combined;
       if (endAt === undefined) delete updated.endAt;
       else updated.endAt = endAt;
+      // 김도현 리뷰(PR #64): Task 쪽은 반대 필드(startAt/endAt)를 정리하는데 Event
+      // 쪽만 deadline을 안 건드리면 비대칭이다 — 지금은 Event가 deadline을 갖는
+      // 경로가 없어 버그는 아니지만, 나중에 실수로 채워지는 경로가 생겨도
+      // scheduledValue/deadlineUrgencyScore가 deadline을 그대로 읽지 않도록 미리 지운다.
+      delete updated.deadline;
     }
 
     await container.repository.saveContextItems([updated]);

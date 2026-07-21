@@ -274,6 +274,25 @@ type Result<T> =
   // kind !== "task"면 { ok: false, error: { code: "validation", ... } }
 "task:snooze" → (input: { id: string; until: string /* ISO */ }) => Promise<Result<void>>
   // until 파싱 실패 시 code: "validation"
+
+// 일정 조회·수정 탭(1.3)의 수정·삭제 — add:submit과 같은 이유로 자연어 파싱 없이
+// 폼이 채운 구조화된 값을 통째로 교체한다(부분 PATCH 아님). Renderer는 task:detail로
+// 값을 채운 폼을 다시 submit한다. update/delete도 complete/snooze와 같이 별도 push
+// 없이 성공 응답 후 재조회로 갱신한다.
+"task:update" → (input: {
+  id: string;
+  title: string;
+  date: string;          // YYYY-MM-DD
+  time: string;           // HH:mm — Task는 마감(deadline), Event는 시작(startAt)
+  endTime?: string;       // HH:mm — Event 전용. Task에 주면 code: "validation"
+  location?: string;      // metadata.location으로 저장(6.6)
+}) => Promise<Result<void>>
+  // kind가 task/event가 아니면 code: "validation"
+"task:delete" → (input: { id: string }) => Promise<Result<void>>
+  // ContextRepository에 delete 메서드가 없어(2.2) status를 "cancelled"로 바꾸는
+  // 소프트 삭제다 — 실제로 항목이 없어지지 않고 today/inbox/calendar에서만 제외된다
+  // (isExcludedContextStatus). Evidence는 그대로 보존된다.
+
 "task:setReminderOffset"  → (input: { id: string; offsetMinutes: number }) => Promise<Result<void>>
   // 아직 미구현(초안)
 
@@ -317,6 +336,8 @@ window.desktopApi.addSubmit(input)
 window.desktopApi.getTaskDetail(id)
 window.desktopApi.completeTask(id)
 window.desktopApi.snoozeTask(id, until)
+window.desktopApi.updateTask(id, input)   // #64, input: task:update의 title/date/time/endTime?/location?
+window.desktopApi.deleteTask(id)          // #64, 소프트 삭제(status: "cancelled")
 window.desktopApi.sync()
 window.desktopApi.getProfile()
 window.desktopApi.saveProfile(profile)

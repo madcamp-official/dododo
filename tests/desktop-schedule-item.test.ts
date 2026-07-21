@@ -5,6 +5,7 @@ import { submitAdd } from "../apps/desktop/src/main/ipc/add.ts";
 import { deleteScheduleItem, updateScheduleItem } from "../apps/desktop/src/main/ipc/scheduleItem.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
+import type { ContextItem } from "../packages/shared/src/index.ts";
 
 const NOW = new Date("2026-07-21T10:00:00+09:00");
 
@@ -94,6 +95,26 @@ test("updateScheduleItem은 Event도 수정할 수 있다", async () => {
   assert.equal(updated?.title, "팀 회의(변경)");
   assert.equal(updated?.startAt, "2026-07-29T10:00:00+09:00");
   assert.equal(updated?.endAt, "2026-07-29T11:00:00+09:00");
+});
+
+// 김도현 리뷰(PR #64): Task 쪽은 반대 필드(startAt/endAt)를 지우는데 Event 쪽만
+// deadline을 안 건드리면 비대칭이다 — 지금은 Event가 deadline을 갖는 경로가 없어
+// 버그는 아니지만, 방어적으로 항상 지워지는지 확인한다.
+test("updateScheduleItem은 Event를 수정할 때 deadline 필드를 지운다(대칭 정리)", async () => {
+  const { container, eventId } = await seededContainer();
+  // 실제로는 Event에 deadline이 채워질 경로가 없지만, 방어 로직 자체를 검증하기
+  // 위해 저장소에 직접 deadline이 있는 Event를 만들어 둔다.
+  const existing = await container.repository.findContextItem(eventId) as ContextItem;
+  await container.repository.saveContextItems([{ ...existing, deadline: "2026-07-01T00:00:00+09:00" }]);
+
+  await updateScheduleItem(container, eventId, {
+    title: "팀 회의",
+    date: "2026-07-29",
+    time: "10:00",
+  }, NOW);
+
+  const updated = await container.repository.findContextItem(eventId);
+  assert.equal(updated?.deadline, undefined);
 });
 
 test("updateScheduleItem은 endTime을 비우면 기존 endAt을 지운다", async () => {
