@@ -80,3 +80,22 @@ test("add는 edit이면 다시 입력하라고 안내하고 저장하지 않는�
   assert.match(output, /다시 `dododo add/);
   assert.deepEqual(await container.repository.listContextItems("event"), []);
 });
+
+test("add는 '부터~까지' 범위 입력을 endAt까지 채워 저장한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  const io = { input: scriptedInput("y"), output: discardOutput() };
+
+  const output = await runAdd(
+    container,
+    ["내일", "오후", "2시부터", "4시까지", "스터디"],
+    NOW,
+    io,
+  );
+
+  assert.match(output, /일정을 저장했습니다/);
+  assert.match(output, /~/);
+  const items = await container.repository.listContextItems("event");
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.startAt, "2026-07-21T14:00:00+09:00");
+  assert.equal(items[0]?.endAt, "2026-07-21T16:00:00+09:00");
+});
