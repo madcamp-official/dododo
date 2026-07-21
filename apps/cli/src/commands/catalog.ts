@@ -7,8 +7,8 @@ export interface CommandDefinition {
 
 export const commandCatalog: CommandDefinition[] = [
   { name: "help", description: "명령 목록을 표시합니다", owner: "runtime", status: "ready" },
-  { name: "doctor", description: "환경과 모듈 상태를 확인합니다", owner: "runtime", status: "ready" },
-  { name: "setup", description: "사용자 프로필과 Source를 설정합니다", owner: "shared", status: "ready" },
+  { name: "doctor", description: "환경과 모듈 상태를 확인합니다 (--llm-test로 인증 추론)", owner: "runtime", status: "ready" },
+  { name: "setup", description: "사용자 프로필·Source·원격 LLM을 설정합니다", owner: "shared", status: "ready" },
   { name: "sync", description: "등록된 Source를 한 번 동기화합니다", owner: "data", status: "ready" },
   { name: "task", description: "Task 상세 조회, 완료 처리, Snooze", owner: "runtime", status: "ready" },
   { name: "watch", description: "주기 동기화와 알림을 실행합니다 (기본 지속 실행, --once로 1회, --interval <seconds>, --os-notify로 OS 알림)", owner: "runtime", status: "ready" },

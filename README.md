@@ -169,28 +169,72 @@ RawItem
 - Node.js: `22.18 이상`
 - npm: Node.js에 포함된 버전
 - Windows 또는 macOS
-- 로컬 Ollama(권장: `gemma3:12b` 텍스트 + `gemma3:4b` Vision, `.env.example` 참고) 또는 외부 LLM Provider 1개(실제 Fact 추출 구현 시)
+- 팀 Gateway를 사용할 경우 운영진이 발급한 일회용 설치 코드
+- 로컬 Ollama를 직접 사용할 경우에만 별도 Ollama와 모델 설치
 
-### 설치 및 실행
+### 제3자 설치 및 원격 LLM 연결
 
 ```bash
 # 1. 저장소 복제
-git clone [REPOSITORY_URL]
+git clone https://github.com/madcamp-official/dododo.git
 cd dododo
 
-# 2. 환경 변수 설정
-cp .env.example .env
-# 사용할 LLM과 로컬 DB 설정을 확인한다.
+# 2. 의존성 설치
+npm ci
 
-# 3. CLI 명령 확인
-npm start -- help
+# 3. 프로필 설정과 설치 코드 활성화
+# 운영진에게 받은 일회용 설치 코드를 질문에 입력한다.
+npm start -- setup
 
-# 4. 현재 스켈레톤 상태 확인
-npm start -- doctor
+# 4. 공개 Gateway와 실제 인증 추론 확인
+npm start -- doctor --llm-test
 
-# 5. 테스트
-npm run check
+# 5. Fixture 기반 첫 사용
+npm start -- sync
+npm start -- inbox
+npm start -- today
+npm start -- ask "운영체제"
 ```
+
+`setup`은 기본적으로 `https://llm.madcamp-kaist.org`에서 설치 코드를 기기별 Token으로
+교환하고, Token을 Git에서 제외되는 `.env`에 권한 `0600`으로 저장한다. Token 원문은
+콘솔이나 Git에 남기지 않는다.
+
+> 원격 Gateway를 사용할 사람은 먼저 `cp .env.example .env`를 실행할 필요가 없다.
+> `.env.example`의 기본값은 로컬 Ollama를 직접 운영하는 개발자를 위한 예시다.
+
+`dododo.sources.json`을 만들지 않은 첫 실행은 학교 사이트·학교 이메일·LMS Fixture로
+동작한다. 실제 Source를 쓰려면 학교 사이트 URL과 Selector, 이메일 `.eml` 디렉터리,
+LMS HTML 경로를 `dododo.sources.json`에 별도로 설정해야 한다. 계정 자동 로그인이나
+OAuth 연동은 현재 MVP 범위에 포함되지 않는다.
+
+### 운영자: 사용자별 설치 코드 발급
+
+Gateway VM의 `/opt/dododo`에서 사용자마다 코드를 하나씩 발급한다. 코드는 기본 7일 후
+만료되며 한 번 활성화하면 다시 사용할 수 없다. 발급 명령은 코드 Hash만 Gateway SQLite에
+저장하고 원문은 명령 실행 직후 한 번만 출력한다. 서비스 재시작은 필요하지 않다.
+
+```bash
+cd /opt/dododo
+
+# 사용자별 코드 발급·등록
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+  npm run gateway:activation-code -- issue \
+  --label "홍길동 MacBook" \
+  --expires-days 7
+
+# 발급 상태 확인(원문은 표시하지 않음)
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+  npm run gateway:activation-code -- list
+
+# 아직 사용하지 않은 코드 취소
+sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
+  npm run gateway:activation-code -- revoke --id ac_발급된_ID
+```
+
+기존 `GATEWAY_ACTIVATION_CODES` 환경변수 방식도 호환을 위해 유지하지만, 신규 사용자는
+위 DB 기반 명령으로 발급한다. 설치 코드와 기기 Token을 README, 이슈, PR 또는 Git에
+커밋하지 않는다.
 
 ### 설치 파일
 

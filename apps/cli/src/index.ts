@@ -29,7 +29,17 @@ async function main(): Promise<void> {
   // SIGINT 종료 전부) 파일 잠금을 풀어야 다음 실행이 곧바로 붙을 수 있다.
   try {
     if (command === "doctor") {
-      console.log(await renderDoctor(container));
+      const doctorArgs = process.argv.slice(3);
+      const unknown = doctorArgs.filter((arg) => arg !== "--llm-test");
+      if (unknown.length > 0) {
+        console.error(`알 수 없는 doctor 옵션입니다: ${unknown.join(", ")}`);
+        console.error("사용법: npm start -- doctor [--llm-test]");
+        process.exitCode = 1;
+        return;
+      }
+      console.log(await renderDoctor(container, fetch, {
+        verifyRemoteInference: doctorArgs.includes("--llm-test"),
+      }));
       return;
     }
     if (command === "setup") {
