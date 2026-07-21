@@ -9,6 +9,7 @@ import { runEvidence } from "../apps/cli/src/commands/evidence.ts";
 import { renderInbox } from "../apps/cli/src/commands/inbox.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
+import type { ContextItem, UserProfile } from "../packages/shared/src/index.ts";
 
 // 이 파일의 존재 이유: issue #27이 "가장 큰 병목"이라 부른 문제 — sync를 실행한
 // 프로세스가 끝나면 InMemory 저장소도 같이 사라져서, 별도 프로세스의 inbox/today가
@@ -177,6 +178,76 @@ test("createSourceCollectors가 통째로 검증에 실패하면(schoolSite는 �
       assert.deepEqual(container.collectors, []);
     } finally {
       container.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+function opportunity(overrides: Partial<ContextItem> = {}): ContextItem {
+  return {
+    id: "ctx-opp-ai",
+    kind: "opportunity",
+    title: "AI 해커톤",
+    status: "new",
+    requirements: [],
+    tags: ["AI"],
+    priority: 0,
+    confidence: 1,
+    evidenceIds: [],
+    metadata: {},
+    createdAt: "2026-07-21T00:00:00+09:00",
+    updatedAt: "2026-07-21T00:00:00+09:00",
+    ...overrides,
+  };
+}
+
+function profile(overrides: Partial<UserProfile> = {}): UserProfile {
+  return {
+    school: "한국대학교",
+    major: "컴퓨터공학과",
+    year: "3학년",
+    interests: ["AI"],
+    activityTypes: [],
+    preferredLocations: [],
+    explicitConstraints: [],
+    ...overrides,
+  };
+}
+
+// SQLite ProfileRepository를 컨테이너에 연결하기 전까지는 setup으로 저장한 프로필이
+// 프로세스 종료와 함께 사라져, today/inbox/watch가 항상 emptyProfile()로 관련도를
+// 계산했다(관심사 겹침이 항상 0) — 개인화 추천이 실질적으로 죽어 있던 문제.
+// relevanceScore(관심사 1개당 +10)가 importanceScore를 거쳐 inbox 점수에 반영되므로,
+// 관심사가 겹치는 Opportunity의 점수가 재시작 후에도 그대로 높게 유지되는지로 검증한다.
+test("setup이 저장한 프로필이 재시작 후에도 유지되어 관련도 기반 추천에 반영된다", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-profile-persistence-"));
+  const dbPath = join(directory, "context.db");
+  const options = { databasePath: dbPath };
+
+  try {
+    const first = createCliContainer(options);
+    await first.profileRepository.save(profile());
+    await first.repository.saveContextItems([
+      opportunity({ id: "ctx-opp-ai", tags: ["AI"] }),
+      opportunity({ id: "ctx-opp-other", title: "관련 없는 공모전", tags: ["기타"] }),
+    ]);
+    first.close();
+
+    const second = createCliContainer(options);
+    try {
+      assert.deepEqual(await second.profileRepository.get(), profile());
+
+      const inbox = await renderInbox(second);
+      const aiScoreMatch = /\[ctx-opp-ai\] 관련도 (\d+)/.exec(inbox);
+      const otherScoreMatch = /\[ctx-opp-other\] 관련도 (\d+)/.exec(inbox);
+      assert.ok(aiScoreMatch !== null && otherScoreMatch !== null, "두 Opportunity 모두 inbox에 나와야 함");
+      assert.ok(
+        Number(aiScoreMatch![1]) > Number(otherScoreMatch![1]),
+        "관심사가 겹치는 Opportunity가 재시작 후에도 더 높은 점수를 받아야 함",
+      );
+    } finally {
+      second.close();
     }
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -23,6 +23,7 @@ import {
   InMemoryRawItemRepository,
   openContextDatabase,
   SQLiteContextRepository,
+  SQLiteProfileRepository,
   SQLiteRawItemRepository,
 } from "../../../../packages/storage/src/index.ts";
 import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
@@ -162,20 +163,25 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
   const dbPath = options.databasePath !== undefined ? normalizeDbPath(options.databasePath) : resolveDbPath(env);
   let repository: ContextRepository;
   let rawItemRepository: RawItemRepository;
+  let profileRepository: ProfileRepository;
   let close: () => void;
   if (dbPath === undefined) {
     repository = new InMemoryContextRepository();
     rawItemRepository = new InMemoryRawItemRepository();
+    profileRepository = new InMemoryProfileRepository();
     close = () => {};
   } else {
     mkdirSync(dirname(dbPath), { recursive: true });
     const database = openContextDatabase(dbPath);
     repository = new SQLiteContextRepository(database);
     rawItemRepository = new SQLiteRawItemRepository(database);
+    // setup이 저장한 프로필이 프로세스 재시작 후에도 남아야 today/inbox/watch의
+    // 관련도 계산(relevance/index.ts)이 매번 빈 프로필로 폴백하지 않는다
+    // (docs/llm-architecture.md §4에서 지적된 병목).
+    profileRepository = new SQLiteProfileRepository(database);
     close = () => database.close();
   }
 
-  const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
   const screenCollector = loadScreenCollector();
