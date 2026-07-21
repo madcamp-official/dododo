@@ -33,10 +33,10 @@ export interface ResolveOutcome {
   history: ContextChangeEvent[];
 }
 
-// packages/shared/src/contracts.ts의 ContextResolver를 아직 넓히지 못했으므로
-// (docs/proposals/context-repository-contract-extension.md 참고), Evidence를 채우려는
-// 호출부(ContextPipeline)는 이 메서드를 duck-typing으로 탐지해 사용하고, 지원하지 않는
-// Resolver(예: 테스트의 narrow mock)는 기존 2-인자 resolve()로 폴백한다.
+// packages/shared/src/contracts.ts의 ContextResolver 계약 자체는 넓히지 않기로
+// 확정했다. Evidence를 채우려는 호출부(ContextPipeline)는 이 메서드를 duck-typing으로
+// 탐지해 사용하고, 지원하지 않는 Resolver(예: 테스트의 narrow mock)는 기존 2-인자
+// resolve()로 폴백한다.
 export interface EvidenceAwareContextResolver extends ContextResolver {
   resolveWithEvidence(
     facts: Fact[],

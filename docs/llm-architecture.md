@@ -22,22 +22,20 @@
 
 **LLM에 절대 맡기지 않는 최종 판단**: 이메일 읽기 허용 범위, DB 삭제·수정 권한, 사용자 확인 없는 일정 저장, 이메일 전송·답장·삭제, Task 완료 처리, Snooze·Quiet Hours, 과제 번호가 다른 항목의 병합, Evidence 없는 날짜 확정, 알림 빈도, 반복 추천 억제, 개인정보 외부 전송 범위, 실패 작업 재시도 한도.
 
-## 3. 현재 상태 (2026-07-20)
-
-"구현된 LLM 기능"과 "실제 CLI에서 사용 중인 기능"이 다르다.
+## 3. 현재 상태 (2026-07-21)
 
 | 기능 | 구현 | 실제 CLI 사용 | 담당 |
 |---|---|---|---|
-| Ollama Provider (`OllamaProvider`) | O | X (미연결) | Intelligence |
-| 구조화 Fact 추출 (`LLMFactExtractor`) | O | X (임시 규칙 Extractor 사용) | Intelligence |
-| 추천 문장 생성 (`generateActionAndReason`) | O | X (규칙 템플릿) | Intelligence |
-| 화면 조언 (`generateScreenAdvice`) | O | X (`advise` 미구현) | Intelligence / CLI |
-| 관련도·병합·충돌·우선순위 (코드) | O | O(엔진 레벨) | Intelligence |
-| Privacy Gateway 마스킹·Chunk | O | X (미연결) | Intelligence / CLI |
-| `ask`·`add`·`watch`·`advise`·`evidence` | 엔진 O / CLI X | X (스켈레톤) | Intelligence / CLI |
-| 실제 이미지 Vision 분석 | Provider만 | X | Intelligence / CLI |
+| Ollama/원격 Provider (`OllamaProvider`/`RemoteJobLLMProvider`) | O | O(`.env` 설정 시, 미설정 시 결정론적 폴백) | Intelligence |
+| 구조화 Fact 추출 (`LLMFactExtractor`) | O | O(`RetryAwareFactExtractor`로 감쌈) | Intelligence |
+| 추천 문장 생성 (`generateActionAndReason`) | O | O | Intelligence |
+| 화면 조언 (`LlmScreenAdvicePolicy`) | O | O(`advise --screen`) | Intelligence / CLI |
+| 관련도·병합·충돌·우선순위 (코드) | O | O | Intelligence |
+| Privacy Gateway 마스킹·Chunk | O | O(`ChunkingPrivacyGateway`) | Intelligence / CLI |
+| `ask`·`add`·`watch`·`advise`·`evidence` | O | O | Intelligence / CLI |
+| 실제 이미지 Vision 분석 | Provider만 | X (`advise --live`가 캡처만 하고 Vision 미호출) | Intelligence / CLI |
 | Embedding / RAG | X | X | Intelligence |
-| 백그라운드 Job Queue | X | X | 공동 |
+| 클라이언트 측 백그라운드 재분석 Job Queue(§5) | X | X | 공동 |
 
 ### 원격 Gateway 구현 상태 (2026-07-21)
 
@@ -60,12 +58,14 @@
 임의 Prompt가 가능하므로, Gateway는 긴 설치 코드·기기별 Token·일일 한도·본문 크기 제한을
 반드시 적용한다. 장기 서비스에서는 Prompt를 서버 operation으로 옮기는 별도 계약 변경이 필요하다.
 
-## 4. 가장 큰 병목 (성능보다 먼저)
+## 4. 남은 병목 (성능·확장 관점)
 
-1. **LLM이 런타임에 연결 안 됨** — `apps/cli/src/runtime/container.ts`가 `OllamaProvider`를 만들어 `LLMFactExtractor`/`RecommendationEngine`/화면 조언에 주입해야 한다. (CLI 담당)
-2. **프로세스 간 Context 미유지** — CLI가 `InMemoryContextRepository`를 써서 `sync` 후 `inbox`를 별도 실행하면 사라진다. SQLite RawItem 저장소는 있으나 Fact·ContextItem·Evidence·변경 이력·Recommendation·LLM 작업 상태·사용자 확인 대기 항목의 영속화가 필요하다. (Storage + Intelligence 공유 계약)
-3. **LLM 실패와 "결과 없음"이 구분돼야 함** — 재시도 정책의 전제. (아래 §6에서 이번에 착수)
-4. **`watch`가 단순 반복문이 아니라 지속 가능한 작업 실행기여야 함** — Job Queue 도입 전제. (CLI + 공동)
+LLM 런타임 연결(`OllamaProvider`/`RemoteJobLLMProvider` 주입), Context SQLite 영속화, LLM 실패와
+"결과 없음"의 구분(`extractWithStatus`/`RetryAwareFactExtractor`)은 모두 완료되었다. 남은 것:
+
+1. **`watch`가 단순 반복문**이라 재시도·Backoff·Dead Letter가 없다 — 아래 §5의 Job Queue 도입 전제. (CLI + 공동)
+2. **`today`/`inbox`/`watch`가 항목마다 LLM 문장 생성을 순차 호출**한다(`RuleBasedRecommendationEngine.recommend`). 항목 수만큼 직렬 대기 시간이 늘어난다 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화가 필요하다. (Intelligence)
+3. **사용자 프로필이 영속화되지 않는다** — `InMemoryProfileRepository`만 있어 `setup`으로 저장한 프로필이 프로세스 종료와 함께 사라지고, `today`/`inbox`/`watch`는 항상 빈 프로필로 관련도를 계산한다. SQLite `ProfileRepository`가 필요하다. (Storage + Intelligence 공유 계약)
 
 ## 5. 확장 구조: 이벤트 기반 비동기 작업 파이프라인
 
@@ -121,11 +121,12 @@ Collectors → RawItem Store → Job Queue
 
 ## 10. 권장 구현 순서
 
-1. **이미 만든 LLM을 CLI에 연결** (CLI): `OllamaProvider` 생성 → `LLMFactExtractor`/Recommendation/화면 조언 주입, `doctor`에 실제 Ollama·모델 상태와 실패 표시.
-2. **Context 영속화** (Storage + Intelligence 공유 계약): ContextItem·Evidence·History·Recommendation SQLite 저장, `InterimContextStore` 제거, 분석 상태·Prompt 버전 저장.
-3. **지속성 Job Queue** (공동): `watch`에서 Job 조회·실행, 재시도·Backoff·Lease·Dead Letter, Heavy/Fast 분리, Source별 격리.
-4. **LLM 활용 확대** (Intelligence): 2단계 추출, 실제 Vision, Embedding 후보 검색, 애매한 병합 검토, `ask` RAG, 자연어 `add`.
-5. **능동적 백그라운드 비서**: 아침 일일 계획, 마감 변경 알림, 준비 지연 Opportunity 감지, 활동-Task 연결, 집중 모드·피드백 기반 침묵, 야간 저우선 재분석.
+CLI 연결과 Context SQLite 영속화는 완료되었다. 남은 순서:
+
+1. **`InterimContextStore` 제거** (Intelligence): `ContextRepository`가 이미 Evidence·History·Recommendation을 저장하므로 더 이상 쓰이지 않는다(tests/smoke.test.ts의 자체 테스트만 참조).
+2. **지속성 Job Queue** (공동): `watch`에서 Job 조회·실행, 재시도·Backoff·Lease·Dead Letter, Heavy/Fast 분리, Source별 격리.
+3. **LLM 활용 확대** (Intelligence): 2단계 추출, 실제 Vision, Embedding 후보 검색, 애매한 병합 검토, `ask` RAG.
+4. **능동적 백그라운드 비서**: 아침 일일 계획, 마감 변경 알림, 준비 지연 Opportunity 감지, 활동-Task 연결, 집중 모드·피드백 기반 침묵, 야간 저우선 재분석.
 
 가장 현실적인 다음 목표는 "더 자율적인 에이전트"가 아니라 아래 흐름의 완성이다.
 
