@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
-import { parseScheduleIntent } from "../../../../packages/context-engine/src/index.ts";
+import { parseScheduleIntentWithLlmFallback } from "../../../../packages/context-engine/src/index.ts";
 import type { ContextItem } from "../../../../packages/shared/src/index.ts";
 import type { CliContainer } from "../runtime/container.ts";
 
@@ -13,9 +13,13 @@ export interface AddIo {
   output: NodeJS.WritableStream;
 }
 
-// user-scenarios.md 시나리오 6. 날짜·시각 계산은 parseScheduleIntent(코드, LLM 아님)가
-// 전부 하고, 이 명령은 결과를 사용자에게 보여주고 [y/N/edit] 확인만 받는다 —
-// AGENTS.md: 모호한 일정을 사용자 확인 없이 확정하지 않는다.
+// user-scenarios.md 시나리오 6. 날짜·시각 계산은 규칙 기반 parseScheduleIntent가
+// 전부 하고, LLM(설정된 경우)은 규칙이 이해 못 한 표현을 규칙이 아는 패턴으로
+// 번역하거나 제목만 다듬을 뿐 날짜·시각을 스스로 계산하지 않는다
+// (packages/context-engine/src/intent/llmScheduleFallback.ts 참고). provider가
+// 없으면(.env 미설정) 순수 규칙 결과와 동일하다 — 회귀 없음. 이 명령은 결과를
+// 사용자에게 보여주고 [y/N/edit] 확인만 받는다 — AGENTS.md: 모호한 일정을
+// 사용자 확인 없이 확정하지 않는다.
 export async function runAdd(
   container: CliContainer,
   args: string[],
@@ -27,7 +31,12 @@ export async function runAdd(
     return `일정 내용을 입력해주세요.\n${USAGE}`;
   }
 
-  const intent = parseScheduleIntent(utterance, now);
+  const intent = await parseScheduleIntentWithLlmFallback(
+    utterance,
+    now,
+    container.llmProvider,
+    container.privacyGateway,
+  );
   if (intent.kind === "unrecognized") {
     return "일정 추가 의도를 알아듣지 못했습니다. 예: \"이번 주 금요일 저녁에 민수랑 저녁 약속 있어\"";
   }
