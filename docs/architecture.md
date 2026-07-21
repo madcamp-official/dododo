@@ -216,10 +216,10 @@ Job의 입력은 성공·실패·취소 시 SQLite에서 제거하고 결과·�
 ## 7. 팀 경계
 
 경로별 소유권과 현재 담당자는 이 문서가 아니라 `AGENTS.md`의 "팀 역할과 소유권"이
-유일한 기준이다. `apps/desktop/`(Electron 데스크톱 UI)은 Runtime & CLI / Data Ingestion
-& Storage / Context Intelligence 세 영역과 다른 별도 기준으로 나뉘며, 그 배정도
-`AGENTS.md`에 정리되어 있다 — 세부 UI 구성은 [프론트엔드 기획](frontend-plan.md)을,
-원래 7일 계획과 분업 서사는 [MVP 범위](mvp-scope.md)를 참고한다.
+유일한 기준이다. 현재 구조는 백엔드 1인(김도현, `apps/desktop/` 제외 전체) + 프론트엔드
+2인(박도현·김도연, `apps/desktop/`)이다 — 세부 UI 구성과 프론트엔드 역할 분담은
+[프론트엔드 기획](frontend-plan.md)을, 원래 3인 분업 시절의 7일 계획과 분업 서사는
+역사적 기록으로 [MVP 범위](mvp-scope.md)를 참고한다.
 
 ## 8. 학교 이메일 수집 경계
 

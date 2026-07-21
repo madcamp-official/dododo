@@ -10,9 +10,10 @@ CLI로 동작하는 현재 구조 위에 Windows/macOS 설치형 데스크톱 UI
 
 ## 0. 소유권 표기 안내
 
-이 문서의 김도연 배정은 이 프론트엔드 작업에 한정된다. `AGENTS.md`의 기존 배정(김도연 =
-Data Ingestion & Storage)과 다르므로 `AGENTS.md`와 `docs/architecture.md`에 이 프론트엔드
-한정 배정을 반영해 두었다 — 두 문서의 소유권 표기는 이제 어긋나지 않는다.
+팀 구조가 백엔드 1인(김도현) + 프론트엔드 2인(박도현·김도연)으로 바뀌면서, `apps/desktop/`
+전체가 두 사람의 정식 소유 영역이 됐다 — 더 이상 "프론트엔드 작업에 한정된" 임시 배정이
+아니다. `AGENTS.md`의 "팀 역할과 소유권"이 최종 기준이며, 이 문서는 그 안에서 박도현·
+김도연의 세부 역할 분담과 우선순위를 정의한다.
 
 ## 1. UI 구성
 
@@ -120,8 +121,10 @@ delete 메서드가 없음)다. `packages/shared`의 계약 확장이 필요할 
 
 ## 3. 역할 분담
 
-기준: Electron Main 프로세스·기존 backend 확장 = 박도현(Runtime/CLI 담당 연장선).
-Renderer(캐릭터·패널·설정 UI) = 김도연(이 프론트엔드 작업 한정 배정, 0번 참고).
+기준: Electron Main 프로세스 = 박도현. Renderer(캐릭터·패널·설정 UI) = 김도연.
+`packages/context-engine`·`packages/shared` 등 실제 backend 로직은 이제 이 문서의
+소유 영역이 아니라 `AGENTS.md`의 백엔드(김도현) 담당이다 — 아래 2.1~2.5의 실제 계산·
+저장 로직은 김도현이 구현하고, 박도현은 그 결과를 IPC로 노출하는 배선만 맡는다.
 
 ### 박도현
 
@@ -131,9 +134,9 @@ Renderer(캐릭터·패널·설정 UI) = 김도연(이 프론트엔드 작업 �
 - `watch`/`watchTick`을 Main에서 상시 실행, 알림 종류별 라우팅(조언/수집완료/충돌경고 등)
 - Electron `Notification` 기반 Notifier 구현체 추가(기존 Notifier 인터페이스 구현)
 - Windows/macOS 패키징(electron-builder 등)
-- **신규 백엔드 기능**(packages/shared·context-engine 등 공동 소유 영역 걸침, 팀 조율 필요):
-  Task/Event 수정·삭제 API(2.2), Source 등록 API(2.3), 리마인더 오프셋(2.4),
-  일정 충돌·우선순위 역전 로직(2.1), Vision 파이프라인(2.5)
+- 2.1~2.5의 신규 backend 기능(Task/Event 수정·삭제 API, Source 등록 API, 리마인더
+  오프셋, 일정 충돌·우선순위 역전 로직, Vision 파이프라인)이 준비되는 대로 IPC
+  핸들러로 연결 — 함수 시그니처와 IPC 계약은 착수 전 김도현과 조율
 
 ### 김도연
 

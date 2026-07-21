@@ -41,8 +41,8 @@ Source → RawItem → Fact → ContextItem → Evidence
 - `packages/privacy/`: 수집·LLM 전달 전 개인정보 정책
 - `packages/evaluation/`: Ground Truth, Benchmark, 실패 사례
 - `fixtures/`: 네트워크 없이 재현 가능한 Source 입력과 평가 자료
-- `apps/desktop/`: Electron 데스크톱 UI(캐릭터 오버레이·팝업 메뉴·설정 창). 소유권은
-  `apps/cli/`나 `packages/*`와 다르게 나뉘므로 아래 소유권 절과 `docs/frontend-plan.md`를 함께 본다.
+- `apps/desktop/`: Electron 데스크톱 UI(캐릭터 오버레이·팝업 메뉴·설정 창). 저장소 전체에서
+  유일한 프론트엔드 영역이며, 소유권과 세부 역할은 아래 소유권 절과 `docs/frontend-plan.md`를 함께 본다.
 - `apps/inference-gateway/`, `deploy/inference-gateway/`: 원격 LLM 추론 Gateway(인증,
   Job Queue, Ollama 연동)와 그 배포 설정.
 
@@ -57,84 +57,64 @@ Source → RawItem → Fact → ContextItem → Evidence
 
 소유권은 충돌을 줄이기 위한 기본 경계다. 사용자가 다른 영역의 변경을 명시적으로 요청한 경우에는 작업할 수 있지만, 영향받는 담당 영역과 공통 계약을 반드시 함께 확인한다.
 
-`apps/desktop/`은 위 세 영역(Runtime & CLI / Data Ingestion & Storage / Context Intelligence)과
-별도로 `docs/frontend-plan.md`가 정의한 기준을 따른다. 그 문서에서 김도연은 Renderer를
-맡지만, 이는 이 프론트엔드 작업에 한정된 배정이며 Data Ingestion & Storage 소유권과는
-무관하다.
+팀 구조는 기존 3인 백엔드 분업(Runtime & CLI / Data Ingestion & Storage / Context
+Intelligence)에서 **백엔드 1인 + 프론트엔드 2인**으로 바뀌었다. `apps/desktop/`
+전체가 프론트엔드이고, 그 외 저장소 전체가 백엔드다. 프론트엔드 두 명의 세부 역할
+분담은 이 문서가 아니라 `docs/frontend-plan.md`가 유일한 기준이다.
 
-### 박도현 — Runtime & CLI
+### 김도현 — 백엔드 전체
+
+옛 세 영역(Runtime & CLI, Data Ingestion & Storage, Context Intelligence &
+Recommendation)을 모두 합친 영역이다.
 
 소유 영역:
 
 ```text
 apps/cli/
 packages/scheduler/
-packages/collectors/src/screen/  # 화면 캡처 Runtime
-apps/desktop/src/main/           # Electron Main, IPC, 상시 watch, Notifier, 창 관리
-apps/desktop/src/preload/        # Renderer에 노출하는 IPC API 타입
-apps/desktop/electron-builder.yml
-```
-
-담당:
-
-- CLI 명령과 사용자 확인 흐름
-- `sync`, `watch`, `today`, `inbox`, `ask`, `add`, `advise`
-- 화면 선택과 일시 캡처
-- 알림, Quiet Hours와 Snooze
-- 오류 메시지, 권한 상태와 실행 상태
-- Electron Main 프로세스(`createCliContainer` 재사용), Renderer용 IPC API, 상시 `watch`
-  실행과 알림 라우팅, Windows/macOS 패키징 — 세부 범위와 우선순위는 `docs/frontend-plan.md`를 따른다
-
-### 김도연 — Data Ingestion & Storage
-
-소유 영역:
-
-```text
-packages/collectors/             # screen 캡처 Runtime 제외
+packages/collectors/             # screen 캡처 Runtime 포함
 packages/storage/
-fixtures/의 Source별 원본 입력
-```
-
-담당:
-
-- 학교 사이트·학교 이메일·LMS 수집
-- HTML·이메일·파일 Parser
-- 외부 ID, Message-ID와 Content Hash 기반 중복 방지
-- SQLite Schema와 Migration
-- RawItem·Fact·ContextItem·Evidence·변경 이력 저장
-- Source별 오류 격리와 증분 동기화
-
-추가로 `apps/desktop/src/renderer/`(캐릭터 UI, 팝업 메뉴, 결과 패널, 설정 창)와
-`apps/desktop/resources/`(캐릭터 에셋)를 담당한다. 이 배정은 `docs/frontend-plan.md`에
-정의된 프론트엔드 작업에 한정되며, 위 Data Ingestion & Storage 소유 영역을 대체하지 않는다.
-
-### 김도현 — Context Intelligence & Recommendation
-
-소유 영역:
-
-```text
 packages/context-engine/
 packages/privacy/
 packages/profile/
 packages/evaluation/
-fixtures/의 Ground Truth와 기대 결과
+fixtures/                        # Source별 원본 입력과 Ground Truth 모두
 apps/inference-gateway/
 deploy/inference-gateway/
 ```
 
 담당:
 
+- CLI 명령과 사용자 확인 흐름 — `sync`, `watch`, `today`, `inbox`, `ask`, `add`, `advise`
+- 화면 선택과 일시 캡처, 알림, Quiet Hours와 Snooze
+- 오류 메시지, 권한 상태와 실행 상태
+- 학교 사이트·학교 이메일·LMS 수집, HTML·이메일·파일 Parser
+- 외부 ID, Message-ID와 Content Hash 기반 중복 방지
+- SQLite Schema와 Migration, RawItem·Fact·ContextItem·Evidence·변경 이력 저장
+- Source별 오류 격리와 증분 동기화
 - LLM Provider와 구조화 Fact 추출
-- Opportunity·Task·Event·Note·Activity 분류
-- 학교 사이트·이메일·LMS의 동일 Context 병합
-- 출처 충돌과 확신도 처리
-- 사용자 프로필 기반 Opportunity 관련도
-- Task 우선순위와 추천 이유
+- Opportunity·Task·Event·Note·Activity 분류, 동일 Context 병합, 출처 충돌과 확신도 처리
+- 사용자 프로필 기반 Opportunity 관련도, Task 우선순위와 추천 이유
 - 화면 Activity 연결과 적극적 조언 정책
 - 자연어 일정 처리와 모호성 확인
 - Ground Truth, Benchmark와 실패 사례 분석
 - 원격 LLM 추론 Gateway(인증, Job Queue, Ollama 연동)와 배포 설정 — 세부 상태는
   `docs/llm-architecture.md`를 따른다
+- `apps/desktop/`이 호출하는 backend 기능(Task/Event 조회·수정·삭제, Source 등록,
+  리마인더 판정, 일정 충돌·우선순위 역전 계산, Vision 추출 등)을 제공한다. IPC 배선,
+  창 관리, Renderer UI 자체는 프론트엔드 담당이며, 함수 시그니처와 IPC 계약은
+  착수 전 프론트엔드와 조율한다.
+
+### 프론트엔드 — 박도현·김도연
+
+소유 영역:
+
+```text
+apps/desktop/
+```
+
+세부 역할(박도현: Main/Preload/패키징, 김도연: Renderer/에셋), 우선순위와 IPC 계약은
+`docs/frontend-plan.md`를 따른다.
 
 ## 공동 소유 파일과 변경 절차
 
