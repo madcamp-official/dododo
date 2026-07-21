@@ -23,7 +23,7 @@ function captureConsoleLog(): { lines: string[]; restore: () => void } {
 }
 
 test("runWatchTick은 첫 실행에서 Source를 동기화하고 알림을 보낸다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
 
   const result = await runWatchTick(container, new Date("2026-07-20T10:00:00+09:00"));
 
@@ -34,7 +34,7 @@ test("runWatchTick은 첫 실행에서 Source를 동기화하고 알림을 보�
 });
 
 test("runWatchTick은 gate를 통과한 추천을 notifier.send로 전달한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const notifier = new RecordingNotifier();
   container.notifier = notifier;
 
@@ -45,7 +45,7 @@ test("runWatchTick은 gate를 통과한 추천을 notifier.send로 전달한다"
 });
 
 test("runWatchTick은 변경 없는 RawItem을 다음 tick에서 재분석하지 않는다(팀 리뷰 반영)", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await runWatchTick(container, new Date("2026-07-20T10:00:00+09:00"));
 
   const items = await container.repository.listContextItems();
@@ -74,7 +74,7 @@ test("runWatchTick은 변경 없는 RawItem을 다음 tick에서 재분석하지
 });
 
 test("runWatchTick은 30분 이내 재실행에서 같은 항목을 다시 알리지 않는다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const first = await runWatchTick(container, new Date("2026-07-20T10:00:00+09:00"));
   assert.ok(first.notified.length > 0);
 
@@ -84,7 +84,7 @@ test("runWatchTick은 30분 이내 재실행에서 같은 항목을 다시 알�
 });
 
 test("runWatchTick은 Quiet Hours 안이면 알림을 보류한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await container.profileRepository.save({ ...emptyProfile(), quietHours: { start: "00:00", end: "23:59" } });
 
   const result = await runWatchTick(container, new Date("2026-07-20T10:00:00+09:00"));
@@ -95,7 +95,7 @@ test("runWatchTick은 Quiet Hours 안이면 알림을 보류한다", async () =>
 });
 
 test("runWatchLoop은 maxIterations:1이면 실제 대기 없이 즉시 끝난다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   let sleepCalls = 0;
 
   const summary = await runWatchLoop(container, {
@@ -113,7 +113,7 @@ test("runWatchLoop은 maxIterations:1이면 실제 대기 없이 즉시 끝난�
 });
 
 test("runWatchLoop은 마지막 iteration 뒤엔 sleep을 호출하지 않는다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const sleepCalls: number[] = [];
 
   const summary = await runWatchLoop(container, {
@@ -131,7 +131,7 @@ test("runWatchLoop은 마지막 iteration 뒤엔 sleep을 호출하지 않는다
 });
 
 test("runWatchLoop은 이미 abort된 signal이어도 최소 1회는 실행한 뒤 멈춘다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const controller = new AbortController();
   controller.abort();
   let sleepCalls = 0;
@@ -151,7 +151,7 @@ test("runWatchLoop은 이미 abort된 signal이어도 최소 1회는 실행한 �
 });
 
 test("runWatchLoop은 keepResults:false면 results를 안 쌓고 요약만 정확히 유지한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
 
   const summary = await runWatchLoop(container, {
     intervalMs: 0,
@@ -167,7 +167,7 @@ test("runWatchLoop은 keepResults:false면 results를 안 쌓고 요약만 정�
 });
 
 test("runWatchLoop은 tick 하나가 예외를 던져도 다음 tick으로 계속 진행한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   let calls = 0;
   container.profileRepository = {
     async get() {
@@ -196,7 +196,7 @@ test("runWatchLoop은 tick 하나가 예외를 던져도 다음 tick으로 계�
 });
 
 test("runWatch --once는 즉시 끝나고 tick 진행 상황을 console.log로 찍는다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const logged = captureConsoleLog();
 
   let output: string;
@@ -210,8 +210,23 @@ test("runWatch --once는 즉시 끝나고 tick 진행 상황을 console.log로 �
   assert.ok(logged.lines.some((line) => /\[tick 1\]/.test(line)));
 });
 
+test("runWatch는 Source 설정 오류로 수집이 중단되면 tick 전에 경고를 먼저 찍는다(PR #40 리뷰)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.sourcesConfigError = "Source 설정 파일이 올바른 JSON이 아닙니다(/tmp/dododo.sources.json)";
+  const logged = captureConsoleLog();
+
+  try {
+    await runWatch(container, ["--once"], new Date("2026-07-20T10:00:00+09:00"));
+  } finally {
+    logged.restore();
+  }
+
+  assert.ok(logged.lines.length > 0);
+  assert.match(logged.lines[0]!, /경고: Source 설정 오류로 수집을 중단합니다/);
+});
+
 test("runWatch는 기본값이면 지속 실행하며 SIGINT로 정상 종료한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const logged = captureConsoleLog();
 
   // runWatch 내부는 process.on("SIGINT", ...)를 첫 await 이전(동기 구간)에 등록하므로,
@@ -231,19 +246,19 @@ test("runWatch는 기본값이면 지속 실행하며 SIGINT로 정상 종료한
 });
 
 test("runWatch는 알 수 없는 옵션에 사용법을 보여준다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runWatch(container, ["--bogus"]);
   assert.match(output, /알 수 없는 옵션입니다: --bogus/);
 });
 
 test("runWatch는 잘못된 --interval 값을 거부한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runWatch(container, ["--interval", "0"]);
   assert.match(output, /--interval은 0보다 큰 초 단위 숫자여야 합니다/);
 });
 
 test("runWatch는 Node 타이머 한계를 넘는 --interval을 거부한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runWatch(container, ["--interval", "999999999999"]);
   assert.match(output, /--interval은 .*초를 넘을 수 없습니다/);
 });
@@ -252,7 +267,7 @@ test("runWatch --os-notify는 알 수 없는 옵션으로 처리되지 않는다
   // 실제 WindowsOsNotifier.send()가 호출되면 진짜 PowerShell 알림을 띄우려 하므로,
   // 이미 30분 dedup으로 알림이 하나도 안 나가는 두 번째 tick에서만 --os-notify를 써서
   // 플래그 인식만 검증하고 실제 알림 발송 경로는 타지 않게 한다.
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await runWatch(container, ["--once"]);
 
   const output = await runWatch(container, ["--once", "--os-notify"]);

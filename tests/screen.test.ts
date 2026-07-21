@@ -87,7 +87,7 @@ test("ScreenCollector는 존재하지 않는 경로에서 경로를 포함한 �
 });
 
 test("runScreen은 fixtures/screen을 privacy allowlist 오류 없이 동기화한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
 
   const output = await runScreen(container, new Date("2026-07-20T10:00:00+09:00"));
 

@@ -25,19 +25,19 @@ function taskItem(overrides: Partial<ContextItem> = {}): ContextItem {
 }
 
 test("ask는 질문이 비어있으면 사용법을 보여준다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runAsk(container, []);
   assert.match(output, /사용법: dododo ask/);
 });
 
 test("ask는 관련 Context가 없으면 모른다고 답한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runAsk(container, ["오늘", "뭐", "해야", "돼?"]);
   assert.match(output, /관련 정보를 찾지 못했습니다/);
 });
 
 test("ask는 관련 Task를 찾으면 결정론적 템플릿으로 답하고 근거를 표시한다(provider 없음)", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await container.repository.saveContextItems([taskItem()]);
 
   const output = await runAsk(container, ["운영체제", "과제", "뭐부터", "하지?"]);

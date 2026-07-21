@@ -17,7 +17,8 @@ export async function renderDoctor(
     `Node: ${process.version}`,
     `Runtime: ${process.platform}/${process.arch}`,
     `Commands: ${ready} ready, ${skeleton} skeleton`,
-    "Storage: in-memory scaffold (SQLite pending)",
+    renderStorageStatus(container),
+    renderSourcesStatus(container),
     await renderLlmStatus(container, fetchImpl),
     "",
     renderSourceStatus(container),
@@ -41,4 +42,23 @@ async function renderLlmStatus(container: CliContainer, fetchImpl: typeof fetch)
     const reason = error instanceof Error ? error.message : String(error);
     return `${base} · 연결 실패(${reason})`;
   }
+}
+
+function renderStorageStatus(container: CliContainer): string {
+  return container.dbPath === undefined
+    ? "Storage: in-memory (DODODO_DB_PATH=:memory:)"
+    : `Storage: SQLite (${container.dbPath})`;
+}
+
+function renderSourcesStatus(container: CliContainer): string {
+  if (container.sourcesConfigError !== undefined) {
+    return `Sources: 설정 오류 — 수집 중단(Fixture로 대체 안 함) (${container.sourcesConfigError})`;
+  }
+  if (container.sourcesConfigPath === undefined) {
+    return "Sources: Fixture 데모 (DODODO_SOURCE_CONFIG 없음)";
+  }
+  const origin = container.sourcesConfigPathIsExplicit
+    ? "DODODO_SOURCE_CONFIG"
+    : "cwd 기본값, 환경변수 미설정";
+  return `Sources: 실제 설정 사용 중 (${container.sourcesConfigPath}, 출처: ${origin})`;
 }

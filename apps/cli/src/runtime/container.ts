@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ import {
 } from "../../../../packages/context-engine/src/index.ts";
 import {
   captureActiveScreen,
+  createSourceCollectors,
   JsonFixtureCollector,
   ScreenCollector,
   type ScreenCaptureResult,
@@ -20,6 +21,9 @@ import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler
 import {
   InMemoryContextRepository,
   InMemoryRawItemRepository,
+  openContextDatabase,
+  SQLiteContextRepository,
+  SQLiteRawItemRepository,
 } from "../../../../packages/storage/src/index.ts";
 import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
 import type {
@@ -34,9 +38,11 @@ import type {
 } from "../../../../packages/shared/src/index.ts";
 import type { LLMProvider } from "../../../../packages/context-engine/src/index.ts";
 import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePolicy } from "./adviceLookup.ts";
+import { normalizeDbPath, resolveDbPath } from "./dbConfig.ts";
 import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
 import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
 import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
+import { loadSourceInputConfig, resolveSourceInputConfigPath } from "./sourceInputConfig.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
 
 // Fixture 기반 데모 Source. 실제 Collector(school-site/school-email/lms)는 아직 미구현이라
@@ -84,6 +90,22 @@ export interface CliContainer {
   // doctor가 provider 내부(private baseUrl/model)를 안 건드리고 상태 문구를 만들 수 있게
   // llmProvider와 같은 소스(resolveLlmConfig)에서 뽑은 설정을 그대로 노출한다.
   llmConfig: LlmConfig | undefined;
+  // undefined면 InMemory 저장소 사용 중(DODODO_DB_PATH=:memory: 명시)이라는 뜻,
+  // 그 외엔 기본값이든 명시든 SQLite 경로 — doctor가 표시한다.
+  dbPath: string | undefined;
+  // 실제 Source 설정 파일(dododo.sources.json류)을 찾았으면 그 경로, 없으면 undefined
+  // (Fixture Collector로 폴백 중이라는 뜻) — doctor가 표시한다.
+  sourcesConfigPath: string | undefined;
+  // sourcesConfigPath가 DODODO_SOURCE_CONFIG로 명시된 경로인지(true), cwd 기본값
+  // (./dododo.sources.json)에서 우연히 찾은 것인지(false) — doctor가 구분해 표시한다.
+  sourcesConfigPathIsExplicit: boolean;
+  // 설정 파일은 있는데 파싱·검증에 실패했을 때의 사유. 이 경우에도 CLI 전체를
+  // 죽이지 않고 Fixture로 폴백하되(AGENTS.md: 한 Source의 실패가 전체를 막지 않음),
+  // doctor가 원인을 보여줘야 조용히 묻히지 않는다.
+  sourcesConfigError: string | undefined;
+  // SQLite를 열었으면 프로세스 종료 전에 파일 잠금을 풀기 위해 명시적으로 닫는다.
+  // InMemory면 아무 것도 하지 않는다. index.ts가 모든 명령 경로에서 호출한다.
+  close: () => void;
 }
 
 function loadFixtureCollectors(): Collector[] {
@@ -121,19 +143,76 @@ function loadScreenCollector(): Collector {
   return new ScreenCollector("screen-manual", fixturePaths);
 }
 
-export function createCliContainer(): CliContainer {
-  const repository = new InMemoryContextRepository();
+export interface CliContainerOptions {
+  env?: NodeJS.ProcessEnv;
+  // 명시하면 DODODO_DB_PATH보다 우선한다 — 테스트나 다른 진입점이 저장 위치를 직접
+  // 통제해야 할 때 쓴다(#43/#45와 통일한 시그니처, PR #40 리뷰 nit). InMemory를 원하면
+  // dbConfig.ts와 같은 규칙으로 ":memory:"를 넘긴다.
+  databasePath?: string;
+}
+
+export function createCliContainer(options: CliContainerOptions = {}): CliContainer {
+  const env = options.env ?? process.env;
+  // 미설정이면 기본 영속 경로(./.dododo/dododo.db)를 쓴다 — issue #27(빈 저장소에서
+  // 대표 시나리오 재현)이 .env 설정 여부에 안 걸리게 한다(PR #40 리뷰, 김도현 지적).
+  // DODODO_DB_PATH=:memory:를 명시했을 때만 InMemory로 돌아간다. SQLite면 같은 커넥션을
+  // ContextRepository·RawItemRepository 양쪽에 공유한다 — 커넥션이 갈리면
+  // saveRawItemAnalysis의 canonical RawItem ID 보정이 서로 다른 raw_items 테이블 뷰를
+  // 보게 돼 깨진다(PR #32 계약 전제).
+  const dbPath = options.databasePath !== undefined ? normalizeDbPath(options.databasePath) : resolveDbPath(env);
+  let repository: ContextRepository;
+  let rawItemRepository: RawItemRepository;
+  let close: () => void;
+  if (dbPath === undefined) {
+    repository = new InMemoryContextRepository();
+    rawItemRepository = new InMemoryRawItemRepository();
+    close = () => {};
+  } else {
+    mkdirSync(dirname(dbPath), { recursive: true });
+    const database = openContextDatabase(dbPath);
+    repository = new SQLiteContextRepository(database);
+    rawItemRepository = new SQLiteRawItemRepository(database);
+    close = () => database.close();
+  }
+
   const profileRepository = new InMemoryProfileRepository();
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
-  // sync/watch가 syncIncrementally로 이 저장소를 써서 변경 없는 RawItem은 재분석을
-  // 건너뛴다. screenCollector는 여기 관여하지 않는다 — advise --screen은 매번
-  // "지금" 활동 스냅샷을 원하지 "지난번과 다를 때만"이 아니다.
-  const rawItemRepository = new InMemoryRawItemRepository();
-  const collectors = loadFixtureCollectors();
   const screenCollector = loadScreenCollector();
-  const llmConfig = resolveLlmConfig();
-  const llmProvider = createLlmProvider();
+  const llmConfig = resolveLlmConfig(env);
+  const llmProvider = createLlmProvider(env);
+
+  // Source 설정 파일(dododo.sources.json류)이 있으면 실제 Collector를, 설정 파일 자체가
+  // 없으면(전혀 시도한 적 없음) 기존 Fixture Collector를 쓴다(DODODO_DB_PATH와 같은
+  // "설정 없으면 데모 모드" 패턴). CLI 전체를 죽이지 않되, doctor가 사유를 보여줄 수
+  // 있게 sourcesConfigError에 남긴다.
+  // DODODO_SOURCE_CONFIG 유래인지 cwd 기본값 유래인지를 doctor가 성공/실패 양쪽
+  // 결과와 함께 보여줄 수 있게 미리 뽑아 둔다(PR #40 리뷰, 김도현 nit) — "설정한 적
+  // 없는데 우연히 그 이름 파일이 있어서 실제 Source로 전환"과 구분돼야 한다.
+  const sourcesConfigPathIsExplicit = resolveSourceInputConfigPath(env).isExplicit;
+  let collectors: Collector[];
+  let sourcesConfigPath: string | undefined;
+  let sourcesConfigError: string | undefined;
+  try {
+    const loaded = loadSourceInputConfig(env);
+    if (loaded === undefined) {
+      collectors = loadFixtureCollectors();
+    } else {
+      collectors = createSourceCollectors(loaded.config);
+      sourcesConfigPath = loaded.path;
+    }
+  } catch (error) {
+    // 설정 파일을 실제로 시도했는데(읽기 실패·JSON 오류·검증 실패) Fixture로 섞어
+    // 넣지 않는다 — createSourceCollectors()는 schoolSite/schoolEmail/lms 전체를
+    // 한 번에 검증하므로, 예를 들어 lms 설정 하나만 오타여도 schoolSite처럼 정상인
+    // 설정까지 여기서 통째로 버려진다. 그 상태에서 Fixture로 채우면 정상 Source
+    // 처리가 중단되는 데다 실제 데이터인 줄 알고 데모 데이터가 영속 SQLite에 그대로
+    // 저장된다(doyeonid, PR #40 리뷰 P1 — Source별 격리 전까지는 아예 수집하지
+    // 않는 쪽이 안전하다). 반면 설정 파일 자체가 없어서 시도조차 안 한 경우(위
+    // loaded === undefined)는 원래부터 데모 모드이므로 Fixture로 채우는 게 맞다.
+    collectors = [];
+    sourcesConfigError = error instanceof Error ? error.message : String(error);
+  }
 
   // screenCollector는 collectors 배열엔 없지만(자동 sync/watch 대상 아님) 수동
   // screen/advise 명령이 pipeline.sync()를 직접 호출하므로 allowlist엔 포함해야
@@ -198,6 +277,11 @@ export function createCliContainer(): CliContainer {
     llmProvider,
     privacyGateway,
     llmConfig,
+    dbPath,
+    sourcesConfigPath,
+    sourcesConfigPathIsExplicit,
+    sourcesConfigError,
+    close,
   };
 }
 

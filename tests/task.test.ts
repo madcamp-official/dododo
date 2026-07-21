@@ -7,7 +7,7 @@ import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 
 async function seededContainer() {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   await runSync(container);
   const tasks = await container.repository.listContextItems("task");
   const opportunities = await container.repository.listContextItems("opportunity");

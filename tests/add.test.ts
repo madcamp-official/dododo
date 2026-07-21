@@ -23,19 +23,19 @@ function scriptedInput(answer: string): Readable {
 const NOW = new Date("2026-07-20T10:00:00+09:00");
 
 test("add는 내용이 비어있으면 사용법을 보여준다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runAdd(container, [], NOW);
   assert.match(output, /사용법: dododo add/);
 });
 
 test("add는 일정 의도를 못 알아들으면 안내한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const output = await runAdd(container, ["아무", "말이나", "던짐"], NOW);
   assert.match(output, /알아듣지 못했습니다/);
 });
 
 test("add는 y로 확인하면 Event를 저장한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const io = { input: scriptedInput("y"), output: discardOutput() };
 
   const output = await runAdd(
@@ -52,7 +52,7 @@ test("add는 y로 확인하면 Event를 저장한다", async () => {
 });
 
 test("add는 확인 답이 y/edit이 아니면 취소한다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const io = { input: scriptedInput("n"), output: discardOutput() };
 
   const output = await runAdd(
@@ -67,7 +67,7 @@ test("add는 확인 답이 y/edit이 아니면 취소한다", async () => {
 });
 
 test("add는 edit이면 다시 입력하라고 안내하고 저장하지 않는다", async () => {
-  const container = createCliContainer();
+  const container = createCliContainer({ databasePath: ":memory:" });
   const io = { input: scriptedInput("edit"), output: discardOutput() };
 
   const output = await runAdd(
