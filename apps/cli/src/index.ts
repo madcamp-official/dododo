@@ -3,6 +3,7 @@ import { runAdvise } from "./commands/advise.ts";
 import { runAsk } from "./commands/ask.ts";
 import { commandCatalog } from "./commands/catalog.ts";
 import { renderDoctor } from "./commands/doctor.ts";
+import { runEvidence } from "./commands/evidence.ts";
 import { renderHelp } from "./commands/help.ts";
 import { renderInbox } from "./commands/inbox.ts";
 import { runSetup } from "./commands/setup.ts";
@@ -68,6 +69,10 @@ async function main(): Promise<void> {
     }
     if (command === "add") {
       console.log(await runAdd(container, process.argv.slice(3)));
+      return;
+    }
+    if (command === "evidence") {
+      console.log(await runEvidence(container, process.argv.slice(3)));
       return;
     }
 

@@ -18,5 +18,5 @@ export const commandCatalog: CommandDefinition[] = [
   { name: "add", description: "자연어로 Task 또는 Event를 추가합니다", owner: "runtime", status: "ready" },
   { name: "advise", description: "현재 화면과 Context를 바탕으로 조언합니다 (--screen [--live])", owner: "runtime", status: "ready" },
   { name: "screen", description: "화면 캡처를 한 번 수집해 Context에 반영합니다 (수동)", owner: "runtime", status: "ready" },
-  { name: "evidence", description: "판단의 원본 근거를 표시합니다", owner: "data", status: "skeleton" },
+  { name: "evidence", description: "Context ID의 원본 근거(출처·인용·관찰 시각)를 표시합니다", owner: "runtime", status: "ready" },
 ];
