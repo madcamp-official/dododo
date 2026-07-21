@@ -1,3 +1,5 @@
+import type { UserProfile } from "../../../../../packages/shared/src/index.ts";
+
 // docs/frontend-plan.md 6.5: ipcMain.handle 콜백은 toResult() 경계 밖에서 Renderer가
 // 보낸 payload를 바로 읽는다 — payload가 object가 아니거나 필수 필드 타입이 안 맞으면
 // 이 지점에서 던진 예외가 Result<T> 계약을 벗어나 Renderer까지 그대로 전파된다(거부된
@@ -21,8 +23,11 @@ export function isValidOffsetMinutes(value: unknown): value is number {
 }
 
 // profile:save 페이로드 검증. 배열 필드는 존재 여부·타입만 확인하고 원소 하나하나는
-// 검증하지 않는다 — add:submit 등 다른 핸들러의 얕은 검증 수준과 맞춘다.
-export function isUserProfileShape(value: unknown): boolean {
+// 검증하지 않는다 — add:submit 등 다른 핸들러의 얕은 검증 수준과 맞춘다. 다른 validate
+// 함수들과 마찬가지로 타입 predicate로 선언해, 이 검증을 통과한 뒤엔 handlers.ts가
+// `as unknown as UserProfile` 같은 캐스팅 없이 그대로 UserProfile로 쓸 수 있게 한다
+// (dotori235 리뷰, PR #68).
+export function isUserProfileShape(value: unknown): value is UserProfile {
   if (
     !isRecord(value)
     || typeof value.school !== "string"

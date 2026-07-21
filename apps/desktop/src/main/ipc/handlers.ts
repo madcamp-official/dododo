@@ -13,7 +13,6 @@ import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
 import { isNonEmptyString, isRecord, isUserProfileShape } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
-import type { UserProfile } from "../../../../../packages/shared/src/index.ts";
 
 export function handleToday(container: CliContainer) {
   return getToday(container);
@@ -92,7 +91,7 @@ export function handleProfileSave(container: CliContainer, input: unknown) {
   if (!isUserProfileShape(input)) {
     return Promise.resolve(fail("validation", "profile 형식이 올바르지 않습니다."));
   }
-  return saveProfile(container, input as unknown as UserProfile);
+  return saveProfile(container, input);
 }
 
 // uiState는 container가 필요 없고 대신 저장 파일 경로가 필요하다 — index.ts가
