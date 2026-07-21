@@ -143,6 +143,11 @@ Fact의 성격과 출처를 이용해 Opportunity, Task, Event, Note, Activity�
 dododo/
 ├── apps/
 │   ├── inference-gateway/       # 인증·비동기 Job API·Ollama Queue
+│   ├── desktop/                  # Electron 데스크톱 UI(캐릭터 오버레이·팝업 메뉴·설정 창)
+│   │   └── src/
+│   │       ├── main/             # Main 프로세스, IPC, 상시 watch, Notifier, 창 관리
+│   │       ├── preload/          # Renderer 노출 IPC API
+│   │       └── renderer/         # 캐릭터·패널·설정 UI
 │   └── cli/
 │       └── src/
 │           ├── commands/         # 명령 카탈로그, help, doctor
@@ -210,33 +215,11 @@ Job의 입력은 성공·실패·취소 시 SQLite에서 제거하고 결과·�
 
 ## 7. 팀 경계
 
-### Runtime & CLI
-
-- CLI 명령과 출력
-- Watch Process
-- 화면 캡처
-- OS 알림
-- 실행·중지와 권한 상태
-
-### Data Ingestion & Storage
-
-- 학교 사이트, 학교 이메일과 LMS Collector
-- 이메일 Message-ID·Thread-ID·발신자·수신 시각 보존
-- 파일과 Calendar Parser
-- Hash 기반 변경 감지
-- SQLite와 변경 이력
-- Source 장애 격리
-
-### Context Intelligence & Recommendation
-
-- Fact와 ContextItem 정의
-- LLM 추출 정책
-- 관련도·우선순위·병합·충돌 정책
-- 화면 Activity 연결과 조언
-- 대화 의도와 확인 정책
-- Ground Truth와 Benchmark
-
-세부 일정과 경로별 소유권은 [MVP 범위](mvp-scope.md)의 구현 계획을 따른다.
+경로별 소유권과 현재 담당자는 이 문서가 아니라 `AGENTS.md`의 "팀 역할과 소유권"이
+유일한 기준이다. `apps/desktop/`(Electron 데스크톱 UI)은 Runtime & CLI / Data Ingestion
+& Storage / Context Intelligence 세 영역과 다른 별도 기준으로 나뉘며, 그 배정도
+`AGENTS.md`에 정리되어 있다 — 세부 UI 구성은 [프론트엔드 기획](frontend-plan.md)을,
+원래 7일 계획과 분업 서사는 [MVP 범위](mvp-scope.md)를 참고한다.
 
 ## 8. 학교 이메일 수집 경계
 

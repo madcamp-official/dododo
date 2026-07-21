@@ -9,6 +9,7 @@
 - 대표 사용자 흐름: `docs/user-scenarios.md`
 - 모듈 구조와 데이터 흐름: `docs/architecture.md`
 - LLM 활용 방향과 확장 경계: `docs/llm-architecture.md`
+- 프론트엔드(Desktop UI) 기획과 역할 분담: `docs/frontend-plan.md`
 
 문서와 구현이 충돌하면 조용히 한쪽을 가정하지 않는다. 충돌을 알리고, 사용자가 정한 범위에 맞춰 문서와 구현을 함께 갱신한다.
 
@@ -40,6 +41,10 @@ Source → RawItem → Fact → ContextItem → Evidence
 - `packages/privacy/`: 수집·LLM 전달 전 개인정보 정책
 - `packages/evaluation/`: Ground Truth, Benchmark, 실패 사례
 - `fixtures/`: 네트워크 없이 재현 가능한 Source 입력과 평가 자료
+- `apps/desktop/`: Electron 데스크톱 UI(캐릭터 오버레이·팝업 메뉴·설정 창). 소유권은
+  `apps/cli/`나 `packages/*`와 다르게 나뉘므로 아래 소유권 절과 `docs/frontend-plan.md`를 함께 본다.
+- `apps/inference-gateway/`, `deploy/inference-gateway/`: 원격 LLM 추론 Gateway(인증,
+  Job Queue, Ollama 연동)와 그 배포 설정.
 
 모듈은 `packages/shared/src/`의 공개 계약을 통해 연결한다.
 
@@ -52,6 +57,11 @@ Source → RawItem → Fact → ContextItem → Evidence
 
 소유권은 충돌을 줄이기 위한 기본 경계다. 사용자가 다른 영역의 변경을 명시적으로 요청한 경우에는 작업할 수 있지만, 영향받는 담당 영역과 공통 계약을 반드시 함께 확인한다.
 
+`apps/desktop/`은 위 세 영역(Runtime & CLI / Data Ingestion & Storage / Context Intelligence)과
+별도로 `docs/frontend-plan.md`가 정의한 기준을 따른다. 그 문서에서 김도연은 Renderer를
+맡지만, 이는 이 프론트엔드 작업에 한정된 배정이며 Data Ingestion & Storage 소유권과는
+무관하다.
+
 ### 박도현 — Runtime & CLI
 
 소유 영역:
@@ -60,6 +70,9 @@ Source → RawItem → Fact → ContextItem → Evidence
 apps/cli/
 packages/scheduler/
 packages/collectors/src/screen/  # 화면 캡처 Runtime
+apps/desktop/src/main/           # Electron Main, IPC, 상시 watch, Notifier, 창 관리
+apps/desktop/src/preload/        # Renderer에 노출하는 IPC API 타입
+apps/desktop/electron-builder.yml
 ```
 
 담당:
@@ -69,6 +82,8 @@ packages/collectors/src/screen/  # 화면 캡처 Runtime
 - 화면 선택과 일시 캡처
 - 알림, Quiet Hours와 Snooze
 - 오류 메시지, 권한 상태와 실행 상태
+- Electron Main 프로세스(`createCliContainer` 재사용), Renderer용 IPC API, 상시 `watch`
+  실행과 알림 라우팅, Windows/macOS 패키징 — 세부 범위와 우선순위는 `docs/frontend-plan.md`를 따른다
 
 ### 김도연 — Data Ingestion & Storage
 
@@ -89,6 +104,10 @@ fixtures/의 Source별 원본 입력
 - RawItem·Fact·ContextItem·Evidence·변경 이력 저장
 - Source별 오류 격리와 증분 동기화
 
+추가로 `apps/desktop/src/renderer/`(캐릭터 UI, 팝업 메뉴, 결과 패널, 설정 창)와
+`apps/desktop/resources/`(캐릭터 에셋)를 담당한다. 이 배정은 `docs/frontend-plan.md`에
+정의된 프론트엔드 작업에 한정되며, 위 Data Ingestion & Storage 소유 영역을 대체하지 않는다.
+
 ### 김도현 — Context Intelligence & Recommendation
 
 소유 영역:
@@ -99,6 +118,8 @@ packages/privacy/
 packages/profile/
 packages/evaluation/
 fixtures/의 Ground Truth와 기대 결과
+apps/inference-gateway/
+deploy/inference-gateway/
 ```
 
 담당:
@@ -112,6 +133,8 @@ fixtures/의 Ground Truth와 기대 결과
 - 화면 Activity 연결과 적극적 조언 정책
 - 자연어 일정 처리와 모호성 확인
 - Ground Truth, Benchmark와 실패 사례 분석
+- 원격 LLM 추론 Gateway(인증, Job Queue, Ollama 연동)와 배포 설정 — 세부 상태는
+  `docs/llm-architecture.md`를 따른다
 
 ## 공동 소유 파일과 변경 절차
 
@@ -123,6 +146,7 @@ packages/shared/src/contracts.ts
 대표 Fixture의 기대 결과와 Ground Truth
 SQLite Migration의 핵심 ID와 관계
 package.json, tsconfig.json 등 전체 모듈에 영향을 주는 설정
+apps/desktop/src/preload/의 IPC 계약(Main↔Renderer 데이터 shape)
 ```
 
 공통 계약을 바꿀 때는 다음 순서를 지킨다.
