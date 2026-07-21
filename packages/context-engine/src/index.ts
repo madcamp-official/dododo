@@ -4,6 +4,7 @@ export * from "./extraction/index.ts";
 export * from "./intent/index.ts";
 export * from "./llm/index.ts";
 export * from "./pipeline.ts";
+export * from "./preparation/index.ts";
 export * from "./recommendation/index.ts";
 export * from "./relevance/index.ts";
 export * from "./resolution/index.ts";

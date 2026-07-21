@@ -1,11 +1,12 @@
 import { runAdd } from "./commands/add.ts";
 import { runAdvise } from "./commands/advise.ts";
 import { runAsk } from "./commands/ask.ts";
+import { runCalendar } from "./commands/calendar.ts";
 import { commandCatalog } from "./commands/catalog.ts";
 import { renderDoctor } from "./commands/doctor.ts";
 import { runEvidence } from "./commands/evidence.ts";
 import { renderHelp } from "./commands/help.ts";
-import { renderInbox } from "./commands/inbox.ts";
+import { runInbox } from "./commands/inbox.ts";
 import { runSetup } from "./commands/setup.ts";
 import { runSync } from "./commands/sync.ts";
 import { runScreen } from "./commands/screen.ts";
@@ -40,11 +41,15 @@ async function main(): Promise<void> {
       return;
     }
     if (command === "inbox") {
-      console.log(await renderInbox(container));
+      console.log(await runInbox(container, process.argv.slice(3)));
       return;
     }
     if (command === "today") {
       console.log(await renderToday(container));
+      return;
+    }
+    if (command === "calendar") {
+      console.log(await runCalendar(container, process.argv.slice(3)));
       return;
     }
     if (command === "task") {

@@ -1,5 +1,6 @@
 import type { Collector, RawItem, SourceType, SyncResult } from "../../../../packages/shared/src/index.ts";
 import type { ContextPipeline } from "../../../../packages/context-engine/src/index.ts";
+import { readCollectorDiagnostics } from "../../../../packages/collectors/src/index.ts";
 import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
 
 // pipeline.sync(collector)가 반환한 RawItem을 전부(스킵 없이) 다시 Fact 추출·
@@ -33,8 +34,12 @@ export async function syncIncrementally(
 ): Promise<SyncResult> {
   let rawItems: RawItem[];
   let changed: RawItem[];
+  let diagnostics: string[];
   try {
     rawItems = await collector.sync();
+    diagnostics = readCollectorDiagnostics(collector).map((error) => error.sourceUri === undefined
+      ? error.message
+      : `${error.sourceUri}: ${error.message}`);
     changed = await filterChanged(rawItems, rawItemRepository);
   } catch (error) {
     // 판정 단계 자체가 실패해도(예: 저장소 조회 오류) 이 Source만 오류로 보고하고
@@ -45,7 +50,7 @@ export async function syncIncrementally(
   }
 
   if (changed.length === 0) {
-    return { sourceId: collector.sourceId, collected: 0, created: 0, updated: 0, skipped: rawItems.length, errors: [] };
+    return { sourceId: collector.sourceId, collected: 0, created: 0, updated: 0, skipped: rawItems.length, errors: diagnostics };
   }
 
   const result = await pipeline.sync(new FixedItemsCollector(collector, changed));
@@ -57,7 +62,7 @@ export async function syncIncrementally(
     for (const item of changed) await rawItemRepository.save(item);
   }
 
-  return result;
+  return { ...result, errors: [...result.errors, ...diagnostics] };
 }
 
 async function filterChanged(items: RawItem[], repository: RawItemRepository): Promise<RawItem[]> {

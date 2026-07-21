@@ -45,7 +45,7 @@
 | 3 | 관련도 이중화 해소 | P1 | Issue #27 지적 — `relevanceScore`(Stage 6)가 어디서도 호출 안 되는 고아 코드. `computePriority`의 importance에 통합 |
 | 4 | `inbox` prepare 변환 로직 | P1 | Opportunity → `{신청마감 Event, 준비 Task[]}` 변환 함수(Runtime CLI와). 시나리오 1의 8단계 |
 | 5 | `canonicalTitle` 우선 사용 | P2 | PR#34 리뷰 — FactExtractor가 `metadata.canonicalTitle`을 subject로 우선 → 실데이터에서 제목 달라도 병합 안정 |
-| 6 | `dueAt` 구조화 마감 우선 | P2 | PR#20 리뷰 — LMS의 `metadata.dueAt`을 LLM 추출보다 우선 → 마감 정확도↑ |
+| 6 | `dueAt` 구조화 마감 우선 | P2 | PR#20 리뷰 — LMS의 `metadata.dueAt`을 LLM 추출보다 우선 → 마감 정확도↑. 현재 기본 휴리스틱 동기화는 일정 시각을 생성하지 않으므로 `calendar` 데모는 LLM 추출 또는 `add` 입력이 필요하다. |
 
 ### 공동
 
