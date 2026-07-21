@@ -175,12 +175,20 @@ function normalize(text: string): string {
 // - dueAt: LMS처럼 마감을 구조화된 값으로 이미 아는 Source는 LLM이 본문에서 뽑은 마감보다
 //   이 값을 신뢰한다. 마감성 Fact(deadline/task)의 eventTime만 대체하고 event(시험 시각)는
 //   건드리지 않는다.
+//
+// 전제(김도연·박도현 리뷰): 이 두 값은 RawItem 단위라서 그 RawItem에서 나온 주제성/마감성
+// Fact 전부에 같은 값이 적용된다. 즉 "RawItem 하나 = 주제 하나"를 가정한다. Collector가
+// 이 metadata를 채울 때는 그 단위를 지켜야 한다 — 안내문 하나에 마감이 서로 다른 과제가
+// 여러 개 있으면 RawItem을 과제 단위로 쪼개고, 쪼갤 수 없으면 canonicalTitle/dueAt을
+// 아예 채우지 않는다(채우지 않으면 LLM 추출값이 그대로 쓰여 회귀가 없다). Fact 단위로
+// 구조화 값을 붙이려면 RawItem.metadata가 아니라 Fact 계약을 넓혀야 하므로, 그때는
+// packages/shared의 공통 계약 변경 절차를 따른다.
 const SUBJECT_KINDS: ReadonlySet<FactKind> = new Set(["opportunity", "task", "event"]);
 const DEADLINE_KINDS: ReadonlySet<FactKind> = new Set(["deadline", "task"]);
 
 function toFact(raw: RawFact, rawItem: RawItem, index: number): Fact {
   const canonicalTitle = stringMetadata(rawItem.metadata.canonicalTitle);
-  const dueAt = stringMetadata(rawItem.metadata.dueAt);
+  const dueAt = structuredDueAt(rawItem);
 
   return {
     id: `fact-${rawItem.id}-${rawItem.contentHash}-${index}`,
@@ -192,6 +200,27 @@ function toFact(raw: RawFact, rawItem: RawItem, index: number): Fact {
     confidence: raw.confidence,
     evidenceText: raw.evidenceText,
   };
+}
+
+// LLM이 반환한 eventTime은 Schema의 format: "date-time" 검증을 거치지만, metadata.dueAt은
+// Collector가 HTML 속성값을 그대로 옮겨 담은 신뢰할 수 없는 외부 입력이다. 검증 없이
+// 우선하면 "tomorrow" 같은 값이 Fact와 ContextItem의 마감으로 저장된다(김도연님 리뷰 P1).
+// 파싱되지 않으면 undefined를 반환해 LLM 추출값으로 폴백한다 — 이 RawItem 하나 때문에
+// 다른 Fact 처리를 중단하지 않는다.
+export function structuredDueAt(rawItem: RawItem): string | undefined {
+  const value = stringMetadata(rawItem.metadata.dueAt);
+  if (value === undefined) return undefined;
+  return isIsoDateTime(value) ? value : undefined;
+}
+
+// JSON Schema의 format: "date-time"과 같은 기준(RFC 3339)으로 본다. Date.parse만으로는
+// "2026-07-23"이나 "Jul 23 2026" 같은 값도 통과해, 시각 없는 날짜가 마감 시각으로
+// 둔갑한다.
+function isIsoDateTime(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}:\d{2})$/.test(value)) {
+    return false;
+  }
+  return !Number.isNaN(Date.parse(value));
 }
 
 function stringMetadata(value: unknown): string | undefined {
