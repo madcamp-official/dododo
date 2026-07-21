@@ -5,18 +5,18 @@ import { fail, toResult, type Result } from "./result.ts";
 export interface SyncSummary {
   collected: number;
   created: number;
-  sourcesConfigError: string | undefined;
 }
 
 // sync.ts(CLI)와 같은 정책: Source 설정 오류면 Fixture로 섞지 않고 수집을 멈춘다
-// (PR #40 리뷰, doyeonid P1) — 여기서도 조용히 성공한 것처럼 안 보이도록
-// sourcesConfigError를 결과에 그대로 실어 보낸다.
+// (PR #40 리뷰, doyeonid P1). docs/frontend-plan.md 6.1: 오류는 성공 응답의 필드가
+// 아니라 Result<T>의 실패 쪽(error.code: "sources-config-error")으로만 알린다 —
+// 성공 응답엔 항상 undefined인 필드를 두지 않는다.
 export async function runSync(container: CliContainer, now: Date = new Date()): Promise<Result<SyncSummary>> {
   if (container.sourcesConfigError !== undefined) {
     return fail("sources-config-error", container.sourcesConfigError);
   }
   if (container.collectors.length === 0) {
-    return toResult(async () => ({ collected: 0, created: 0, sourcesConfigError: undefined }));
+    return toResult(async () => ({ collected: 0, created: 0 }));
   }
 
   return toResult(async () => {
@@ -28,6 +28,6 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
       collected += result.collected;
       created += result.created;
     }
-    return { collected, created, sourcesConfigError: undefined };
+    return { collected, created };
   });
 }

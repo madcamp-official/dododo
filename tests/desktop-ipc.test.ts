@@ -77,6 +77,7 @@ test("askQuestion은 Context 기반 답변과 근거를 반환한다", async () 
   if (!result.ok) return;
   assert.equal(typeof result.data.answer, "string");
   assert.ok(result.data.answer.length > 0);
+  assert.deepEqual(result.data.evidenceIds, result.data.evidence.map((evidence) => evidence.id));
 });
 
 test("getTaskDetail은 Task와 Evidence를 함께 반환한다", async () => {
@@ -193,4 +194,5 @@ test("runSync(IPC)는 등록된 Source를 동기화하고 수집·생성 건수�
   if (!result.ok) return;
   assert.ok(result.data.collected > 0);
   assert.ok(result.data.created > 0);
+  assert.deepEqual(Object.keys(result.data).sort(), ["collected", "created"]);
 });
