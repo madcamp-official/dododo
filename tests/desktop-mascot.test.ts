@@ -8,6 +8,7 @@ const desktopFiles = [
   "apps/desktop/src/preload/index.cjs",
   "apps/desktop/src/renderer/character/mascot.js",
   "apps/desktop/src/renderer/character/notification-state.mjs",
+  "apps/desktop/src/renderer/character/schedule-form.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -144,4 +145,24 @@ test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보�
   assert.match(main, /webContents\.send\(NOTIFICATION_CHANNEL/);
   assert.match(style, /\.notification-bubble\s*\{/);
   assert.match(style, /\.notification-badge\s*\{/);
+});
+
+test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를 연결한다", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /updateTask/);
+  assert.match(adapter, /deleteTask/);
+  assert.match(adapter, /setReminderOffset/);
+  assert.match(renderer, /data-schedule-edit-form/);
+  assert.match(renderer, /desktopApi\.update/);
+  assert.match(renderer, /window\.confirm/);
+  assert.match(renderer, /desktopApi\.delete/);
+  assert.match(renderer, /desktopApi\.reminder/);
+  assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
+  assert.match(style, /\.danger-button\s*\{/);
+  assert.match(style, /\.reminder-form\s*\{/);
 });

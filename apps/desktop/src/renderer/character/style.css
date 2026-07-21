@@ -389,7 +389,8 @@ h2 {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   padding: 8px 12px;
   border-radius: 11px;
   cursor: pointer;
@@ -404,6 +405,46 @@ h2 {
 .secondary-button {
   border: 1px solid #d6c2a1;
   background: #fffaf0;
+}
+
+.danger-button {
+  border: 1px solid #e4b9ae;
+  background: #fff3ef;
+  color: #a33f32;
+}
+
+.management-actions {
+  display: flex;
+  margin-top: 12px;
+  gap: 7px;
+}
+
+.reminder-form {
+  display: grid;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eadfc9;
+  gap: 7px;
+}
+
+.reminder-form label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reminder-form div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.reminder-form input {
+  box-sizing: border-box;
+  width: 90px;
+  padding: 8px;
+  border: 1px solid #d9c9ad;
+  border-radius: 10px;
+  background: #fffdf8;
 }
 
 .answer {

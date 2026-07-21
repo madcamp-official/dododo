@@ -11,6 +11,7 @@ import {
   createNotificationStore,
   notificationKindLabel,
 } from "./notification-state.mjs";
+import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -392,7 +393,8 @@ function renderNotificationCenter() {
   });
 }
 
-function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
+function renderDetail(detail) {
+  const { item, evidence, isSnoozed, snoozedUntil } = detail;
   const requirementsContent = item.requirements.length === 0
     ? '<p class="evidence-note">등록된 요구사항이 없습니다.</p>'
     : `<ul class="evidence-list">${item.requirements.map((requirement) => `
@@ -410,6 +412,22 @@ function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
         <button class="secondary-button" type="button" data-snooze>내일 알림</button>
       </div>`
     : "";
+  const form = scheduleItemToForm(item);
+  const managementContent = item.kind === "task" || item.kind === "event"
+    ? `<div class="management-actions">
+        <button class="secondary-button" type="button" data-edit-schedule>수정</button>
+        <button class="danger-button" type="button" data-delete-schedule>삭제</button>
+      </div>
+      <form class="reminder-form" data-reminder-form>
+        <label for="reminder-offset">마감 전 알림</label>
+        <div>
+          <input id="reminder-offset" name="offsetMinutes" type="number" min="1" step="1"
+            value="${escapeHtml(form.reminderOffsetMinutes ?? "")}" placeholder="예: 60" required />
+          <span>분 전</span>
+          <button class="secondary-button" type="submit">저장</button>
+        </div>
+      </form>`
+    : "";
   panelContent.innerHTML = `
     <article class="detail-card">
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
@@ -424,6 +442,7 @@ function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
       <h2>근거</h2>
       ${evidenceContent}
       ${actionContent}
+      ${managementContent}
     </article>`;
   panelContent.querySelector("[data-complete]")?.addEventListener("click", (event) => runTaskAction(
     event.currentTarget,
@@ -433,6 +452,108 @@ function renderDetail({ item, evidence, isSnoozed, snoozedUntil }) {
     event.currentTarget,
     () => desktopApi.snooze(item.id, tomorrowAtSameTime()),
   ));
+  panelContent.querySelector("[data-edit-schedule]")?.addEventListener("click", () => renderScheduleEdit(detail));
+  panelContent.querySelector("[data-delete-schedule]")?.addEventListener("click", (event) => {
+    runDeleteSchedule(event.currentTarget, item);
+  });
+  panelContent.querySelector("[data-reminder-form]")?.addEventListener("submit", (event) => {
+    runReminderUpdate(event, item.id);
+  });
+}
+
+function renderScheduleEdit(detail) {
+  const { item } = detail;
+  const form = scheduleItemToForm(item);
+  panelTitle.textContent = item.kind === "task" ? "할 일 수정" : "일정 수정";
+  panelContent.innerHTML = `
+    <form class="add-form" data-schedule-edit-form>
+      <div class="form-field">
+        <label for="edit-title">제목</label>
+        <input id="edit-title" name="title" type="text" value="${escapeHtml(form.title)}" required />
+      </div>
+      <div class="form-row">
+        <div class="form-field">
+          <label for="edit-date">날짜</label>
+          <input id="edit-date" name="date" type="date" value="${escapeHtml(form.date)}" required />
+        </div>
+        <div class="form-field">
+          <label for="edit-time">${item.kind === "task" ? "마감" : "시작"}</label>
+          <input id="edit-time" name="time" type="time" value="${escapeHtml(form.time)}" required />
+        </div>
+      </div>
+      ${item.kind === "event" ? `<div class="form-field">
+        <label for="edit-end-time">종료(선택)</label>
+        <input id="edit-end-time" name="endTime" type="time" value="${escapeHtml(form.endTime)}" />
+      </div>` : ""}
+      <div class="form-field">
+        <label for="edit-location">장소(선택)</label>
+        <input id="edit-location" name="location" type="text" value="${escapeHtml(form.location)}" />
+      </div>
+      <div class="action-row">
+        <button class="primary-button" type="submit">변경 저장</button>
+        <button class="secondary-button" type="button" data-cancel-edit>취소</button>
+      </div>
+    </form>`;
+  panelContent.querySelector("[data-cancel-edit]")?.addEventListener("click", () => renderDetail(detail));
+  panelContent.querySelector("[data-schedule-edit-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLFormElement)) return;
+    const data = new FormData(target);
+    const optional = (name) => data.get(name)?.toString().trim() || undefined;
+    const input = {
+      title: data.get("title")?.toString().trim() ?? "",
+      date: data.get("date")?.toString() ?? "",
+      time: data.get("time")?.toString() ?? "",
+      ...(item.kind === "event" ? { endTime: optional("endTime") } : {}),
+      location: optional("location"),
+    };
+    const buttons = target.querySelectorAll("button");
+    for (const button of buttons) button.disabled = true;
+    try {
+      unwrapResult(await desktopApi.update(item.id, input));
+      await openDetail(item.id);
+    } catch (error) {
+      renderError(error);
+    } finally {
+      for (const button of buttons) if (button.isConnected) button.disabled = false;
+    }
+  });
+}
+
+async function runDeleteSchedule(button, item) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  if (!window.confirm(`“${item.title}”을(를) 삭제할까요? 목록에서 숨겨지며 근거는 보존됩니다.`)) return;
+  button.disabled = true;
+  try {
+    unwrapResult(await desktopApi.delete(item.id));
+    await openView(currentListView);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+async function runReminderUpdate(event, id) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!(form instanceof HTMLFormElement)) return;
+  const offset = parseReminderOffset(new FormData(form).get("offsetMinutes"));
+  if (offset === undefined) {
+    renderError(new Error("알림 시간은 1분 이상의 정수로 입력해주세요."));
+    return;
+  }
+  const submit = form.querySelector("button[type='submit']");
+  if (submit instanceof HTMLButtonElement) submit.disabled = true;
+  try {
+    unwrapResult(await desktopApi.reminder(id, offset));
+    await openDetail(id);
+  } catch (error) {
+    renderError(error);
+  } finally {
+    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
+  }
 }
 
 async function runTaskAction(button, action) {
