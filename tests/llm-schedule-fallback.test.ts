@@ -81,11 +81,12 @@ test("제목 다듬기 응답이 무효하거나 실패하면 규칙 파서의 �
 });
 
 test("규칙 파서가 실패하면 LLM이 표준 패턴으로 번역한 문장을 다시 규칙 파서에 넣는다", async () => {
-  // "동아리 뒤풀이"는 구 SCHEDULE_SIGNAL 목록에 없어 규칙 파서 혼자서는 인식하지 못한다.
-  const utterance = "금요일 저녁 7시 동아리 뒤풀이";
+  // "뵙기로"는 SCHEDULE_SIGNAL 목록에 없어(비슷한 "보기로"만 있음) 규칙 파서 혼자서는
+  // 인식하지 못한다. "낼"도 날짜 표현으로 인식되지 않는다.
+  const utterance = "낼 3시쯤 지도교수님 뵙기로 함";
   assert.equal(parseScheduleIntent(utterance, NOW).kind, "unrecognized");
 
-  const provider = providerReturning({ rewrite: { rewritten: "금요일 저녁 7시 모임" } });
+  const provider = providerReturning({ rewrite: { rewritten: "내일 오후 3시 면담" } });
   const result = await parseScheduleIntentWithLlmFallback(utterance, NOW, provider, passthroughPrivacyGateway);
 
   assert.equal(result.kind, "event_draft");
@@ -104,8 +105,8 @@ test("LLM 재작성 결과도 규칙 파서를 다시 통과해야 하며, 여�
 });
 
 test("재작성 응답이 지나치게 길면(패턴을 벗어난 자유 문장으로 의심) 시도하지 않는다", async () => {
-  const utterance = "금요일 저녁 7시 동아리 뒤풀이";
-  const provider = providerReturning({ rewrite: { rewritten: `금요일 저녁 7시 모임 ${"가".repeat(100)}` } });
+  const utterance = "낼 3시쯤 지도교수님 뵙기로 함";
+  const provider = providerReturning({ rewrite: { rewritten: `내일 오후 3시 면담 ${"가".repeat(100)}` } });
 
   const result = await parseScheduleIntentWithLlmFallback(utterance, NOW, provider, passthroughPrivacyGateway);
 
