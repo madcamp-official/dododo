@@ -66,6 +66,21 @@ dododo inbox
 dododo ask "오늘 뭘 먼저 해야 해?"
 ```
 
+원격 Gateway를 처음 사용하는 기기는 `setup`에서 운영진이 발급한 일회용 설치 코드를
+입력한다. CLI는 `/v1/auth/activate`로 기기 Token을 발급받아 Git에서 제외되는 `.env`에
+권한 `0600`으로 저장한다. Token 원문은 화면이나 로그에 출력하지 않는다.
+
+```text
+npm start -- setup
+→ 설치 코드 입력
+→ 기기 Token 발급·.env 저장
+→ npm start -- doctor --llm-test
+→ 인증된 실제 추론 Job 검증
+```
+
+일반 `doctor`는 비용 없는 공개 `/health`만 확인한다. `--llm-test`를 명시한 경우에만
+일일 사용량을 1회 소비하는 실제 인증 Job을 생성한다.
+
 ### Watch Process
 
 사용자가 실행해 둔 동안 다음을 반복한다.

@@ -1,9 +1,17 @@
 import { createInterface } from "node:readline/promises";
+import { hostname } from "node:os";
+import { join } from "node:path";
 import { stdin, stdout } from "node:process";
 
 import { isValidClockTime } from "../../../../packages/scheduler/src/index.ts";
 import type { UserProfile } from "../../../../packages/shared/src/index.ts";
 import type { CliContainer } from "../runtime/container.ts";
+import {
+  activateRemoteDevice,
+  DEFAULT_REMOTE_GATEWAY_URL,
+  DEFAULT_REMOTE_TIMEOUT_MS,
+  saveRemoteLlmConfig,
+} from "../runtime/remoteActivation.ts";
 import { renderSourceStatus } from "../runtime/sourceStatus.ts";
 
 export interface SetupIo {
@@ -11,9 +19,17 @@ export interface SetupIo {
   output: NodeJS.WritableStream;
 }
 
+export interface SetupDependencies {
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  deviceName?: string;
+  fetchImplementation?: typeof fetch;
+}
+
 export async function runSetup(
   container: CliContainer,
   io: SetupIo = { input: stdin, output: stdout },
+  dependencies: SetupDependencies = {},
 ): Promise<string> {
   const rl = createInterface({ input: io.input, output: io.output });
 
@@ -41,10 +57,57 @@ export async function runSetup(
 
     const lines = ["프로필이 저장되었습니다."];
     if (quietHours.warning !== undefined) lines.push(quietHours.warning);
+    await configureRemoteLlm(rl, lines, dependencies);
     lines.push("", renderSourceStatus(container));
     return lines.join("\n");
   } finally {
     rl.close();
+  }
+}
+
+async function configureRemoteLlm(
+  rl: ReturnType<typeof createInterface>,
+  lines: string[],
+  dependencies: SetupDependencies,
+): Promise<void> {
+  const env = dependencies.env ?? process.env;
+  const existingToken = env.DODODO_LLM_TOKEN?.trim();
+  const existingProvider = env.DODODO_LLM_PROVIDER?.trim();
+  if (existingProvider === "remote-job" && existingToken) {
+    lines.push("원격 LLM: 기기 토큰이 이미 설정되어 있습니다.");
+    lines.push("인증 추론 확인: npm start -- doctor --llm-test");
+    return;
+  }
+
+  const activationCode = (await rl.question(
+    "원격 LLM 설치 코드(선택한 Context가 팀 GPU 서버로 전송됨, 사용하지 않으면 Enter): ",
+  )).trim();
+  if (activationCode === "") {
+    lines.push("원격 LLM 연결은 건너뛰었습니다.");
+    return;
+  }
+
+  const baseUrl = env.DODODO_LLM_BASE_URL?.trim() || DEFAULT_REMOTE_GATEWAY_URL;
+  try {
+    const activation = await activateRemoteDevice({
+      baseUrl,
+      activationCode,
+      deviceName: dependencies.deviceName ?? hostname(),
+      ...(dependencies.fetchImplementation === undefined
+        ? {}
+        : { fetchImplementation: dependencies.fetchImplementation }),
+    });
+    await saveRemoteLlmConfig({
+      envPath: join(dependencies.cwd ?? process.cwd(), ".env"),
+      baseUrl,
+      token: activation.token,
+      timeoutMs: DEFAULT_REMOTE_TIMEOUT_MS,
+    });
+    lines.push("원격 LLM 기기 토큰을 .env에 안전하게 저장했습니다.");
+    lines.push("인증 추론 확인: npm start -- doctor --llm-test");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    lines.push(`원격 LLM 설정 실패: ${reason}`);
   }
 }
 

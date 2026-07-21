@@ -47,6 +47,9 @@
   결과 Schema 재검증을 수행한다.
 - CLI는 `DODODO_LLM_PROVIDER=remote-job`일 때 원격 Provider를 선택하고 `doctor`는 공개
   `/health`를 확인한다.
+- `setup`은 일회용 설치 코드를 `/v1/auth/activate`로 교환하고 기기별 Token을 `.env`에
+  권한 `0600`으로 저장한다. `doctor --llm-test`는 실제 인증 Job을 한 번 생성해 Token과
+  추론 경로를 함께 검증한다. 일반 `doctor`는 GPU 사용량을 소비하지 않는다.
 - Ollama의 실제 모델명은 Gateway 환경변수로만 정하며 클라이언트는 `text` 또는 `vision`만
   요청한다.
 

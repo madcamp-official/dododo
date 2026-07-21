@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { Readable, Writable } from "node:stream";
 
@@ -164,6 +167,7 @@ test("setup saves a profile collected from scripted stdin", async () => {
     "온라인",
     "서울",
     "",
+    "",
   ]));
   const output = discardOutput();
 
@@ -187,6 +191,7 @@ test("setup saves quietHours when both times are valid", async () => {
     "서울",
     "22:00",
     "07:00",
+    "",
   ]));
   const output = discardOutput();
 
@@ -228,6 +233,7 @@ test("setup skips quietHours and warns when the start time is malformed", async 
     "온라인",
     "서울",
     "25:99",
+    "",
   ]));
   const output = discardOutput();
 
@@ -236,4 +242,107 @@ test("setup skips quietHours and warns when the start time is malformed", async 
 
   const profile = await container.profileRepository.get();
   assert.equal(profile?.quietHours, undefined);
+});
+
+test("setup은 설치 코드를 기기 Token으로 교환하고 .env에 권한을 제한해 저장한다", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-remote-setup-"));
+  try {
+    await writeFile(join(directory, ".env"), [
+      "DODODO_LLM_PROVIDER=ollama",
+      "DODODO_LLM_BASE_URL=http://localhost:11434",
+      "DODODO_DB_PATH=./data/context.db",
+      "",
+    ].join("\n"));
+    const container = createCliContainer({ databasePath: ":memory:", env: {} });
+    const input = Readable.from(pacedLines([
+      "테스트대학교",
+      "컴퓨터공학",
+      "3학년",
+      "AI",
+      "공모전",
+      "온라인",
+      "",
+      "install-code",
+    ]));
+    const output = discardOutput();
+    let activationAuthorization: string | undefined;
+    const fakeFetch = (async (inputValue: string | URL | Request, init?: RequestInit) => {
+      assert.equal(String(inputValue), "https://llm.madcamp-kaist.org/v1/auth/activate");
+      activationAuthorization = new Headers(init?.headers).get("authorization") ?? undefined;
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        activationCode: "install-code",
+        deviceName: "test-mac",
+      });
+      return new Response(JSON.stringify({ token: "dodo_secret_device_token", tokenType: "Bearer" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const summary = await runSetup(container, { input, output }, {
+      cwd: directory,
+      env: {},
+      deviceName: "test-mac",
+      fetchImplementation: fakeFetch,
+    });
+
+    assert.equal(activationAuthorization, undefined);
+    assert.match(summary, /기기 토큰을 \.env에 안전하게 저장했습니다/);
+    assert.doesNotMatch(summary, /dodo_secret_device_token/);
+    const envFile = await readFile(join(directory, ".env"), "utf8");
+    assert.match(envFile, /^DODODO_LLM_PROVIDER=remote-job$/m);
+    assert.match(envFile, /^DODODO_LLM_BASE_URL=https:\/\/llm\.madcamp-kaist\.org$/m);
+    assert.match(envFile, /^DODODO_LLM_TOKEN=dodo_secret_device_token$/m);
+    assert.match(envFile, /^DODODO_LLM_TIMEOUT_MS=1200000$/m);
+    assert.match(envFile, /^DODODO_DB_PATH=\.\/data\/context\.db$/m);
+    assert.doesNotMatch(envFile, /http:\/\/localhost:11434/);
+    if (process.platform !== "win32") {
+      assert.equal((await stat(join(directory, ".env"))).mode & 0o777, 0o600);
+    }
+    container.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("doctor --llm-test에 해당하는 옵션은 Bearer Token으로 실제 Job을 생성해 검증한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:", env: {} });
+  container.llmConfig = {
+    provider: "remote-job",
+    baseUrl: "https://llm.example.test",
+    textModel: "gemma3:12b",
+    visionModel: "gemma3:4b",
+    token: "device-secret",
+    timeoutMs: 5_000,
+  };
+  let call = 0;
+  const responses = [
+    new Response(null, { status: 200 }),
+    new Response(JSON.stringify({ jobId: "job_doctor", status: "queued", pollAfterMs: 1 }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    }),
+    new Response(JSON.stringify({
+      jobId: "job_doctor",
+      status: "succeeded",
+      result: { status: "ok" },
+      createdAt: "2026-07-21T00:00:00.000Z",
+      updatedAt: "2026-07-21T00:00:01.000Z",
+      expiresAt: "2026-07-21T00:30:00.000Z",
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  ];
+  const authorizations: Array<string | null> = [];
+  const fakeFetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    authorizations.push(new Headers(init?.headers).get("authorization"));
+    return responses[call++]!;
+  }) as typeof fetch;
+
+  const doctor = await renderDoctor(container, fakeFetch, { verifyRemoteInference: true });
+  assert.match(doctor, /LLM 인증 추론: OK/);
+  assert.deepEqual(authorizations, [null, "Bearer device-secret", "Bearer device-secret"]);
+  assert.doesNotMatch(doctor, /device-secret/);
+  container.close();
 });

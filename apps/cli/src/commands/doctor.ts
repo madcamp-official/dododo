@@ -1,4 +1,5 @@
 import type { CliContainer } from "../runtime/container.ts";
+import { verifyRemoteInference } from "../runtime/remoteActivation.ts";
 import { renderSourceStatus } from "../runtime/sourceStatus.ts";
 import { commandCatalog } from "./catalog.ts";
 
@@ -8,11 +9,12 @@ const LLM_STATUS_TIMEOUT_MS = 3000;
 export async function renderDoctor(
   container: CliContainer,
   fetchImpl: typeof fetch = fetch,
+  options: { verifyRemoteInference?: boolean } = {},
 ): Promise<string> {
   const ready = commandCatalog.filter((command) => command.status === "ready").length;
   const skeleton = commandCatalog.length - ready;
 
-  return [
+  const lines = [
     "dododo doctor",
     `Node: ${process.version}`,
     `Runtime: ${process.platform}/${process.arch}`,
@@ -20,9 +22,34 @@ export async function renderDoctor(
     renderStorageStatus(container),
     renderSourcesStatus(container),
     await renderLlmStatus(container, fetchImpl),
-    "",
-    renderSourceStatus(container),
-  ].join("\n");
+  ];
+  if (options.verifyRemoteInference) lines.push(await renderAuthenticatedLlmTest(container, fetchImpl));
+  lines.push("", renderSourceStatus(container));
+  return lines.join("\n");
+}
+
+async function renderAuthenticatedLlmTest(
+  container: CliContainer,
+  fetchImpl: typeof fetch,
+): Promise<string> {
+  const config = container.llmConfig;
+  if (config?.provider !== "remote-job") {
+    return "LLM 인증 추론: remote-job Provider에서만 사용할 수 있습니다";
+  }
+  if (!config.token) return "LLM 인증 추론: DODODO_LLM_TOKEN이 필요합니다";
+
+  try {
+    await verifyRemoteInference({
+      baseUrl: config.baseUrl,
+      token: config.token,
+      timeoutMs: config.timeoutMs,
+      fetchImplementation: fetchImpl,
+    });
+    return "LLM 인증 추론: OK";
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return `LLM 인증 추론: 실패(${reason})`;
+  }
 }
 
 async function renderLlmStatus(container: CliContainer, fetchImpl: typeof fetch): Promise<string> {
