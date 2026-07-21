@@ -42,6 +42,7 @@ import { defaultScreenAdvicePolicy, LlmScreenAdvicePolicy, type ScreenAdvicePoli
 import { normalizeDbPath, resolveDbPath } from "./dbConfig.ts";
 import { createLlmProvider, resolveLlmConfig, type LlmConfig } from "./llmProvider.ts";
 import { MaskingLLMProvider } from "./maskingLlmProvider.ts";
+import { createMutex, type Mutex } from "./mutex.ts";
 import { RetryAwareFactExtractor } from "./retryAwareFactExtractor.ts";
 import { loadSourceInputConfig, resolveSourceInputConfigPath } from "./sourceInputConfig.ts";
 import { TempHeuristicFactExtractor } from "./tempFactExtractor.ts";
@@ -69,6 +70,11 @@ export interface CliContainer {
   // 다음 tick에 재시도된다 — 그래서 Collector를 감싸는 대신 이 저장소 자체를
   // 공개해 호출부가 직접 순서를 통제하게 한다.
   rawItemRepository: RawItemRepository;
+  // watch tick의 자동 동기화와 수동 sync(CLI sync 명령, 데스크톱 sync:run IPC)가
+  // 같은 collectors/pipeline을 동시에 건드리지 않도록 "동기화 한 번"을 이 락으로
+  // 감싼다(mutex.ts, doyeonid 리뷰 PR #61) — CLI는 원래 한 진입점만 쓰지만 데스크톱은
+  // watch 루프와 Renderer IPC가 같은 container를 공유해 실제로 겹칠 수 있다.
+  syncLock: Mutex;
   collectors: Collector[];
   // 화면 캡처는 의도적으로 collectors에 넣지 않는다: "변경분만 동기화"라는
   // 주기 폴링 개념이 실시간 화면엔 안 맞고, AGENTS.md 최소수집 원칙상 사용자
@@ -273,6 +279,7 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
     syncStatus,
     pipeline,
     rawItemRepository,
+    syncLock: createMutex(),
     collectors,
     screenCollector,
     // provider 없으면(.env 미설정) 기존 substring-매칭 placeholder로 폴백 — 회귀 없음.

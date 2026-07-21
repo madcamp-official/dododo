@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
 import { registerIpcHandlers } from "./ipc/index.ts";
+import { startDesktopWatch } from "./watch/desktopWatch.ts";
 import { clampPositionToWorkArea } from "./dragGeometry.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -124,10 +125,16 @@ function createCharacterWindow() {
   });
 }
 
+let desktopWatchHandle;
+
 app.whenReady().then(() => {
   // apps/cli의 createCliContainer를 그대로 재사용한다(container.ts) — CLI 명령마다
   // 새로 만들고 버리는 것과 달리, 앱 실행 내내 하나만 만들어 모든 IPC 호출이 공유한다.
-  registerIpcHandlers(getDesktopContainer());
+  const container = getDesktopContainer();
+  registerIpcHandlers(container);
+  // CLI의 watch 명령과 달리 사용자가 따로 실행하지 않아도 앱이 떠 있는 동안 상시
+  // 돈다(docs/frontend-plan.md 3번) — before-quit에서 stop()으로 멈춘다.
+  desktopWatchHandle = startDesktopWatch(container);
   createCharacterWindow();
 
   app.on("activate", () => {
@@ -147,5 +154,6 @@ app.on("window-all-closed", () => {
 // window-all-closed, OS 종료) 파일 잠금을 풀어야 다음 실행이 곧바로 붙을 수 있다
 // (apps/cli/src/index.ts의 try/finally와 같은 이유).
 app.on("before-quit", () => {
+  desktopWatchHandle?.stop();
   closeDesktopContainer();
 });

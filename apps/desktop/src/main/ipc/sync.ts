@@ -19,7 +19,9 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
     return toResult(async () => ({ collected: 0, created: 0 }));
   }
 
-  return toResult(async () => {
+  // doyeonid 리뷰(PR #61): watch tick(watchTick.ts)과 이 수동 sync:run이 같은
+  // container를 공유해 동시에 실행될 수 있다 — 같은 syncLock으로 직렬화한다.
+  return toResult(() => container.syncLock.run(async () => {
     let collected = 0;
     let created = 0;
     for (const collector of container.collectors) {
@@ -29,5 +31,5 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
       created += result.created;
     }
     return { collected, created };
-  });
+  }));
 }
