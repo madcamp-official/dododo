@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
 import { registerIpcHandlers } from "./ipc/index.ts";
+import { clampPositionToWorkArea } from "./dragGeometry.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
@@ -17,11 +18,34 @@ const END_CHARACTER_DRAG = "desktop:end-character-drag";
 const characterDragOrigins = new WeakMap();
 const EXPANDED_SIZE = { width: 680, height: 420 };
 
+// Renderer가 mouse-ignore 초기 상태의 단독 소유자다(위 mousemove 주석 참고). Renderer
+// 스크립트가 실패하거나 아직 SET_MOUSE_PASSTHROUGH를 한 번도 못 보낸 상태로 남으면
+// 투명·alwaysOnTop 창 전체가 계속 클릭을 가로막을 수 있다 — 일정 시간 안에 Renderer가
+// 보고하지 않으면 안전한 기본값(click-through)으로 되돌린다.
+const PASSTHROUGH_FALLBACK_MS = 2000;
+const passthroughFallbacks = new WeakMap();
+
+function schedulePassthroughFallback(characterWindow) {
+  const timeoutId = setTimeout(() => {
+    passthroughFallbacks.delete(characterWindow);
+    if (!characterWindow.isDestroyed()) characterWindow.setIgnoreMouseEvents(true, { forward: true });
+  }, PASSTHROUGH_FALLBACK_MS);
+  passthroughFallbacks.set(characterWindow, timeoutId);
+}
+
+function cancelPassthroughFallback(characterWindow) {
+  const timeoutId = passthroughFallbacks.get(characterWindow);
+  if (timeoutId === undefined) return;
+  clearTimeout(timeoutId);
+  passthroughFallbacks.delete(characterWindow);
+}
+
 ipcMain.on(SET_MOUSE_PASSTHROUGH, (event, shouldIgnore) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
   if (characterWindow === null || !characterWindows.has(characterWindow) || typeof shouldIgnore !== "boolean") {
     return;
   }
+  cancelPassthroughFallback(characterWindow);
   characterWindow.setIgnoreMouseEvents(shouldIgnore, { forward: true });
 });
 
@@ -42,10 +66,12 @@ ipcMain.on(MOVE_CHARACTER_DRAG, (event, pointer) => {
   const desiredY = Math.round(origin.windowY + pointer.y - origin.pointerY);
   const workArea = screen.getDisplayNearestPoint(pointer).workArea;
   const [windowWidth, windowHeight] = characterWindow.getSize();
-  characterWindow.setPosition(
-    Math.min(Math.max(desiredX, workArea.x), workArea.x + workArea.width - windowWidth),
-    Math.min(Math.max(desiredY, workArea.y), workArea.y + workArea.height - windowHeight),
+  const clamped = clampPositionToWorkArea(
+    { x: desiredX, y: desiredY },
+    { width: windowWidth, height: windowHeight },
+    workArea,
   );
+  characterWindow.setPosition(clamped.x, clamped.y);
 });
 
 ipcMain.on(END_CHARACTER_DRAG, (event) => {
@@ -80,7 +106,9 @@ function createCharacterWindow() {
 
   characterWindow.setMenuBarVisibility(false);
   characterWindows.add(characterWindow);
+  schedulePassthroughFallback(characterWindow);
   characterWindow.on("closed", () => {
+    cancelPassthroughFallback(characterWindow);
     characterDragOrigins.delete(characterWindow);
     characterWindows.delete(characterWindow);
   });

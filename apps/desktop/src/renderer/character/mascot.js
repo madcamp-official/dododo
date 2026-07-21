@@ -98,8 +98,10 @@ if (character instanceof HTMLImageElement) {
   else character.addEventListener("load", prepareAlphaMask, { once: true });
   // Main과 Renderer가 각각 초기 mouse-ignore 상태를 쓰면 loadFile 완료 시점에 따라
   // 실제 창 상태와 isIgnoringMouse가 어긋날 수 있다. Renderer를 단일 소유자로 두고
-  // 투명 여백을 먼저 click-through로 만든 뒤, 전달받은 mousemove로 캐릭터 위에서
-  // false로 전환한다. 그래야 -webkit-app-region: drag가 실제 마우스 입력을 받는다.
+  // 투명 여백을 먼저 click-through로 만든 뒤, mousemove로 캐릭터(불투명 픽셀)나
+  // 메뉴·패널 위에서 false로 전환한다. 그래야 pointerdown이 characterButton까지
+  // 도달해 startCharacterDrag가 실행된다(더 이상 CSS -webkit-app-region: drag가
+  // 아니라 Pointer Event 기반 드래그다 — Main.setPosition으로 창을 옮긴다).
   window.desktopMascot?.setMousePassthrough(isIgnoringMouse);
   window.addEventListener("mousemove", updateMousePassthrough);
 }
@@ -348,7 +350,10 @@ async function runTaskAction(button, action) {
       try {
         await openView(currentListView, { throwOnError: true });
       } catch (error) {
+        // openView가 실패하기 전에 이미 panelTitle을 목록 뷰 제목으로 바꿔놨다 —
+        // 이 안내는 목록이 아니라 처리 결과이므로 제목도 내용에 맞게 다시 맞춘다.
         const detail = error instanceof Error ? error.message : "알 수 없는 오류";
+        panelTitle.textContent = "처리 완료";
         renderError(new Error(`처리는 완료됐지만 목록 갱신에 실패했습니다. ${detail}`));
       }
     } finally {
