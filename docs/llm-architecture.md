@@ -50,6 +50,8 @@
 - `setup`은 일회용 설치 코드를 `/v1/auth/activate`로 교환하고 기기별 Token을 `.env`에
   권한 `0600`으로 저장한다. `doctor --llm-test`는 실제 인증 Job을 한 번 생성해 Token과
   추론 경로를 함께 검증한다. 일반 `doctor`는 GPU 사용량을 소비하지 않는다.
+- 운영자는 `gateway:activation-code` 명령으로 사용자별 설치 코드를 SQLite에 즉시 발급·조회·
+  취소한다. DB에는 코드 원문 대신 Hash와 만료·사용 상태만 저장하며 기본 유효기간은 7일이다.
 - Ollama의 실제 모델명은 Gateway 환경변수로만 정하며 클라이언트는 `text` 또는 `vision`만
   요청한다.
 

@@ -281,7 +281,10 @@ test("setup은 설치 코드를 기기 Token으로 교환하고 .env에 권한�
 
     const summary = await runSetup(container, { input, output }, {
       cwd: directory,
-      env: {},
+      env: {
+        DODODO_LLM_PROVIDER: "ollama",
+        DODODO_LLM_BASE_URL: "http://localhost:11434",
+      },
       deviceName: "test-mac",
       fetchImplementation: fakeFetch,
     });

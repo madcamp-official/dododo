@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { GatewayConfig } from "../apps/inference-gateway/src/config.ts";
 import { createGatewayRuntime } from "../apps/inference-gateway/src/server.ts";
+import { GatewayStore, hashSecret } from "../apps/inference-gateway/src/store.ts";
 import {
   LLMExtractionError,
   RemoteJobLLMProvider,
@@ -50,6 +51,41 @@ test("설치 코드는 한 번만 기기 Token으로 교환된다", async () => 
     });
     assert.equal(second.status, 409);
   });
+});
+
+test("운영자가 DB에 발급한 사용자별 설치 코드는 재시작 없이 한 번만 사용할 수 있다", async () => {
+  const store = new GatewayStore(":memory:");
+  const code = "dodo_setup_test_user_code";
+  store.registerActivationCode(
+    "ac_test_user",
+    hashSecret(code),
+    "테스트 사용자",
+    "2026-07-21T00:00:00.000Z",
+    "2026-07-28T00:00:00.000Z",
+  );
+  const runtime = createGatewayRuntime(
+    { ...testConfig(), activationCodes: [] },
+    {
+      provider: returningProvider({ answer: "ok" }),
+      store,
+      now: () => new Date("2026-07-21T01:00:00.000Z"),
+    },
+  );
+  const address = await runtime.listen();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const first = await activate(baseUrl, code);
+    assert.equal(first.status, 201);
+    assert.match((await first.json() as { token: string }).token, /^dodo_/);
+
+    const second = await activate(baseUrl, code);
+    assert.equal(second.status, 409);
+    assert.equal(store.listIssuedActivationCodes()[0]?.usedAt, "2026-07-21T01:00:00.000Z");
+  } finally {
+    await runtime.close();
+    store.close();
+  }
 });
 
 test("RemoteJobLLMProvider는 Job 생성·polling·Schema 검증을 끝까지 수행한다", async () => {
@@ -225,6 +261,14 @@ function remoteRequest(): Record<string, unknown> {
     schema: resultSchema,
     temperature: 0,
   };
+}
+
+function activate(baseUrl: string, activationCode: string): Promise<Response> {
+  return fetch(`${baseUrl}/v1/auth/activate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ activationCode, deviceName: "test-device" }),
+  });
 }
 
 function returningProvider(value: unknown): LLMProvider {

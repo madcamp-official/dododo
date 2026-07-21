@@ -87,7 +87,12 @@ async function configureRemoteLlm(
     return;
   }
 
-  const baseUrl = env.DODODO_LLM_BASE_URL?.trim() || DEFAULT_REMOTE_GATEWAY_URL;
+  // README의 로컬 Ollama 예시를 복사한 .env가 있어도 설치 코드는 팀 Gateway로
+  // 활성화해야 한다. 사용자가 remote-job을 명시한 경우에만 커스텀 원격 주소를 유지한다.
+  const configuredRemoteUrl = existingProvider === "remote-job"
+    ? env.DODODO_LLM_BASE_URL?.trim()
+    : undefined;
+  const baseUrl = configuredRemoteUrl || DEFAULT_REMOTE_GATEWAY_URL;
   try {
     const activation = await activateRemoteDevice({
       baseUrl,

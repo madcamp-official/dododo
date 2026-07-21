@@ -81,6 +81,10 @@ npm start -- setup
 일반 `doctor`는 비용 없는 공개 `/health`만 확인한다. `--llm-test`를 명시한 경우에만
 일일 사용량을 1회 소비하는 실제 인증 Job을 생성한다.
 
+운영자는 Gateway VM에서 `npm run gateway:activation-code -- issue --label <사용자>`로
+사용자별 코드를 Gateway SQLite에 발급한다. 원문은 발급 시 한 번만 표시하며 DB에는 Hash,
+대상, 만료·사용·취소 상태만 저장한다. 코드 추가와 취소에 Gateway 재시작은 필요하지 않다.
+
 ### Watch Process
 
 사용자가 실행해 둔 동안 다음을 반복한다.

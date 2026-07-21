@@ -20,9 +20,19 @@ export interface StoredInferenceJob {
   expiresAt: string;
 }
 
+export interface IssuedActivationCode {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt?: string;
+  usedAt?: string;
+  revokedAt?: string;
+}
+
 export type ActivationResult =
   | { status: "activated"; token: string }
-  | { status: "already_used" };
+  | { status: "already_used" }
+  | { status: "unavailable" };
 
 export type JobAdmissionResult =
   | { status: "created"; job: StoredInferenceJob }
@@ -58,22 +68,77 @@ export class GatewayStore {
     return row !== undefined;
   }
 
-  activate(codeHash: string, deviceName: string | undefined, now: string): ActivationResult {
-    const existing = this.database.prepare(
-      "SELECT code_hash FROM gateway_activations WHERE code_hash = ?",
-    ).get(codeHash);
-    if (existing !== undefined) return { status: "already_used" };
+  registerActivationCode(
+    id: string,
+    codeHash: string,
+    label: string,
+    createdAt: string,
+    expiresAt: string | undefined,
+  ): IssuedActivationCode {
+    this.database.prepare(`
+      INSERT INTO gateway_issued_activation_codes(
+        id, code_hash, label, created_at, expires_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(id, codeHash, label, createdAt, expiresAt ?? null);
+    return { id, label, createdAt, ...(expiresAt === undefined ? {} : { expiresAt }) };
+  }
 
+  isIssuedActivationCodeActive(codeHash: string, now: string): boolean {
+    const row = this.database.prepare(`
+      SELECT id FROM gateway_issued_activation_codes
+      WHERE code_hash = ?
+        AND used_at IS NULL
+        AND revoked_at IS NULL
+        AND (expires_at IS NULL OR expires_at > ?)
+    `).get(codeHash, now);
+    return row !== undefined;
+  }
+
+  hasIssuedActivationCode(codeHash: string): boolean {
+    return this.database.prepare(
+      "SELECT id FROM gateway_issued_activation_codes WHERE code_hash = ?",
+    ).get(codeHash) !== undefined;
+  }
+
+  listIssuedActivationCodes(): IssuedActivationCode[] {
+    const rows = this.database.prepare(`
+      SELECT id, label, created_at, expires_at, used_at, revoked_at
+      FROM gateway_issued_activation_codes
+      ORDER BY created_at DESC
+    `).all() as unknown as IssuedActivationCodeRow[];
+    return rows.map(rowToActivationCode);
+  }
+
+  revokeActivationCode(id: string, now: string): boolean {
+    const result = this.database.prepare(`
+      UPDATE gateway_issued_activation_codes
+      SET revoked_at = ?
+      WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL
+    `).run(now, id);
+    return Number(result.changes) === 1;
+  }
+
+  activate(
+    codeHash: string,
+    deviceName: string | undefined,
+    now: string,
+    requireIssuedCode = false,
+  ): ActivationResult {
     const token = `dodo_${randomBytes(32).toString("base64url")}`;
     const tokenHash = hashSecret(token);
+
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const raced = this.database.prepare(
+      const existing = this.database.prepare(
         "SELECT code_hash FROM gateway_activations WHERE code_hash = ?",
       ).get(codeHash);
-      if (raced !== undefined) {
+      if (existing !== undefined) {
         this.database.exec("ROLLBACK");
         return { status: "already_used" };
+      }
+      if (requireIssuedCode && !this.isIssuedActivationCodeActive(codeHash, now)) {
+        this.database.exec("ROLLBACK");
+        return { status: "unavailable" };
       }
 
       this.database.prepare(`
@@ -84,6 +149,11 @@ export class GatewayStore {
         INSERT INTO gateway_activations(code_hash, token_hash, activated_at)
         VALUES (?, ?, ?)
       `).run(codeHash, tokenHash, now);
+      this.database.prepare(`
+        UPDATE gateway_issued_activation_codes
+        SET used_at = ?
+        WHERE code_hash = ? AND used_at IS NULL
+      `).run(now, codeHash);
       this.database.exec("COMMIT");
       return { status: "activated", token };
     } catch (error) {
@@ -263,6 +333,16 @@ export class GatewayStore {
         activated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS gateway_issued_activation_codes (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL UNIQUE,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT,
+        used_at TEXT,
+        revoked_at TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS gateway_daily_usage (
         owner_token_hash TEXT NOT NULL,
         usage_day TEXT NOT NULL,
@@ -300,6 +380,26 @@ interface JobRow {
   created_at: string;
   updated_at: string;
   expires_at: string;
+}
+
+interface IssuedActivationCodeRow {
+  id: string;
+  label: string;
+  created_at: string;
+  expires_at: string | null;
+  used_at: string | null;
+  revoked_at: string | null;
+}
+
+function rowToActivationCode(row: IssuedActivationCodeRow): IssuedActivationCode {
+  return {
+    id: row.id,
+    label: row.label,
+    createdAt: row.created_at,
+    ...(row.expires_at === null ? {} : { expiresAt: row.expires_at }),
+    ...(row.used_at === null ? {} : { usedAt: row.used_at }),
+    ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
+  };
 }
 
 function rowToJob(row: JobRow): StoredInferenceJob {

@@ -70,9 +70,16 @@ async function route(
     const body = await readJson(request, Math.min(dependencies.config.maxBodyBytes, 16_384));
     const activationCode = requiredString(body, "activationCode", 256);
     const deviceName = optionalString(body, "deviceName", 200);
-    if (!dependencies.auth.isActivationCodeAllowed(activationCode)) throw httpError(401, "invalid_activation_code", "유효하지 않은 설치 코드입니다");
-    const result = dependencies.store.activate(hashSecret(activationCode), deviceName, timestamp(dependencies.now));
+    const authorization = dependencies.auth.authorizeActivationCode(activationCode);
+    if (authorization === undefined) throw httpError(401, "invalid_activation_code", "유효하지 않은 설치 코드입니다");
+    const result = dependencies.store.activate(
+      authorization.codeHash,
+      deviceName,
+      timestamp(dependencies.now),
+      authorization.source === "issued",
+    );
     if (result.status === "already_used") throw httpError(409, "activation_code_used", "이미 사용된 설치 코드입니다");
+    if (result.status === "unavailable") throw httpError(401, "invalid_activation_code", "만료되었거나 취소된 설치 코드입니다");
     sendJson(response, 201, { token: result.token, tokenType: "Bearer" });
     return;
   }
@@ -148,9 +155,21 @@ class GatewayAuth {
     return this.store.isDeviceTokenActive(tokenHash) ? tokenHash : undefined;
   }
 
-  isActivationCodeAllowed(code: string): boolean {
-    return containsHash(this.activationCodeHashes, hashSecret(code));
+  authorizeActivationCode(code: string): ActivationCodeAuthorization | undefined {
+    const codeHash = hashSecret(code);
+    if (containsHash(this.activationCodeHashes, codeHash)) {
+      return { codeHash, source: "environment" };
+    }
+    if (this.store.hasIssuedActivationCode(codeHash)) {
+      return { codeHash, source: "issued" };
+    }
+    return undefined;
   }
+}
+
+interface ActivationCodeAuthorization {
+  codeHash: string;
+  source: "environment" | "issued";
 }
 
 class HttpError extends Error {
