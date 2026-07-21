@@ -1,4 +1,10 @@
-import { desktopApi, formatDateTime, statusLabel } from "./desktop-api.mjs";
+import {
+  desktopApi,
+  formatDateTime,
+  formatSyncSummary,
+  statusLabel,
+  unwrapResult,
+} from "./desktop-api.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -78,9 +84,13 @@ async function openView(view) {
   panelTitle.textContent = viewTitle(view);
   panelContent.innerHTML = '<div class="state-message">불러오는 중...</div>';
   try {
-    if (view === "today") renderItems((await desktopApi.today()).items, "오늘 확인할 일이 없습니다.");
-    else if (view === "calendar") renderItems((await desktopApi.calendar()).items, "이번 주 일정이 없습니다.");
-    else if (view === "inbox") renderRecommendations((await desktopApi.inbox()).recommendations);
+    if (view === "today") {
+      renderRankedItems(unwrapResult(await desktopApi.today()).items, "오늘 확인할 일이 없습니다.");
+    } else if (view === "calendar") {
+      renderScheduledItems(unwrapResult(await desktopApi.calendar()).items);
+    } else if (view === "inbox") {
+      renderRecommendations(unwrapResult(await desktopApi.inbox()).items);
+    }
     else if (view === "ask") renderAsk();
     else renderSettings();
   } catch (error) {
@@ -88,34 +98,55 @@ async function openView(view) {
   }
 }
 
-function renderItems(items, emptyMessage) {
-  if (items.length === 0) {
+function renderRankedItems(entries, emptyMessage) {
+  if (entries.length === 0) {
     panelContent.innerHTML = `<div class="state-message">${escapeHtml(emptyMessage)}</div>`;
     return;
   }
-  panelContent.innerHTML = `<div class="card-list">${items.map((item) => `
+  panelContent.innerHTML = `<div class="card-list">${entries.map(({ item, score, reason }) => `
     <button class="context-card" type="button" data-item-id="${escapeHtml(item.id)}">
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
       <strong>${escapeHtml(item.title)}</strong>
       <span>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</span>
-      <small>${escapeHtml(statusLabel(item.status))}</small>
+      <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
-    button.addEventListener("click", () => renderDetail(items.find((item) => item.id === button.dataset.itemId)));
+    button.addEventListener("click", () => {
+      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
+    });
   });
 }
 
-function renderRecommendations(recommendations) {
-  if (recommendations.length === 0) {
+function renderScheduledItems(entries) {
+  if (entries.length === 0) {
+    panelContent.innerHTML = '<div class="state-message">이번 주 일정이 없습니다.</div>';
+    return;
+  }
+  panelContent.innerHTML = `<div class="card-list">${entries.map(({ item, at }) => `
+    <button class="context-card" type="button" data-item-id="${escapeHtml(item.id)}">
+      <span class="card-kind">${item.kind === "event" ? "일정" : "마감"}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(formatDateTime(at))}</span>
+      <small>${escapeHtml(statusLabel(item.status))}</small>
+    </button>`).join("")}</div>`;
+  panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      renderDetail(entries.find((entry) => entry.item.id === button.dataset.itemId)?.item);
+    });
+  });
+}
+
+function renderRecommendations(entries) {
+  if (entries.length === 0) {
     panelContent.innerHTML = '<div class="state-message">새로운 추천이 없습니다.</div>';
     return;
   }
-  panelContent.innerHTML = `<div class="card-list">${recommendations.map((recommendation) => `
+  panelContent.innerHTML = `<div class="card-list">${entries.map(({ item, score, reason }) => `
     <article class="context-card static-card">
       <span class="card-kind opportunity">추천</span>
-      <strong>${escapeHtml(recommendation.title)}</strong>
-      <span>${escapeHtml(recommendation.reason)}</span>
-      <small>${escapeHtml(formatDateTime(recommendation.deadline))}</small>
+      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(reason)}</span>
+      <small>${escapeHtml(`${score}점 · ${formatDateTime(item.deadline)}`)}</small>
     </article>`).join("")}</div>`;
 }
 
@@ -135,7 +166,8 @@ function renderAsk() {
     answer.hidden = false;
     answer.textContent = "답변을 찾는 중...";
     try {
-      answer.textContent = (await desktopApi.ask(question)).answer;
+      const result = unwrapResult(await desktopApi.ask(question));
+      answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
     } catch (error) {
       answer.textContent = error instanceof Error ? error.message : "질문 처리에 실패했습니다.";
     }
@@ -178,11 +210,11 @@ async function runSync(button) {
   const original = button.innerHTML;
   button.textContent = "동기화 중...";
   try {
-    const result = await desktopApi.sync();
+    const result = unwrapResult(await desktopApi.sync());
     popupMenu.hidden = true;
     panel.hidden = false;
     panelTitle.textContent = "동기화";
-    panelContent.innerHTML = `<div class="state-message success">${escapeHtml(result.message)}</div>`;
+    panelContent.innerHTML = `<div class="state-message success">${escapeHtml(formatSyncSummary(result))}</div>`;
   } catch (error) {
     renderError(error);
   } finally {
