@@ -191,30 +191,62 @@ apps/desktop/                      # 신규 Electron 앱(기존 apps/cli/와 별
 
 ## 6. 공동 계약 제안 (병렬 작업 전 고정)
 
-3번 "공동" 항목의 "IPC 계약을 먼저 고정한다"를 구체화한 초안이다. 박도현(Main)과
-김도연(Renderer)이 이 초안을 기준으로 합의·조정한 뒤 착수한다 — 확정본이 아니라
-논의 시작점이다.
+3번 "공동" 항목의 "IPC 계약을 먼저 고정한다"를 구체화한 초안이다. 같은 Main/Preload
+영역을 서로 다른 계약으로 구현한 PR이 동시에 있었다(#60 `feat/desktop-main-container-ipc`의
+`window.desktopApi` + `{ items: RankedItem[] }` 계열과, #63 `feat/desktop-main-readonly-ipc`의
+`window.dododo` + `{ entries: RecommendedEntry[] }` 계열). **#60을 기준 구현으로
+선택했고, 이 문서는 그 위에서 박도현·김도연이 합의한 최종 목표 계약이다.** #63에만
+있던 `profile:*`/`ui-state:*`는 폐기하지 않고 #60 계약 형태로 다시 맞춰
+#68(`feat/desktop-profile-uistate-port`, base: #60)로 이식했다.
+
+**#60이 이 목표 계약대로 main에 머지됐다**(`today:get`~`sync:run`, 6.1의 "조회/질문/
+Task/동기화" 그룹). 애초 문서와 어긋났던 세 가지 — `ask:ask`의 `evidence: Evidence[]`,
+`sync:run` 성공 응답에서 `sourcesConfigError` 제거, `ipcMain.handle` payload 경계
+검증 — 모두 반영됐고, doyeonid 2차 리뷰로 payload 검증 로직을 `apps/desktop/src/main/
+ipc/handlers.ts`(electron 미의존, `node --test`로 직접 검증 가능)로 분리하는 것과
+`reminderOffsetMinutes`를 `Number.isSafeInteger`로 강화하는 것까지 함께 반영됐다.
+
+`profile:*`/`ui-state:*`는 #68이 #60 위에서 구현했다(payload 경계 검증까지 포함, #60의
+다른 채널과 동일한 `validate.ts` 패턴). `task:update`/`task:delete`/
+`task:setReminderOffset`/`source:list`/`source:register`(school-site만)/`source:remove`는
+#61·#64·#65·#66·#67 PR 스택에서 이미 이 계약대로 구현·테스트됐지만 아직 main에
+머지되지 않았다. `study:*`는 착수 전 초안 상태를 유지한다 — 남은 부분은 박도현·
+김도연이 계속 합의·조정한다.
+
+**병합 순서**: #60은 이미 머지됐다. #68은 #60 위에 쌓여 있고, #61·#64·#65·#66·#67도
+#60 위에서 순서대로 쌓인 스택이다 — 각각 최신 main에 rebase한 뒤 스택 순서대로
+머지한다. 이 문서(#62)는 그 rebase·머지 흐름과 독립적으로 지금 머지해도 된다(코드
+변경이 아니라 이미 머지된 #60과 진행 중인 PR들의 상태를 설명하는 문서이므로).
 
 ### 6.1 IPC 함수(Renderer → Main, `invoke`/`handle`)
 
 이름 규칙은 `영역:동작`. 모든 함수는 아래 `Result<T>`로 성공·실패를 통일해서 반환한다
-(6.5 참고). 응답에 쓰는 `ContextItemView`/`EvidenceView`/`RecommendationView`는
-`packages/shared`의 `ContextItem`/`Evidence`/`Recommendation`을 그대로 노출한다 —
-Renderer용으로 새 타입을 따로 만들지 않고 기존 계약을 재사용한다.
+(6.5 참고). 조회·Task 응답의 `item`/`evidence` 필드는 `packages/shared`의
+`ContextItem`/`Evidence`를 그대로 노출한다 — Renderer용으로 새 타입을 따로 만들지
+않고 기존 계약을 재사용한다.
 
 ```ts
 type Result<T> =
   | { ok: true; data: T }
   | { ok: false; error: { code: string; message: string } };
 
-// 조회
-"today:get"    → () => Promise<Result<{ items: ContextItemView[] }>>
-"calendar:get" → () => Promise<Result<{ items: ContextItemView[] }>>   // 이번 주 고정, range 파라미터는 후속
-"inbox:get"    → () => Promise<Result<{ recommendations: RecommendationView[] }>>
+// 조회 — today/inbox는 순위 계산 결과(RankedItem), calendar는 이번 주 일정
+// (ScheduledItem)을 돌려준다. 셋 다 evidence 본문은 포함하지 않는다 — 상세 보기는
+// task:detail로 별도 조회한다. 빈 배열은 오류가 아니라 { ok: true, data: { items: [] } }.
+"today:get" → () => Promise<Result<{
+  items: Array<{ item: ContextItem; score: number; reason: string }>
+}>>
+"inbox:get" → () => Promise<Result<{
+  items: Array<{ item: ContextItem; score: number; reason: string }>
+}>>
+"calendar:get" → () => Promise<Result<{
+  items: Array<{ item: ContextItem; at: string /* ISO */ }>
+}>>   // 이번 주 고정(Asia/Seoul), range 파라미터는 후속
 
-// 질문
+// 질문 — evidenceIds뿐 아니라 Evidence 본문도 함께 돌려준다(task:detail과 동일하게
+// 근거 원문을 바로 표시할 수 있게 한다). evidenceIds는 하위 호환을 위해 유지한다.
 "ask:ask" → (input: { question: string }) =>
-  Promise<Result<{ answer: string; evidenceIds: string[] }>>
+  Promise<Result<{ answer: string; evidenceIds: string[]; evidence: Evidence[] }>>
 
 // 일정 추가(폼 입력, 자연어 파싱 아님 — 1.2 참고)
 "add:submit" → (input: {
@@ -226,32 +258,73 @@ type Result<T> =
   reminderOffsetMinutes?: number;
 }) => Promise<Result<{ id: string }>>
 
-// Task 상세·액션
-"task:detail"             → (input: { id: string }) => Promise<Result<{ item: ContextItemView; evidence: EvidenceView[] }>>
-"task:complete"           → (input: { id: string }) => Promise<Result<void>>
-"task:snooze"             → (input: { id: string; until: string }) => Promise<Result<void>>
+// Task 상세·액션 — complete/snooze 후 갱신 방식은 재조회로 확정한다: Main은 별도
+// push 이벤트를 보내지 않고, Renderer가 성공 응답을 받으면 today:get/inbox:get/
+// calendar:get을 다시 호출해 목록을 갱신한다.
+"task:detail" → (input: { id: string }) => Promise<Result<{
+  item: ContextItem;
+  evidence: Evidence[];
+  snoozedUntil: string | undefined; // ISO
+  isSnoozed: boolean;
+}>>
+"task:complete" → (input: { id: string }) => Promise<Result<void>>
+  // kind !== "task"면 { ok: false, error: { code: "validation", ... } }
+"task:snooze" → (input: { id: string; until: string /* ISO */ }) => Promise<Result<void>>
+  // until 파싱 실패 시 code: "validation"
 "task:setReminderOffset"  → (input: { id: string; offsetMinutes: number }) => Promise<Result<void>>
+  // 아직 미구현(초안)
 
-// Source 등록(2.3)
+// Source 등록(2.3) — 아직 미구현(초안)
 "source:list"     → () => Promise<Result<{ sources: SourceView[] }>>
 "source:register" → (input: { type: "school-site" | "school-email" | "lms"; value: string }) => Promise<Result<{ id: string }>>
 "source:remove"   → (input: { id: string }) => Promise<Result<void>>
 
-// 동기화
+// 동기화 — Source 설정 오류(sourcesConfigError)는 throw 대신
+// { ok: false, error: { code: "sources-config-error", message } }로 명시적으로 알린다
+// (PR #40 리뷰 반영: 조용히 성공한 것처럼 보이지 않게 한다).
 "sync:run" → () => Promise<Result<{ collected: number; created: number }>>
 
-// 같이 공부하기 세션(2.5)
+// 같이 공부하기 세션(2.5) — 아직 미구현(초안)
 "study:start" → () => Promise<Result<{ sessionId: string }>>
 "study:end"   → (input: { sessionId: string }) => Promise<Result<{ summaryText: string; durationMinutes: number; adviceCount: number }>>
 
-// 프로필(설정 창)
+// 프로필(설정 창) — #68이 #63의 profile:*를 이 계약 형태로 이식 완료
 "profile:get"  → () => Promise<Result<UserProfile | undefined>>
 "profile:save" → (input: UserProfile) => Promise<Result<void>>
+  // profile 형식이 필수 필드를 갖추지 않으면 code: "validation"
 
-// UI 로컬 상태(6.4)
+// UI 로컬 상태(6.4) — #68이 #63의 ui-state:*를 이 계약 형태로 이식 완료
 "ui-state:get" → (input: { key: string }) => Promise<Result<unknown>>
 "ui-state:set" → (input: { key: string; value: unknown }) => Promise<Result<void>>
 ```
+
+### 6.1.1 Preload Renderer API(`window.desktopApi`, #60+#68 기준)
+
+IPC 채널 이름은 6.1에서 고정했지만, Renderer가 실제로 호출하는 전역 API 이름은
+`apps/desktop/src/preload/index.cjs`가 정한다. #60(+ profile/ui-state를 더한 #68)
+구현을 기준으로 아래 이름을 확정 계약으로 고정한다 — Renderer는 `ipcRenderer.invoke`나
+채널 문자열을 직접 쓰지 않고 이 함수만 호출한다.
+
+```js
+window.desktopApi.getToday()
+window.desktopApi.getCalendar()
+window.desktopApi.getInbox()
+window.desktopApi.ask(question)
+window.desktopApi.addSubmit(input)
+window.desktopApi.getTaskDetail(id)
+window.desktopApi.completeTask(id)
+window.desktopApi.snoozeTask(id, until)
+window.desktopApi.sync()
+window.desktopApi.getProfile()
+window.desktopApi.saveProfile(profile)
+window.desktopApi.getUiState(key)
+window.desktopApi.setUiState(key, value)
+```
+
+각 함수는 대응하는 채널의 `Promise<Result<T>>`를 그대로 반환한다. 새 채널을
+추가할 때는 `apps/desktop/src/main/ipc/index.ts`의 `IPC_CHANNELS`와 이 목록,
+preload의 `CHANNELS`/`desktopApi` 세 곳을 함께 갱신한다(preload는 sandbox
+CommonJS라 Main의 `.ts` 상수를 import할 수 없어 문자열을 중복 정의한다).
 
 ### 6.2 이벤트(Main → Renderer push)
 
@@ -305,10 +378,19 @@ Renderer의 `localStorage`가 아니라 Main이 `app.getPath("userData")`에 작
 ### 6.5 에러 처리 규약
 
 모든 IPC 함수는 `Result<T>`(6.1)로 통일한다. `error.code`는 소문자-kebab 문자열:
-`"llm-unavailable"`, `"network"`, `"not-found"`, `"validation"`, `"unknown"` 등.
-Renderer는 `code`로 분기하고 `message`는 그대로 사용자에게 보여줄 수 있는 문장으로
-만든다(Main이 이미 사람이 읽을 문장으로 가공해서 넘긴다 — 기존 CLI 오류 메시지
-관례와 동일).
+`"llm-unavailable"`, `"network"`, `"not-found"`, `"validation"`, `"sources-config-error"`,
+`"unknown"` 등. Renderer는 `code`로 분기하고 `message`는 그대로 사용자에게 보여줄 수
+있는 문장으로 만든다(Main이 이미 사람이 읽을 문장으로 가공해서 넘긴다 — 기존 CLI
+오류 메시지 관례와 동일). `toResult()`로 감싼 예외는 전부 `"unknown"`이 된다 — 코드로
+구분해야 하는 실패(`"validation"`/`"not-found"` 등)는 핸들러가 `toResult()` 밖에서
+먼저 걸러 `fail()`을 직접 반환한다.
+
+`ipcMain.handle` 등록 함수는 `input.question`/`input.id`/`input.until`처럼 Renderer가
+보낸 payload 필드를 바로 읽는다 — 이 지점은 `toResult()` 경계 밖이라 payload가
+`object`가 아니거나 필수 문자열 필드가 없으면 예외가 `Result<T>` 계약을 벗어나
+Renderer까지 그대로 전파될 수 있다. 각 핸들러는 `ipcMain.handle` 콜백 시작에서
+payload 형태와 필수 필드를 확인하고, 어긋나면 `fail("validation", ...)`을 바로
+반환해 모든 경로가 `Result<T>` 하나로만 나가게 한다.
 
 ### 6.6 `ContextItem.metadata` 키 레지스트리
 
