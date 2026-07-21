@@ -18,25 +18,16 @@ Intelligence)에서 **백엔드 1인 + 프론트엔드 2인**으로 바뀌었다
 3. 옛 Data Ingestion & Storage 영역(`packages/collectors/`, `packages/storage/`)도
    합쳐졌으므로, 그쪽에 남아 있던 문서·주석 부채도 이번에 정리한다.
 
-## P0 — 이미 구현된 desktop 능동 조언 PR 스택 검토·병합
+## P0 — desktop 능동 조언 PR 스택 검토·병합 (완료)
 
-`#60`(main에 병합됨) 위에 `#61 → #64 → #65 → #66 → #67`이 순서대로 쌓여 있고, 각각
-Notifier/watch 배선, Task/Event 수정·삭제 IPC, 일정 충돌 감지, 마감 리마인더
-오프셋, Source 등록 API(school-site만)를 구현한다. 이 스택은 `apps/desktop/src/main/*`
-(프론트엔드 소유)뿐 아니라 `apps/cli/src/runtime/*`(`scheduleConflict.ts`,
-`reminderCheck.ts`, `sourceRegistration.ts`, `watchTick.ts`, `container.ts`,
-`mutex.ts` 등, 이제 내 소유)까지 함께 바꾼다.
+`#61 → #64 → #65 → #66 → #67`을 순서대로 리뷰·병합했다(전부 main에 들어감).
+리뷰 중 `#65`(일정 충돌 감지)에서 실제 버그를 발견했다 — Task는 마감을
+`deadline`에 저장하는데 필터가 `startAt`만 읽어 Task가 관련된 충돌이 전혀
+감지되지 않았다. `scheduledStart()` 헬퍼(`calendar.ts`의 `scheduledValue`와
+같은 규칙)로 수정 완료.
 
-1. `#61`부터 순서대로 main에 rebase·병합 — `apps/cli/src/runtime/*` 변경분을
-   Job Queue·LLM 정책(§P1)과 충돌하지 않는지 검토하면서 병합한다.
-2. `#64`~`#67`은 `#61`이 main에 들어간 뒤 순서대로 rebase — 각 PR이 건드리는
-   backend 파일(runtime/scheduleConflict.ts 등)을 리뷰하고, frontend-plan.md
-   §6.1(IPC 계약)과 실제 구현이 맞는지 확인한다.
-3. 병합 후 `docs/frontend-plan.md`의 "아직 병합되지 않음" 표시를 정정한다.
-
-이 스택이 다 들어오면 frontend-plan.md 2.2/2.3/2.4와 2.1의 일정 충돌 부분이 완료
-상태가 된다. **우선순위 역전 감지(2.1의 나머지 절반)**는 이 스택에 포함되어 있지
-않아 보이므로 병합 후 별도 확인이 필요하다 — 없다면 아래 P1에 남긴다.
+frontend-plan.md 2.2/2.3/2.4와 2.1의 일정 충돌 부분은 완료 상태다.
+**우선순위 역전 감지(2.1의 나머지 절반)**는 이 스택에 없었다 — 아래 P1에 남는다.
 
 ## P1 — Job Queue Worker 경계 정리 (llm-architecture §10-1)
 
@@ -54,9 +45,11 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 ## P1 — LLM 활용 확대 (llm-architecture §8)
 
-1. `RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
-   호출하는 문제(§4-2) 해소 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화.
-   `today`/`inbox`/`watch` 체감 지연의 직접 원인이라 가장 먼저.
+1. ~~`RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
+   호출하는 문제(§4-2) 해소~~ — **완료.** 우선순위 상위 `llmPhrasingLimit`(기본 5)개만
+   `Promise.all`로 병렬 LLM 호출, 나머지는 `deterministicPhrasing` 템플릿을 즉시
+   사용하도록 바꿨다. `generateActionAndReason`이 실패 시 이미 내부에서 템플릿으로
+   폴백하므로 병렬 호출 중 하나가 실패해도 나머지를 막지 않는다.
 2. 애매한 병합 LLM 검토 — 40~69점 Candidate에 `same`/`different`/`uncertain` 제안
    추가. Hard Guard(과제 번호 등)는 계속 코드가 최종 결정.
 3. `ask` Local RAG — SQLite 조건 검색으로 상위 Context 5~10개를 고른 뒤 LLM에
@@ -116,8 +109,7 @@ P0 스택에 없는 것만 남는다.
 
 ## 권장 순서
 
-1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
-   필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
-2. P1 — Job Queue Worker 경계 정리, `today`/`inbox`/`watch` 문장 생성 지연 해소.
-3. P1 — 우선순위 역전(스택에 없다면)·Vision 파이프라인.
+1. ~~P0 — PR 스택(`#61`~`#67`) 리뷰·병합~~ — 완료.
+2. ~~P1 — `today`/`inbox`/`watch` 문장 생성 지연 해소~~ — 완료.
+3. P1 — Job Queue Worker 경계 정리, 우선순위 역전 감지, Vision 파이프라인.
 4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
