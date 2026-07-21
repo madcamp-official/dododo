@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   adaptScreenFixtureToRawItem,
+  computePriority,
   generateScreenAdvice,
   linkActivityToContext,
   relevanceScore,
@@ -307,3 +308,80 @@ const passthroughPrivacyGateway: PrivacyGateway = {
     return structuredClone(rawItem);
   },
 };
+
+test("computePriority는 관련도 계산에 relevanceScore를 쓴다 — 관심사 겹침 가점", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: ["AI"], activityTypes: [] });
+  const related = osTask({ kind: "opportunity", title: "AI 공모전", tags: ["opportunity", "AI"], deadline: undefined });
+  const unrelated = osTask({ kind: "opportunity", title: "봉사활동", tags: ["opportunity"], deadline: undefined });
+
+  const relatedScore = computePriority(related, [], { now, profile, recentRecommendations: [] });
+  const unrelatedScore = computePriority(unrelated, [], { now, profile, recentRecommendations: [] });
+  assert.ok(relatedScore.importance > unrelatedScore.importance, "관심사와 겹치는 Opportunity의 중요도가 더 높아야 한다");
+});
+
+test("computePriority는 활동유형 겹침도 관련도 가점으로 반영한다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: [], activityTypes: ["해커톤"] });
+  const related = osTask({ kind: "opportunity", title: "교내 해커톤", tags: ["opportunity", "해커톤"], deadline: undefined });
+  const unrelated = osTask({ kind: "opportunity", title: "봉사활동", tags: ["opportunity"], deadline: undefined });
+
+  const relatedScore = computePriority(related, [], { now, profile, recentRecommendations: [] });
+  const unrelatedScore = computePriority(unrelated, [], { now, profile, recentRecommendations: [] });
+  assert.ok(
+    relatedScore.importance > unrelatedScore.importance,
+    "활동유형(activityTypes)과 겹치는 Opportunity의 중요도가 더 높아야 한다",
+  );
+});
+
+// 박도현님 리뷰: 예전 cap(10)은 겹침 2개에서 이미 닿아 2개와 5개가 같은 점수였다.
+// relevanceScore를 실제로 반영하려던 목적과 반대로 작동하던 지점.
+test("computePriority는 관련도 신호가 많을수록 중요도를 계속 구분한다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: ["AI", "보안", "네트워크"], activityTypes: ["해커톤"] });
+  const opportunity = (tags: string[]) =>
+    osTask({ kind: "opportunity", tags: ["opportunity", ...tags], deadline: undefined });
+  const priority = (tags: string[]) =>
+    computePriority(opportunity(tags), [], { now, profile, recentRecommendations: [] }).importance;
+
+  const one = priority(["AI"]);
+  const two = priority(["AI", "보안"]);
+  const three = priority(["AI", "보안", "네트워크"]);
+
+  assert.ok(one < two, "겹침 1개보다 2개가 높아야 한다");
+  assert.ok(two < three, "겹침 2개보다 3개가 높아야 한다");
+});
+
+// 김도연님 리뷰 P1: 중요도만 0으로 만들면 마감 긴급도(최대 40)와 미충족 요구사항
+// (최대 15)이 그대로 더해진다. 하필 "대학원생만 지원 가능"이라는 자격 문구 자체가
+// requirements 가점으로 계산돼, 부적격 Opportunity가 오히려 상단에 올 수 있었다.
+test("computePriority는 자격 위반 Opportunity를 추천 후보에서 제외한다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile({ interests: ["AI"] });
+  const gradOnly = osTask({
+    kind: "opportunity", title: "대학원생 대상 세미나",
+    requirements: ["대학원생만 지원 가능"], tags: ["opportunity", "AI"],
+    deadline: "2026-07-18T06:00:00+09:00",
+  });
+
+  const breakdown = computePriority(gradOnly, [], { now, profile, recentRecommendations: [] });
+
+  assert.equal(breakdown.excluded, true);
+  assert.equal(breakdown.total, -Infinity);
+  assert.match(breakdown.excludedReason ?? "", /지원 자격/);
+});
+
+// 같은 자격 문구가 Task 본문에 있다고 해서 이미 내게 주어진 과제를 감추면 안 된다.
+// "지원 자격 미충족 시 추천하지 않는다"는 신청 대상(Opportunity)에 대한 정책이다.
+test("computePriority는 Opportunity가 아닌 Context를 자격 문구로 제외하지 않는다", () => {
+  const now = new Date("2026-07-18T00:00:00+09:00");
+  const profile = undergraduateProfile();
+  const task = osTask({
+    kind: "task", title: "대학원생 대상 세미나 자료 정리",
+    requirements: ["대학원생만 지원 가능"], tags: ["task"],
+  });
+
+  const breakdown = computePriority(task, [], { now, profile, recentRecommendations: [] });
+
+  assert.equal(breakdown.excluded, false);
+});

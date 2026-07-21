@@ -1,4 +1,5 @@
 import type { ContextItem, Recommendation, UserProfile } from "../../../shared/src/index.ts";
+import { relevanceScore, type RelevanceBreakdown } from "../relevance/index.ts";
 import { pickSubjectSignal } from "../resolution/mergeScore.ts";
 
 const EXCLUDED_STATUSES: ReadonlySet<ContextItem["status"]> = new Set([
@@ -70,8 +71,21 @@ export function computePriority(
     return excluded("동일 추천이 30분 이내에 이미 있었음");
   }
 
+  // 자격 위반은 중요도를 0으로 떨어뜨리는 것만으로는 부족하다 — 마감 긴급도(최대 40)와
+  // 미충족 요구사항(최대 15)이 그대로 더해지고, 하필 "대학원생만 지원 가능" 같은 자격
+  // 문구 자체가 requirements에 있어 가점으로 계산되기 때문에 부적격 Opportunity가 오히려
+  // 상단에 올 수 있었다(김도연님 리뷰 P1). 후보에서 아예 제외한다.
+  //
+  // Opportunity로 한정한다. "지원 자격을 충족하지 않으면 기본적으로 추천하지 않는다"는
+  // 신청 대상에 대한 정책이고(user-scenarios.md 시나리오 1), Task/Event 본문에 우연히
+  // 같은 문구가 있다고 해서 이미 내게 주어진 과제나 시험 일정을 감추면 안 된다.
+  const relevance = relevanceScore(item, ctx.profile);
+  if (item.kind === "opportunity" && relevance.eligibilityViolated) {
+    return excluded("지원 자격을 충족하지 않음");
+  }
+
   const deadlineUrgency = deadlineUrgencyScore(item.deadline ?? item.startAt, ctx.now);
-  const importance = importanceScore(item, ctx.profile);
+  const importance = importanceScore(item, relevance);
   const unmetRequirements = Math.min(item.requirements.length * 5, 15);
   const todayRelated = Math.min(countTodayRelatedEvents(item, todayEvents) * 5, 15);
   const currentActivity = clamp(ctx.currentActivityRelevance ?? 0, 0, 15);
@@ -128,14 +142,26 @@ function deadlineUrgencyScore(deadline: string | undefined, now: Date): number {
   return 40 * (1 - clampedHours / 168);
 }
 
-// kind별 기본 중요도에 profile.interests/activityTypes와 태그가 겹치는 만큼 가산한다.
-// tags는 resolution/index.ts가 생성 시점에 kind와 course/category로 채운다.
-function importanceScore(item: ContextItem, profile: UserProfile): number {
+// 관련도 신호가 몇 개 겹치든 상한에 붙어버리면 순위가 구분되지 않으므로, relevanceScore의
+// 원점수(관심사 1개당 10, 활동유형 1개당 8)를 절반으로 눌러 기존 "겹침 1개당 5점" 스케일을
+// 유지하되 상한만 넓힌다. 예전 cap 10은 겹침 2개에서 이미 닿아 2개와 5개가 같은 점수였다
+// (박도현님 리뷰). 이제 겹침 3개(=15점)까지 구분된다.
+const RELEVANCE_BONUS_SCALE = 0.5;
+const RELEVANCE_BONUS_CAP = 15;
+
+// kind별 기본 중요도에 프로필 관련도를 더한다. 관련도 계산은 relevance/index.ts의
+// relevanceScore 하나로 통일한다 — 예전엔 여기(importanceScore)와 relevanceScore가
+// interests/activityTypes 겹침을 각자 계산하는 이중 로직이었고, relevanceScore는
+// 어디서도 호출되지 않는 고아 코드였다(Issue #27 지적).
+// 자격 위반 Opportunity는 computePriority가 후보에서 이미 제외하므로 여기서 다시
+// 감점하지 않는다.
+function importanceScore(item: ContextItem, relevance: RelevanceBreakdown): number {
   const base = KIND_BASE_IMPORTANCE[item.kind] ?? 0;
-  const interestSignals = new Set([...profile.interests, ...profile.activityTypes]);
-  const overlapCount = item.tags.filter((tag) => interestSignals.has(tag)).length;
-  const interestBonus = Math.min(overlapCount * 5, 10);
-  return Math.min(base + interestBonus, 20);
+  const relevanceBonus = Math.min(
+    (relevance.interestOverlap + relevance.activityOverlap) * RELEVANCE_BONUS_SCALE,
+    RELEVANCE_BONUS_CAP,
+  );
+  return Math.min(base + relevanceBonus, 20);
 }
 
 // "동일 추천은 30분 내 반복하지 않는다"(README)를 두 단계로 구현한다: 30분 이내는
