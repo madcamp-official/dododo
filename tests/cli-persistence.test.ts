@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { renderDoctor } from "../apps/cli/src/commands/doctor.ts";
+import { runEvidence } from "../apps/cli/src/commands/evidence.ts";
 import { renderInbox } from "../apps/cli/src/commands/inbox.ts";
 import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
@@ -38,6 +39,14 @@ test("sync 후 container를 새로 만들어도(프로세스 재시작 흉내) i
         opportunitiesBeforeRestart.map((item) => item.id).sort(),
         "재시작 후에도 같은 Opportunity가 그대로 조회돼야 함",
       );
+
+      // evidence도 프로세스 재시작(=새 container) 뒤에 조회돼야 한다 — 테스트가 전부
+      // 단일 :memory: container로만 돌면, 나중에 누가 container 기본값을 되돌려도
+      // 이 테스트들은 계속 통과한 채로 실사용 흐름만 조용히 깨질 수 있다
+      // (PR #44 리뷰, 김도현 "발견 2" — 프로세스 간 회귀를 막을 장치가 없다는 지적).
+      const evidenceOutput = await runEvidence(second, [opportunitiesAfterRestart[0]!.id]);
+      assert.match(evidenceOutput, /근거:/);
+      assert.doesNotMatch(evidenceOutput, /찾을 수 없습니다/);
     } finally {
       second.close();
     }

@@ -94,6 +94,20 @@ test("evidence는 원본 근거(출처·인용·관찰 시각)를 그대로 보�
   assert.match(output, /과제 3은 2026년 7월 22일 23시 59분까지 제출합니다\./);
 });
 
+// #42 이후 Evidence.quote가 구조화 필드 출처를 뒤에 붙여 여러 줄이 될 수 있다.
+// 둘째 줄부터 들여쓰기가 없으면 "인용:" 레이블 왼쪽으로 튀어나온다(PR #44 리뷰, 김도현 지적).
+test("evidence는 여러 줄 인용도 같은 들여쓰기로 이어서 보여준다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  await container.repository.saveContextItems([taskItem()]);
+  await container.repository.saveEvidence([
+    evidence({ quote: "과제 마감 관련\n[구조화 필드] dueAt: 2026-07-23T18:00:00+09:00" }),
+  ]);
+
+  const output = await runEvidence(container, ["task-os"]);
+
+  assert.match(output, /   인용: 과제 마감 관련\n         \[구조화 필드\] dueAt: 2026-07-23T18:00:00\+09:00/);
+});
+
 test("evidence는 여러 Source의 근거를 모두 보여준다(병합된 Opportunity)", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   await container.repository.saveContextItems([

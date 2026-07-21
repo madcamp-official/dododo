@@ -31,7 +31,10 @@ export async function runEvidence(container: CliContainer, args: string[]): Prom
   evidence.forEach((entry, index) => {
     lines.push(`${index + 1}. [${entry.sourceType} · ${entry.authority}] ${entry.observedAt}`);
     lines.push(`   위치: ${entry.location}`);
-    lines.push(`   인용: ${entry.quote}`);
+    // #42 이후 Evidence.quote가 여러 줄일 수 있다(구조화 값으로 대체된 제목·마감의
+    // 출처를 인용문 뒤에 붙임). 둘째 줄부터 들여쓰기가 없으면 왼쪽 끝으로 튀어나오고,
+    // 근거가 2건 이상이면 어느 항목 소속인지도 흐려진다(PR #44 리뷰, 김도현 지적).
+    lines.push(`   인용: ${entry.quote.replaceAll("\n", "\n         ")}`);
   });
 
   return lines.join("\n");
