@@ -275,3 +275,49 @@ test("runWatch --os-notify는 알 수 없는 옵션으로 처리되지 않는다
   assert.doesNotMatch(output, /알 수 없는 옵션/);
   assert.match(output, /Watch 종료/);
 });
+
+test("runWatchTick은 겹치는 Event를 감지하고, 같은 tick 안에서 재알리지 않는다(docs/frontend-plan.md 2.1)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  const now = new Date("2026-07-20T10:00:00+09:00");
+  await container.repository.saveContextItems([
+    {
+      id: "evt-a",
+      kind: "event",
+      title: "영민이와 복싱 스파링",
+      status: "confirmed",
+      startAt: "2026-07-25T18:00:00+09:00",
+      endAt: "2026-07-25T19:00:00+09:00",
+      requirements: [],
+      tags: [],
+      priority: 0,
+      confidence: 1,
+      evidenceIds: [],
+      metadata: {},
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    },
+    {
+      id: "evt-b",
+      kind: "event",
+      title: "춘봉이와 저녁",
+      status: "confirmed",
+      startAt: "2026-07-25T18:30:00+09:00",
+      endAt: "2026-07-25T20:00:00+09:00",
+      requirements: [],
+      tags: [],
+      priority: 0,
+      confidence: 1,
+      evidenceIds: [],
+      metadata: {},
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    },
+  ]);
+
+  const first = await runWatchTick(container, now);
+  assert.equal(first.newConflicts.length, 1);
+  assert.deepEqual([first.newConflicts[0].a.id, first.newConflicts[0].b.id].sort(), ["evt-a", "evt-b"]);
+
+  const second = await runWatchTick(container, now);
+  assert.deepEqual(second.newConflicts, []);
+});

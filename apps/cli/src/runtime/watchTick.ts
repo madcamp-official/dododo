@@ -1,5 +1,6 @@
 import { gateNotification } from "../../../../packages/scheduler/src/index.ts";
 import type { Recommendation, SyncResult } from "../../../../packages/shared/src/index.ts";
+import { checkScheduleConflicts, type ScheduleConflict } from "./scheduleConflict.ts";
 import { emptyProfile, type CliContainer } from "./container.ts";
 import { syncIncrementally } from "./incrementalSync.ts";
 import { isSnoozed } from "./snooze.ts";
@@ -8,6 +9,9 @@ export interface WatchTickResult {
   syncedSources: SyncResult[];
   notified: Recommendation[];
   heldForQuietHours: Recommendation[];
+  // docs/frontend-plan.md 2.1 — 이번 tick에서 새로 감지된 일정 충돌만 담는다(이미
+  // 알린 쌍은 checkScheduleConflicts가 걸러낸다).
+  newConflicts: ScheduleConflict[];
 }
 
 // docs/architecture.md §3 Watch Process 흐름 한 번(수집 스케줄 확인 → 동기화 →
@@ -33,6 +37,11 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
   const items = [...tasks, ...events, ...opportunities];
   const itemsById = new Map(items.map((item) => [item.id, item]));
 
+  const conflictCheck = checkScheduleConflicts([...tasks, ...events], now);
+  if (conflictCheck.updatedItems.length > 0) {
+    await container.repository.saveContextItems(conflictCheck.updatedItems);
+  }
+
   const profile = (await container.profileRepository.get()) ?? emptyProfile();
   const recommendations = await container.recommendationEngine.recommend(items, profile, now);
 
@@ -54,5 +63,5 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
     }
   }
 
-  return { syncedSources, notified, heldForQuietHours };
+  return { syncedSources, notified, heldForQuietHours, newConflicts: conflictCheck.newConflicts };
 }

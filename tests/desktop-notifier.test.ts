@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { ContextItem, Recommendation, SyncResult } from "../packages/shared/src/index.ts";
 import { classifyRecommendation } from "../apps/desktop/src/main/notifier/classifyNotification.ts";
+import { toConflictEvents } from "../apps/desktop/src/main/watch/conflictEvents.ts";
 import { summarizeSyncForNotification } from "../apps/desktop/src/main/watch/syncCompleteSummary.ts";
 
 function opportunity(): ContextItem {
@@ -75,4 +76,18 @@ test("summarizeSyncForNotification은 새 항목이 없으면 undefined를 반�
 
   assert.equal(summarizeSyncForNotification([syncResult(0), syncResult(0)], now), undefined);
   assert.equal(summarizeSyncForNotification([], now), undefined);
+});
+
+test("toConflictEvents는 겹치는 두 일정을 conflict 이벤트로 바꾼다", () => {
+  const now = new Date("2026-07-21T09:00:00Z");
+  const a = { ...opportunity(), id: "evt-a", kind: "event" as const, title: "영민이와 복싱 스파링" };
+  const b = { ...opportunity(), id: "evt-b", kind: "event" as const, title: "춘봉이와 저녁" };
+
+  const events = toConflictEvents([{ a, b }], now);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, "conflict");
+  assert.equal(events[0].contextItemId, "evt-a");
+  assert.equal(events[0].message, "\"영민이와 복싱 스파링\"와(과) \"춘봉이와 저녁\" 일정이 겹칩니다.");
+  assert.equal(events[0].createdAt, now.toISOString());
 });

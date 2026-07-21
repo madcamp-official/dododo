@@ -1,6 +1,7 @@
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { runWatchLoop } from "../../../../cli/src/runtime/watchLoop.ts";
 import { broadcastNotification } from "../notifier/broadcast.ts";
+import { toConflictEvents } from "./conflictEvents.ts";
 import { summarizeSyncForNotification } from "./syncCompleteSummary.ts";
 
 // CLI의 watch 명령(apps/cli/src/commands/watch.ts)과 같은 기본 주기 — 값을 바꿀 땐
@@ -25,8 +26,11 @@ export function startDesktopWatch(
     keepResults: false,
     signal: controller.signal,
     onTick: (result, iteration) => {
-      const summary = summarizeSyncForNotification(result.syncedSources, new Date());
+      const tickNow = new Date();
+      const summary = summarizeSyncForNotification(result.syncedSources, tickNow);
       if (summary !== undefined) broadcastNotification(summary);
+
+      for (const event of toConflictEvents(result.newConflicts, tickNow)) broadcastNotification(event);
 
       const errorCount = result.syncedSources.reduce((sum, source) => sum + source.errors.length, 0);
       if (errorCount > 0) {
