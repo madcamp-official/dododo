@@ -210,7 +210,7 @@ test("runWatch --once는 즉시 끝나고 tick 진행 상황을 console.log로 �
   assert.ok(logged.lines.some((line) => /\[tick 1\]/.test(line)));
 });
 
-test("runWatch는 Source 설정 오류로 Fixture 폴백 중이면 tick 전에 경고를 먼저 찍는다(PR #40 리뷰)", async () => {
+test("runWatch는 Source 설정 오류로 수집이 중단되면 tick 전에 경고를 먼저 찍는다(PR #40 리뷰)", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   container.sourcesConfigError = "Source 설정 파일이 올바른 JSON이 아닙니다(/tmp/dododo.sources.json)";
   const logged = captureConsoleLog();
@@ -222,7 +222,7 @@ test("runWatch는 Source 설정 오류로 Fixture 폴백 중이면 tick 전에 �
   }
 
   assert.ok(logged.lines.length > 0);
-  assert.match(logged.lines[0]!, /경고: Source 설정 오류로 Fixture 데모 데이터를 수집 중입니다/);
+  assert.match(logged.lines[0]!, /경고: Source 설정 오류로 수집을 중단합니다/);
 });
 
 test("runWatch는 기본값이면 지속 실행하며 SIGINT로 정상 종료한다", async () => {

@@ -115,7 +115,7 @@ test("doctor는 Source 설정 파일이 없으면 Fixture 데모 상태를 보�
   }
 });
 
-test("doctor는 Source 설정 파일이 잘못됐으면 Fixture로 폴백하되 오류를 보여준다", async () => {
+test("doctor는 Source 설정 파일이 잘못됐으면 Fixture로 섞지 않고 수집을 멈추며 오류를 보여준다(doyeonid, PR #40 새 P1)", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dododo-doctor-sources-"));
   const configPath = join(directory, "dododo.sources.json");
   try {
@@ -125,16 +125,47 @@ test("doctor는 Source 설정 파일이 잘못됐으면 Fixture로 폴백하되 
       env: { DODODO_SOURCE_CONFIG: configPath },
     });
     try {
-      assert.match(await renderDoctor(container), /Sources: 설정 오류 — Fixture로 폴백 중/);
-      const sourceIds = container.collectors.map((collector) => collector.sourceId).sort();
-      assert.deepEqual(sourceIds, ["lms-main", "school-email-main", "school-site-main"]);
+      assert.match(await renderDoctor(container), /Sources: 설정 오류 — 수집 중단\(Fixture로 대체 안 함\)/);
+      // 설정 오류로 Fixture와 섞이면 정상 Source까지 데모 데이터로 뒤바뀔 수 있다 —
+      // Source별 검증 격리 전까지는 collectors가 아예 비어 있어야 한다.
+      assert.deepEqual(container.collectors, []);
 
       // doctor를 따로 실행해야만 원인이 보이면 위험하다 — sync 출력 맨 위에도 경고가
       // 있어야 "수집 N건" 성공 메시지만 보고 실제 학교 데이터인 줄 착각하지 않는다
       // (PR #40 리뷰, 김도현 지적).
       const syncOutput = await runSync(container);
       assert.match(syncOutput.split("\n")[0]!, /^dododo sync$/);
-      assert.match(syncOutput.split("\n")[1]!, /경고: Source 설정 오류로 Fixture 데모 데이터를 수집 중입니다/);
+      assert.match(syncOutput.split("\n")[1]!, /경고: Source 설정 오류로 수집을 중단합니다/);
+      assert.match(syncOutput, /등록된 Source\(Fixture\)가 없습니다\./);
+    } finally {
+      container.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSourceCollectors가 통째로 검증에 실패하면(schoolSite는 정상, lms만 오타) 정상 Source까지 Fixture로 바뀌지 않는다(doyeonid, PR #40 새 P1)", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-partial-source-config-"));
+  const configPath = join(directory, "dododo.sources.json");
+  try {
+    await writeFile(configPath, JSON.stringify({
+      schoolSite: { url: "https://school.example/notices" },
+      lms: {
+        baseUrl: "https://lms.example",
+        inputPaths: [],
+        selectors: { item: ".item", title: ".title" },
+      },
+    }));
+    const container = createCliContainer({
+      databasePath: ":memory:",
+      env: { DODODO_SOURCE_CONFIG: configPath },
+    });
+    try {
+      // lms.inputPaths가 비어 있어 validateSourceInputConfig 전체가 실패한다 —
+      // schoolSite는 유효한데도 그 정상 설정이 Fixture로 대체되면 안 된다.
+      assert.notEqual(container.sourcesConfigError, undefined);
+      assert.deepEqual(container.collectors, []);
     } finally {
       container.close();
     }

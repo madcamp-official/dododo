@@ -182,10 +182,10 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
   const llmConfig = resolveLlmConfig(env);
   const llmProvider = createLlmProvider(env);
 
-  // Source 설정 파일(dododo.sources.json류)이 있으면 실제 Collector를, 없으면 기존
-  // Fixture Collector를 쓴다(DODODO_DB_PATH와 같은 "설정 없으면 데모 모드" 패턴).
-  // 파일이 있는데 파싱·검증에 실패하면 CLI 전체를 죽이지 않고 Fixture로 폴백한다 —
-  // 대신 doctor가 사유를 보여줄 수 있게 sourcesConfigError에 남긴다.
+  // Source 설정 파일(dododo.sources.json류)이 있으면 실제 Collector를, 설정 파일 자체가
+  // 없으면(전혀 시도한 적 없음) 기존 Fixture Collector를 쓴다(DODODO_DB_PATH와 같은
+  // "설정 없으면 데모 모드" 패턴). CLI 전체를 죽이지 않되, doctor가 사유를 보여줄 수
+  // 있게 sourcesConfigError에 남긴다.
   // DODODO_SOURCE_CONFIG 유래인지 cwd 기본값 유래인지를 doctor가 성공/실패 양쪽
   // 결과와 함께 보여줄 수 있게 미리 뽑아 둔다(PR #40 리뷰, 김도현 nit) — "설정한 적
   // 없는데 우연히 그 이름 파일이 있어서 실제 Source로 전환"과 구분돼야 한다.
@@ -202,7 +202,15 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
       sourcesConfigPath = loaded.path;
     }
   } catch (error) {
-    collectors = loadFixtureCollectors();
+    // 설정 파일을 실제로 시도했는데(읽기 실패·JSON 오류·검증 실패) Fixture로 섞어
+    // 넣지 않는다 — createSourceCollectors()는 schoolSite/schoolEmail/lms 전체를
+    // 한 번에 검증하므로, 예를 들어 lms 설정 하나만 오타여도 schoolSite처럼 정상인
+    // 설정까지 여기서 통째로 버려진다. 그 상태에서 Fixture로 채우면 정상 Source
+    // 처리가 중단되는 데다 실제 데이터인 줄 알고 데모 데이터가 영속 SQLite에 그대로
+    // 저장된다(doyeonid, PR #40 리뷰 P1 — Source별 격리 전까지는 아예 수집하지
+    // 않는 쪽이 안전하다). 반면 설정 파일 자체가 없어서 시도조차 안 한 경우(위
+    // loaded === undefined)는 원래부터 데모 모드이므로 Fixture로 채우는 게 맞다.
+    collectors = [];
     sourcesConfigError = error instanceof Error ? error.message : String(error);
   }
 

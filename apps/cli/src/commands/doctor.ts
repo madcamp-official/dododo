@@ -52,7 +52,7 @@ function renderStorageStatus(container: CliContainer): string {
 
 function renderSourcesStatus(container: CliContainer): string {
   if (container.sourcesConfigError !== undefined) {
-    return `Sources: 설정 오류 — Fixture로 폴백 중 (${container.sourcesConfigError})`;
+    return `Sources: 설정 오류 — 수집 중단(Fixture로 대체 안 함) (${container.sourcesConfigError})`;
   }
   if (container.sourcesConfigPath === undefined) {
     return "Sources: Fixture 데모 (DODODO_SOURCE_CONFIG 없음)";
