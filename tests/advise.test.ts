@@ -117,20 +117,74 @@ test("runAdvise는 --screen이 없으면 사용법을 보여준다", async () =>
   assert.match(output, /사용법: dododo advise --screen/);
 });
 
-test("runAdvise --screen --live는 캡처 성공 시 Vision 미연결 안내를 반환한다", async () => {
+test("runAdvise --screen --live는 LLM이 설정되지 않았으면 캡처 완료만 보고한다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   container.captureLiveScreen = async () => ({
     capturedAt: new Date("2026-07-20T10:00:00+09:00"),
     byteLength: 12345,
     imageBase64: "fake",
   });
+  assert.equal(container.llmProvider, undefined, "이 테스트는 llmProvider가 없는 기본 container를 전제한다");
 
   const output = await runAdvise(container, ["--screen", "--live"]);
 
   assert.match(output, /실시간 화면 캡처 완료/);
   assert.match(output, /12345 bytes/);
-  assert.match(output, /Vision 분석이 아직 연결되지 않아/);
+  assert.match(output, /화면 분석용 LLM이 설정되지 않아/);
   assert.doesNotMatch(output, /fake/);
+});
+
+test("runAdvise --screen --live는 Vision이 관련 Task를 찾으면 조언 문구를 반환한다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  await container.repository.saveContextItems([taskItem()]);
+  container.captureLiveScreen = async () => ({
+    capturedAt: new Date("2026-07-18T15:20:00+09:00"),
+    byteLength: 999,
+    imageBase64: "fake-image-bytes",
+  });
+  container.llmProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = {
+        application: "브라우저",
+        activityType: "학습 자료 열람",
+        taskCandidate: "운영체제 시험 대비",
+        sensitiveContentDetected: false,
+        confidence: 0.9,
+      };
+      if (!request.validate(value)) throw new Error("응답이 스키마를 통과하지 못했습니다");
+      return value as T;
+    },
+  };
+
+  const output = await runAdvise(container, ["--screen", "--live"], new Date("2026-07-18T15:20:00+09:00"));
+
+  assert.match(output, /화면 기반 조언/);
+  assert.match(output, /운영체제 시험 대비/);
+});
+
+test("runAdvise --screen --live는 민감한 내용이 감지되면 조언하지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.captureLiveScreen = async () => ({
+    capturedAt: new Date("2026-07-18T15:20:00+09:00"),
+    byteLength: 999,
+    imageBase64: "fake-image-bytes",
+  });
+  container.llmProvider = {
+    async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
+      const value = {
+        application: "카카오톡",
+        activityType: "메시지 확인",
+        sensitiveContentDetected: true,
+        confidence: 0.9,
+      };
+      if (!request.validate(value)) throw new Error("응답이 스키마를 통과하지 못했습니다");
+      return value as T;
+    },
+  };
+
+  const output = await runAdvise(container, ["--screen", "--live"]);
+
+  assert.match(output, /민감한 내용이 감지되어 조언하지 않습니다/);
 });
 
 test("runAdvise --screen --live는 캡처 실패를 명확한 오류로 보여준다", async () => {

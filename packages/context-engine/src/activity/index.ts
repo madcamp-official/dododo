@@ -5,6 +5,8 @@ import type { LLMProvider } from "../llm/provider.ts";
 import type { JSONSchemaNode } from "../llm/jsonSchema.ts";
 import { trigramSimilarity } from "../resolution/similarity.ts";
 
+export * from "./visionExtraction.ts";
+
 // 화면 Fixture 형태. packages/collectors/src/screen(박도현 소유)의 캡처 Runtime이 아직
 // Collector 계약(sync(): RawItem[])을 구현하지 않아, 이 형태를 RawItem으로 변환하는
 // 어댑터를 여기서 둔다(AGENTS.md: 미구현 모듈은 계약을 따르는 Mock/어댑터로 대체).

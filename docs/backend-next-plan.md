@@ -70,13 +70,22 @@ P0 스택에 없는 것만 남는다.
 1. **우선순위 역전 감지**(frontend-plan 2.1): `priority.ts`가 이미 계산하는 전체
    순위와 현재 세션/화면이 다루는 Task를 비교하는 순수 함수. P0 스택 포함 여부
    확인 후 없으면 착수.
-2. **Vision 파이프라인 실제 호출**(frontend-plan 2.5): `LLMProvider.completeJSON({
-   modelKind: "vision", images: [...] })` 호출 코드가 아직 없다(인터페이스만
-   존재). 구조화 Activity 추출 후 `linkActivityToContext`/`generateScreenAdvice`로
-   연결, 원본은 호출 직후 즉시 삭제.
-3. **Privacy Gateway의 이미지 미대응**: 현재 텍스트 전용이라 이미지가 Privacy
-   Gateway를 거치지 않는다. 세션 시작 시 1회 동의로 최소 대응(frontend-plan
-   방향)하되, 원격 Provider 고지 문구는 프론트엔드와 조율.
+2. ~~**Vision 파이프라인 실제 호출**(frontend-plan 2.5)~~ — **완료.**
+   `packages/context-engine/src/activity/visionExtraction.ts`의
+   `extractScreenActivity(imageBase64, observedAt, provider)`가 `LLMProvider.completeJSON({
+   modelKind: "vision", images: [...] })`을 호출해 구조화 Activity를 추출하고,
+   기존 `linkActivityToContext`/`generateScreenAdvice`/`screenAdvicePolicy`가
+   그대로 소비할 수 있는 `RawItem`으로 변환한다(fixture 경로와 같은 metadata
+   키). `sensitiveContentDetected`면 RawItem 자체를 만들지 않는다. 원본
+   `imageBase64`는 이 함수 호출에만 쓰이고 반환값에 담기지 않아 호출부
+   (`apps/cli/src/commands/advise.ts`의 `advise --screen --live`)가 곧바로
+   버린다. 남은 건 3분 폴링이 아닌 Trigger 기반 자동 캡처와 데스크톱 "같이
+   공부하기" 세션 UI(프론트엔드 몫).
+3. **Privacy Gateway의 이미지 미대응** — 부분 완화됨. `extractScreenActivity`의
+   `sensitiveContentDetected` 자기 보고가 1차 방어선 역할을 하지만(민감해
+   보이면 RawItem을 아예 안 만듦), Privacy Gateway 자체가 이미지를 마스킹·
+   검토하는 건 아니다. 세션 시작 시 1회 동의(frontend-plan 방향)와 원격
+   Provider 고지 문구는 여전히 프론트엔드와 조율 필요.
 
 ## P2 — Data Ingestion 영역 문서·코드 정리
 
@@ -111,13 +120,14 @@ P0 스택에 없는 것만 남는다.
   이미 cancelled를 오늘/추천에서 제외하므로 계약 확장이 필요 없었다.
 - P0 스택 병합 후 IPC 계약과 실제 구현이 어긋나는 부분은 프론트엔드(박도현·
   김도연)와 조율.
-- 우선순위 역전·Vision 파이프라인의 입출력 타입은 구현 전 프론트엔드와 먼저
-  고정한다(IPC 응답 모양과 맞물림).
+- 우선순위 역전은 함수가 준비됐고(위 참고), Vision도 `extractScreenActivity`가
+  준비됐다 — 둘 다 데스크톱에서 실제로 언제/어떻게 호출할지(트리거, IPC 채널,
+  "같이 공부하기" 세션 UI)는 프론트엔드와 조율 필요.
 
 ## 권장 순서
 
 1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
    필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
 2. P1 — Job Queue Worker 경계 정리, `today`/`inbox`/`watch` 문장 생성 지연 해소.
-3. P1 — 우선순위 역전(스택에 없다면)·Vision 파이프라인.
+3. ~~P1 — 우선순위 역전·Vision 파이프라인~~ — 완료. 남은 건 프론트엔드 연결.
 4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
