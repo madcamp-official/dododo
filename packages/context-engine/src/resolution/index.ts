@@ -19,6 +19,13 @@ export * from "./similarity.ts";
 export interface ResolveContext {
   rawItemsById: Map<string, RawItem>;
   existingEvidence: Evidence[];
+  // 이 분석의 기준 시각(ISO). ContextItem 생성 시각과 변경 이력 changedAt에 쓴다.
+  // ContextPipeline은 saveRawItemAnalysis의 analyzedAt과 같은 값(= RawItem.observedAt)을
+  // 주입한다 — 벽시계 시각을 쓰면 같은 관찰을 재분석할 때 결정적인 History ID
+  // (hist-created-*, hist-merge-* 등)에 매번 다른 changedAt이 붙어 저장소의 append-only
+  // 검증과 충돌한다. 선택 필드로 두면 호출부 하나가 빠뜨렸을 때 그 충돌이 조용히
+  // 되살아나므로 필수로 둔다(김도연님 리뷰 P3).
+  analyzedAt: string;
 }
 
 export interface ResolveOutcome {
@@ -50,6 +57,14 @@ const AUTO_MERGE_THRESHOLD = 70;
 const CONFIRM_MERGE_THRESHOLD = 40;
 
 export class DeterministicContextResolver implements EvidenceAwareContextResolver {
+  private readonly now: () => Date;
+
+  // 좁은 resolve() 경로에는 주입할 RawItem이 없어 기준 시각을 만들 데가 없다. 시스템
+  // 로컬 시간에 암묵적으로 의존하지 않도록 시계 자체를 주입 가능하게 둔다(AGENTS.md).
+  constructor(now: () => Date = () => new Date()) {
+    this.now = now;
+  }
+
   // context 없이 직접 호출되면(예: 파이프라인을 거치지 않는 단독 테스트) Evidence 없이
   // 동작한다 — ContextResolver 계약을 그대로 만족시키기 위한 폴백 경로다. RawItem 정보가
   // 없으면 병합 점수를 계산할 수 없어 모든 Fact가 새 항목으로 생성된다.
@@ -57,6 +72,7 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     const outcome = await this.resolveWithEvidence(facts, existing, {
       rawItemsById: new Map(),
       existingEvidence: [],
+      analyzedAt: this.now().toISOString(),
     });
     return [...outcome.createdItems, ...outcome.updatedItems];
   }
@@ -66,7 +82,7 @@ export class DeterministicContextResolver implements EvidenceAwareContextResolve
     existing: ContextItem[],
     context: ResolveContext,
   ): Promise<ResolveOutcome> {
-    const now = new Date().toISOString();
+    const now = context.analyzedAt;
     const createdItems: ContextItem[] = [];
     const updatedItems: ContextItem[] = [];
     const newEvidence: Evidence[] = [];
@@ -166,7 +182,12 @@ function mergeFactIntoItem(
   history: ContextChangeEvent[],
 ): ContextItem {
   const updated: ContextItem = structuredClone(existing);
-  updated.updatedAt = now;
+  // 기준 시각이 관찰 시각이라, 뒤늦게 수집된 오래된 RawItem이나 관찰 시각순으로
+  // 정렬되지 않은 batch가 병합되면 updatedAt이 과거로 돌아갈 수 있다(김도연님 리뷰 P2).
+  // "마지막으로 갱신된 시각"은 단조 증가해야 최근 갱신 기준 조회가 어긋나지 않으므로
+  // 뒤로 가지 않게 막는다. 변경 이력 changedAt은 그 변경을 일으킨 관찰 시각 그대로
+  // 남긴다 — 여기에 벽시계를 쓰면 재분석 멱등성이 다시 깨진다.
+  updated.updatedAt = laterTimestamp(existing.updatedAt, now);
 
   history.push({
     id: `hist-merge-${evidence?.id ?? fact.id}`,
@@ -246,6 +267,16 @@ function applyConflictAwareField(
     evidenceId: newEvidence.id,
     changedAt: now,
   });
+}
+
+// 둘 중 나중 시각을 고른다. 파싱할 수 없는 값(외부 입력에서 흘러든 잘못된 시각)은
+// 비교 대상에서 빼고 이번 분석 시각을 쓴다 — 판독 불가한 과거 값에 갇히지 않게 한다.
+function laterTimestamp(previous: string, candidate: string): string {
+  const previousMs = Date.parse(previous);
+  const candidateMs = Date.parse(candidate);
+  if (Number.isNaN(previousMs)) return candidate;
+  if (Number.isNaN(candidateMs)) return previous;
+  return previousMs > candidateMs ? previous : candidate;
 }
 
 function fieldEvidenceIdKey(field: "deadline" | "startAt"): string {

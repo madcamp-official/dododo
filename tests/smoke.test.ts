@@ -975,3 +975,88 @@ test("마감과 무관한 고권위 Evidence가 낮은 권위의 최신 마감 �
     "마감을 뒷받침하는 근거끼리(observation vs observation, 최신 우선) 비교해 갱신돼야 한다",
   );
 });
+
+test("resolveWithEvidence는 주입된 analyzedAt을 ContextItem·History 시각에 쓴다(시스템 시간 비의존)", async () => {
+  const resolver = new DeterministicContextResolver();
+  const injectedNow = "2026-07-18T09:00:00+09:00";
+  const rawItem: RawItem = {
+    id: "raw-time-1", sourceId: "lms", sourceType: "lms", uri: "u",
+    title: "과제", content: "과제 마감", contentHash: "h", observedAt: injectedNow, metadata: {},
+  };
+  const fact: Fact = {
+    id: "fact-time-1", rawItemId: "raw-time-1", kind: "task", subject: "과제",
+    value: "제출", eventTime: "2026-07-22T18:00:00+09:00", confidence: 0.9, evidenceText: "과제 마감",
+  };
+
+  const outcome = await resolver.resolveWithEvidence([fact], [], {
+    rawItemsById: new Map([["raw-time-1", rawItem]]),
+    existingEvidence: [],
+    analyzedAt: injectedNow,
+  });
+
+  assert.equal(outcome.createdItems[0]?.createdAt, injectedNow);
+  assert.equal(outcome.createdItems[0]?.updatedAt, injectedNow);
+  assert.equal(outcome.history[0]?.changedAt, injectedNow, "변경 이력 changedAt이 주입된 analyzedAt과 같아야 append-only 재분석이 멱등이 된다");
+});
+
+// 김도연님 리뷰 P2: 기준 시각이 관찰 시각이라, 뒤늦게 수집된 오래된 공지가 기존
+// Context에 병합되면 updatedAt이 과거로 돌아갈 수 있다. "마지막으로 갱신된 시각"은
+// 단조 증가해야 최근 갱신 기준 조회가 어긋나지 않는다.
+test("오래된 관찰이 병합돼도 ContextItem.updatedAt은 과거로 돌아가지 않는다", async () => {
+  const resolver = new DeterministicContextResolver();
+  const laterUpdate = "2026-07-18T09:00:00+09:00";
+  const earlierObservation = "2026-07-10T09:00:00+09:00";
+
+  const existingItem: ContextItem = {
+    id: "ctx-fact-merge-base", kind: "task", title: "운영체제 과제 3",
+    status: "todo", deadline: "2026-07-22T18:00:00+09:00",
+    requirements: [], tags: ["task", "운영체제"], priority: 0, confidence: 0.9,
+    evidenceIds: [], metadata: { rawItemId: "raw-merge-base", course: "운영체제" },
+    createdAt: laterUpdate, updatedAt: laterUpdate,
+  };
+  const oldRawItem: RawItem = {
+    id: "raw-old", sourceId: "lms", sourceType: "lms", uri: "u-old",
+    title: "운영체제 과제 3", content: "운영체제 과제 3 안내", contentHash: "h-old",
+    observedAt: earlierObservation, metadata: { course: "운영체제" },
+  };
+  const oldFact: Fact = {
+    id: "fact-old", rawItemId: "raw-old", kind: "task", subject: "운영체제 과제 3",
+    value: "제출", eventTime: "2026-07-22T18:00:00+09:00", confidence: 0.9,
+    evidenceText: "운영체제 과제 3 안내",
+  };
+
+  const outcome = await resolver.resolveWithEvidence([oldFact], [existingItem], {
+    rawItemsById: new Map([["raw-old", oldRawItem]]),
+    existingEvidence: [],
+    analyzedAt: earlierObservation,
+  });
+
+  const merged = outcome.updatedItems[0];
+  assert.ok(merged, "같은 과목·같은 제목이면 병합돼야 한다");
+  assert.equal(merged.updatedAt, laterUpdate, "더 늦은 기존 updatedAt이 유지돼야 한다");
+  assert.ok(
+    Date.parse(merged.updatedAt) >= Date.parse(merged.createdAt),
+    "updatedAt이 createdAt보다 앞설 수 없다",
+  );
+  assert.equal(
+    outcome.history[0]?.changedAt,
+    earlierObservation,
+    "변경 이력은 그 변경을 일으킨 관찰 시각을 그대로 남겨야 재분석이 멱등이 된다",
+  );
+});
+
+// 김도연님 리뷰 P3: analyzedAt은 필수 필드라 호출부가 생략할 수 없다. RawItem이
+// 없는 좁은 resolve() 경로만 기준 시각을 만들 데가 없으므로 시계를 주입받는다.
+test("좁은 resolve() 경로는 주입된 시계를 쓴다(new Date() 직접 호출 없음)", async () => {
+  const fixed = new Date("2026-07-18T09:00:00+09:00");
+  const resolver = new DeterministicContextResolver(() => fixed);
+  const fact: Fact = {
+    id: "fact-clock", rawItemId: "raw-clock", kind: "task", subject: "과제",
+    value: "제출", confidence: 0.9, evidenceText: "과제 마감",
+  };
+
+  const items = await resolver.resolve([fact], []);
+
+  assert.equal(items[0]?.createdAt, fixed.toISOString());
+  assert.equal(items[0]?.updatedAt, fixed.toISOString());
+});

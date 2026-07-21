@@ -56,6 +56,7 @@ export class ContextPipeline {
           facts,
           existing,
           rawItemsById,
+          rawItem.observedAt,
         );
         await this.dependencies.repository.saveRawItemAnalysis({
           rawItem,
@@ -99,6 +100,7 @@ export class ContextPipeline {
     facts: Fact[],
     existing: ContextItem[],
     rawItemsById: Map<string, RawItem>,
+    analyzedAt: string,
   ): Promise<ResolveResult> {
     const resolver = this.dependencies.contextResolver;
 
@@ -110,9 +112,13 @@ export class ContextPipeline {
     const existingEvidenceIds = existing.flatMap((item) => item.evidenceIds);
     const existingEvidence = await this.evidenceStore.listEvidence(existingEvidenceIds);
 
+    // 분석 시각을 관찰 시각(rawItem.observedAt)으로 주입한다 — resolver가 만드는
+    // ContextItem 시각·변경 이력 changedAt이 saveRawItemAnalysis의 analyzedAt과
+    // 같아져, 같은 관찰에 대한 재분석이 History append-only 검증과 충돌하지 않는다.
     const outcome = await resolver.resolveWithEvidence(facts, existing, {
       rawItemsById,
       existingEvidence,
+      analyzedAt,
     });
     return {
       createdItems: outcome.createdItems,
