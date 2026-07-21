@@ -79,6 +79,26 @@ test("준비 Task ID는 requirements 순서가 바뀌어도 같은 요구사항�
   assert.deepEqual(prepareOpportunity(original, NOW).history, first.history);
 });
 
+test("prepare history는 같은 시각에는 멱등하고 다른 시각에는 새 ID를 사용한다", () => {
+  const opportunity = opportunityItem();
+  const first = prepareOpportunity(opportunity, NOW);
+  const later = prepareOpportunity(opportunity, new Date(NOW.getTime() + 1_000));
+
+  assert.deepEqual(prepareOpportunity(opportunity, NOW).history, first.history);
+  assert.equal(
+    later.history.some((event) => first.history.some((previous) => previous.id === event.id)),
+    false,
+  );
+});
+
+test("중복 requirements는 하나의 준비 Task로 정규화한다", () => {
+  const opportunity = opportunityItem({ requirements: ["참가 신청서", "  참가   신청서  "] });
+  const prepared = prepareOpportunity(opportunity, NOW);
+
+  assert.equal(prepared.tasks.length, 1);
+  assert.equal(new Set(prepared.tasks.map((task) => task.id)).size, 1);
+});
+
 function opportunityItem(overrides: Partial<ContextItem> = {}): ContextItem {
   return {
     id: "opportunity-1",

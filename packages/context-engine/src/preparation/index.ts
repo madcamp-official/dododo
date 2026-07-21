@@ -21,9 +21,13 @@ export function prepareOpportunity(
   const requirements = opportunity.requirements.length > 0
     ? opportunity.requirements
     : [`${opportunity.title} 신청서 준비`];
+  const keyedRequirements = [...new Map(requirements.map((requirement) => {
+    const key = requirementKey(requirement);
+    return [key, { key, requirement }] as const;
+  })).values()];
   const sharedMetadata = { parentOpportunityId: opportunity.id, preparedFromOpportunity: true };
-  const tasks = requirements.map((requirement): ContextItem => ({
-    id: `ctx-prepare-task-${opportunity.id}-${requirementKey(requirement)}`,
+  const tasks = keyedRequirements.map(({ key, requirement }): ContextItem => ({
+    id: `ctx-prepare-task-${opportunity.id}-${key}`,
     kind: "task",
     title: requirement,
     status: "todo",
@@ -33,7 +37,7 @@ export function prepareOpportunity(
     priority: 0,
     confidence: opportunity.confidence,
     evidenceIds: [...opportunity.evidenceIds],
-    metadata: { ...sharedMetadata, preparationRequirementKey: requirementKey(requirement) },
+    metadata: { ...sharedMetadata, preparationRequirementKey: key },
     createdAt: timestamp,
     updatedAt: timestamp,
   }));
@@ -62,7 +66,7 @@ export function prepareOpportunity(
   const derivedItems = [...tasks, ...(event === undefined ? [] : [event])];
   const history: ContextChangeEvent[] = [
     {
-      id: `hist-prepare-status-${opportunity.id}`,
+      id: `hist-prepare-status-${opportunity.id}-${timestamp}`,
       contextItemId: opportunity.id,
       changeType: "status_changed",
       field: "status",
@@ -72,7 +76,7 @@ export function prepareOpportunity(
       changedAt: timestamp,
     },
     ...derivedItems.map((item): ContextChangeEvent => ({
-      id: `hist-prepare-created-${item.id}`,
+      id: `hist-prepare-created-${item.id}-${timestamp}`,
       contextItemId: item.id,
       changeType: "created",
       evidenceId: item.evidenceIds[0],
