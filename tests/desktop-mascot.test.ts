@@ -269,14 +269,16 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.match(renderer, /desktopApi\.studyStart/);
   assert.match(renderer, /desktopApi\.studyEnd/);
   assert.match(renderer, /desktopApi\.studyGet/);
-  assert.match(renderer, /restoreStudySession/);
+  assert.match(renderer, /const studySessionRestorePromise = restoreStudySession\(\)/);
+  assert.match(renderer, /openStudySession\(\).*await studySessionRestorePromise/s);
   assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /studySummaryView/);
   assert.match(renderer, /restingExpression/);
   assert.match(expressions, /reading\.png/);
   assert.match(renderer, /data-study-elapsed/);
-  assert.match(renderer, /restoreStudySession/);
+  assert.match(renderer, /data-study-status aria-live="polite"/);
+  assert.doesNotMatch(renderer, /study-progress" aria-live/);
 });
 
 test("desktop mascot changes expression for notifications and restores its activity state", async () => {

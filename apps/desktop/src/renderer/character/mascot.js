@@ -160,7 +160,7 @@ notificationDetail?.addEventListener("click", () => {
 
 subscribeToNotifications();
 void showDailySummaryOnFirstLaunch();
-void restoreStudySession();
+const studySessionRestorePromise = restoreStudySession();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
@@ -182,6 +182,7 @@ popupMenu?.addEventListener("click", async (event) => {
 });
 
 async function openStudySession() {
+  await studySessionRestorePromise;
   popupMenu.hidden = true;
   panel.hidden = false;
   panelTitle.textContent = "같이 공부하기";
@@ -194,9 +195,9 @@ async function openStudySession() {
     panelContent.querySelector("[data-study-start]")?.addEventListener("click", startStudySession);
   } else {
     panelContent.innerHTML = `
-      <section class="study-progress" aria-live="polite">
+      <section class="study-progress">
         <span class="study-status-dot" aria-hidden="true"></span>
-        <div><strong data-study-elapsed>00:00</strong><p data-study-status></p></div>
+        <div><strong data-study-elapsed>00:00</strong><p data-study-status aria-live="polite"></p></div>
       </section>
       <p class="hint">세션이 진행되는 동안에만 화면 분석 기능을 사용할 수 있습니다.</p>
       <button class="danger-button" type="button" data-study-end>세션 종료</button>`;
@@ -254,7 +255,7 @@ function renderStudyProgress(now = new Date()) {
   const elapsed = panelContent.querySelector("[data-study-elapsed]");
   const status = panelContent.querySelector("[data-study-status]");
   if (elapsed !== null) elapsed.textContent = view.elapsedLabel;
-  if (status !== null) status.textContent = view.statusText;
+  if (status !== null && status.textContent !== view.statusText) status.textContent = view.statusText;
 }
 
 function startStudyProgressTimer() {
