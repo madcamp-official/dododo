@@ -4,8 +4,6 @@ import test from "node:test";
 import type { ContextItem } from "../packages/shared/src/index.ts";
 import type { RankedItem } from "../apps/cli/src/runtime/recommendationRanking.ts";
 import { checkPriorityInversion, findPriorityInversion } from "../apps/cli/src/runtime/priorityInversion.ts";
-import { rankItems } from "../apps/cli/src/runtime/recommendationRanking.ts";
-import { runSync } from "../apps/cli/src/commands/sync.ts";
 import { createCliContainer } from "../apps/cli/src/runtime/container.ts";
 
 const NOW = new Date("2026-07-21T00:00:00+09:00");
@@ -43,6 +41,15 @@ test("findPriorityInversion은 현재 항목보다 순위가 높은 항목이 �
   assert.equal(inversion.topScore, 90);
 });
 
+test("findPriorityInversion은 입력이 정렬되지 않아도 실제 최고 점수 항목을 찾는다", () => {
+  const list = ranked([{ id: "current", score: 30 }, { id: "middle", score: 60 }, { id: "top", score: 90 }]);
+
+  const inversion = findPriorityInversion(list, "current");
+
+  assert.equal(inversion?.topItem.id, "top");
+  assert.equal(inversion?.topScore, 90);
+});
+
 test("findPriorityInversion은 현재 항목이 이미 최상위면 역전이 아니다", () => {
   const list = ranked([{ id: "current", score: 90 }, { id: "second", score: 60 }]);
 
@@ -67,41 +74,51 @@ test("findPriorityInversion은 동점이면 역전으로 보지 않는다", () =
 
 test("checkPriorityInversion은 실제 container의 순위 계산 결과로 역전을 판정한다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  await runSync(container);
-  const existingTasks = await container.repository.listContextItems("task");
-  const existingCurrent = existingTasks[0];
-  assert.ok(existingCurrent !== undefined, "fixture에 Task가 있어야 함");
-
-  // fixture 항목끼리는 점수가 동점일 수 있어(rankItems 자체 테스트로 이미 확인),
-  // 마감이 1시간 뒤인 새 Task를 추가해 확실한 최상위 항목을 만든다.
+  const currentTask: ContextItem = {
+    ...item({ id: "ctx-current", title: "현재 과제" }),
+    deadline: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  };
   const urgentTask: ContextItem = {
     ...item({ id: "ctx-urgent", title: "긴급 과제" }),
     deadline: new Date(NOW.getTime() + 60 * 60 * 1000).toISOString(),
   };
-  await container.repository.saveContextItems([urgentTask]);
+  await container.repository.saveContextItems([currentTask, urgentTask]);
 
-  const inversion = await checkPriorityInversion(container, existingCurrent.id, NOW);
+  const inversion = await checkPriorityInversion(container, currentTask.id, NOW);
 
   assert.ok(inversion !== undefined, "마감이 훨씬 급한 새 Task가 있으면 역전이 감지돼야 함");
   assert.equal(inversion?.topItem.id, "ctx-urgent");
-  assert.equal(inversion?.currentItem.id, existingCurrent.id);
+  assert.equal(inversion?.currentItem.id, currentTask.id);
 });
 
 test("checkPriorityInversion은 이미 가장 급한 항목을 보고 있으면 역전이 아니다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  await runSync(container);
   const urgentTask: ContextItem = {
     ...item({ id: "ctx-urgent", title: "긴급 과제" }),
     deadline: new Date(NOW.getTime() + 60 * 60 * 1000).toISOString(),
   };
-  await container.repository.saveContextItems([urgentTask]);
+  const relaxedTask: ContextItem = {
+    ...item({ id: "ctx-relaxed", title: "여유 있는 과제" }),
+    deadline: new Date(NOW.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  await container.repository.saveContextItems([urgentTask, relaxedTask]);
 
   assert.equal(await checkPriorityInversion(container, "ctx-urgent", NOW), undefined);
 });
 
+test("checkPriorityInversion은 실제 점수 계산 결과가 동점이면 역전으로 보지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  const deadline = new Date(NOW.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  await container.repository.saveContextItems([
+    { ...item({ id: "ctx-current" }), deadline },
+    { ...item({ id: "ctx-peer" }), deadline },
+  ]);
+
+  assert.equal(await checkPriorityInversion(container, "ctx-current", NOW), undefined);
+});
+
 test("checkPriorityInversion은 존재하지 않는 id면 undefined를 반환한다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
-  await runSync(container);
 
   assert.equal(await checkPriorityInversion(container, "no-such-id", NOW), undefined);
 });

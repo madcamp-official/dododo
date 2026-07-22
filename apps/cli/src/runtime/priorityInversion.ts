@@ -12,22 +12,23 @@ export interface PriorityInversion {
 // docs/frontend-plan.md 2.1: 현재 세션/화면에서 다루는 Task보다 전체 순위상 더
 // 급한 Task가 있으면 알린다. "현재 다루는 Task"가 무엇인지(세션 상태, 또는 아직
 // 미구현인 Vision 화면 Activity 연결)는 호출부가 정해 currentItemId로 넘긴다 —
-// 이 함수는 이미 순위가 매겨진 목록과 그 id를 비교하는 순수 판정만 담당한다.
-// ranked는 rankItems와 같은 순서(점수 내림차순)라고 가정한다.
+// 이 함수는 이미 점수가 계산된 목록과 그 id를 비교하는 순수 판정만 담당한다.
+// 호출자가 목록을 정렬했다고 가정하지 않고 실제 최고 점수를 직접 찾는다.
 export function findPriorityInversion(
   ranked: RankedItem[],
   currentItemId: string,
 ): PriorityInversion | undefined {
   if (ranked.length === 0) return undefined;
 
-  const currentIndex = ranked.findIndex(({ item }) => item.id === currentItemId);
+  const current = ranked.find(({ item }) => item.id === currentItemId);
   // 현재 항목이 순위 목록에 없으면(완료·Snooze 등으로 제외됐거나 존재하지 않는
-  // id) 비교 기준이 없어 판정하지 않는다. 이미 최상위(index 0)면 역전이 아니다.
-  if (currentIndex <= 0) return undefined;
+  // id) 비교 기준이 없어 판정하지 않는다.
+  if (current === undefined) return undefined;
 
-  const current = ranked[currentIndex];
-  const top = ranked[0];
-  if (current === undefined || top === undefined || top.score <= current.score) return undefined;
+  const top = ranked.reduce((highest, candidate) => (
+    candidate.score > highest.score ? candidate : highest
+  ));
+  if (top.score <= current.score) return undefined;
 
   return {
     currentItem: current.item,
