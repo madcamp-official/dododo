@@ -61,6 +61,7 @@ test("설정 Renderer는 기존 desktopApi와 순수 폼 모듈을 재사용한�
   assert.match(renderer, /scheduleItemToForm/);
   assert.match(renderer, /buildWeeklyCalendar/);
   assert.match(renderer, /createExclusiveActionRunner/);
+  assert.match(renderer, /\[\.\.\.tabButtons, \.\.\.content\.querySelectorAll\("button, input"\)\]/);
   assert.match(renderer, /class="state-card" role="status"/);
   assert.match(renderer, /class="notice" role="status"/);
 });

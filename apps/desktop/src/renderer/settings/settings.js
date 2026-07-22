@@ -235,7 +235,7 @@ async function runSourceRemove(id) {
 
 async function withBusy(action) {
   await runExclusive(async () => {
-    const controls = [...content.querySelectorAll("button, input")];
+    const controls = [...tabButtons, ...content.querySelectorAll("button, input")];
     const states = controls.map((control) => control.disabled);
     controls.forEach((control) => { control.disabled = true; });
     try { await action(); }
