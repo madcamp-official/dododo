@@ -359,6 +359,28 @@ test("answerContextQuestion은 provider 없거나 실패하면 결정론적 템�
   assert.deepEqual(onFailure.evidenceIds, ["ev-os"]);
 });
 
+test("answerContextQuestion은 일반 계획 질문에 deadline 없는 Event와 Task도 답한다", async () => {
+  const event = taskItem({
+    id: "ctx-event-dinner",
+    kind: "event",
+    title: "저녁 약속",
+    deadline: undefined,
+    startAt: "2026-07-18T18:00:00+09:00",
+  });
+  const noDateTask = taskItem({
+    id: "ctx-task-reading",
+    title: "자료 읽기",
+    deadline: undefined,
+  });
+
+  const eventAnswer = await answerContextQuestion("오늘 뭐부터 해야 해?", [event, noDateTask], NOW);
+  const noDateAnswer = await answerContextQuestion("뭐부터 할까?", [noDateTask], NOW);
+
+  assert.match(eventAnswer.answer, /저녁 약속/);
+  assert.match(eventAnswer.answer, /예정 시각/);
+  assert.match(noDateAnswer.answer, /자료 읽기/);
+});
+
 test("answerContextQuestion은 Privacy Gateway를 거친 질문과 Context만 Provider에 전달한다", async () => {
   let prompt = "";
   let timeoutMs: number | undefined;

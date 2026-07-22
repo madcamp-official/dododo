@@ -99,11 +99,15 @@ function questionScore(
     trigramSimilarity(question, item.title),
     ...item.tags.map((tag) => trigramSimilarity(question, tag)),
   );
-  const urgency = deadlineUrgency(item.deadline, now);
+  // 사용자가 데스크톱의 "추가"로 만든 Event는 deadline이 아니라 startAt을 가진다.
+  // 일반 계획 질문에서 이를 보지 않으면 일정이 충분히 있어도 후보가 0개가 된다.
+  const urgency = deadlineUrgency(item.deadline ?? item.startAt, now);
   // "뭘 할까?" 같은 일반 계획 질문에서만 임박도를 독립적인 후보 신호로 허용한다.
   // 구체 질문은 최소 관련도를 통과해야 하므로 무관한 임박 Task가 답변을 가로채지 않는다.
   const score = generalPlanning
-    ? Math.max(relevance, urgency) + Math.min(relevance, urgency) * 0.5
+    // "뭐부터 할까?"는 특정 키워드가 없는 질문이므로 날짜도 없는 활성 항목까지
+    // 최소 후보로 남긴다. 동일 점수에서는 저장소 순서를 유지한다.
+    ? Math.max(relevance, urgency, 0.01) + Math.min(relevance, urgency) * 0.5
     : relevance + urgency * 0.25;
   return { relevance, score };
 }
@@ -162,7 +166,11 @@ function isGeneralPlanningQuestion(question: string): boolean {
 }
 
 function templateAnswer(item: ContextItem): string {
-  const reason = item.deadline !== undefined ? ` 마감이 ${item.deadline}입니다.` : "";
+  const reason = item.deadline !== undefined
+    ? ` 마감이 ${item.deadline}입니다.`
+    : item.startAt !== undefined
+      ? ` 예정 시각은 ${item.startAt}입니다.`
+      : "";
   return `${item.title}을(를) 먼저 하세요.${reason}`;
 }
 
