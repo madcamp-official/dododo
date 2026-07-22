@@ -17,6 +17,7 @@ import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
 import { groupScheduledItems } from "./schedule-management.mjs";
 import { studyProgressView, studySummaryView } from "./study-session-ui.mjs";
+import { notificationExpression, restingExpression } from "./character-expression.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -268,14 +269,18 @@ function stopStudyProgressTimer() {
 }
 
 function updateStudyCharacter() {
-  if (!(character instanceof HTMLImageElement)) return;
-  character.src = activeStudySession === undefined
-    ? "../../../resources/character/idle.png"
-    : "../../../resources/character/reading.png";
-  character.alt = activeStudySession === undefined
-    ? "DoDoDo 도토리 캐릭터"
-    : "같이 공부 중인 DoDoDo 도토리 캐릭터";
   document.body.classList.toggle("is-studying", activeStudySession !== undefined);
+  if (activeNotification !== undefined) return;
+  setCharacterExpression(restingExpression(activeStudySession !== undefined));
+}
+
+function setCharacterExpression(expression) {
+  if (!(character instanceof HTMLImageElement)) return;
+  if (!character.src.endsWith(`/${expression.asset}`)) {
+    character.addEventListener("load", prepareAlphaMask, { once: true });
+    character.src = `../../../resources/character/${expression.asset}`;
+  }
+  character.alt = expression.alt;
 }
 
 async function openView(view, { throwOnError = false } = {}) {
@@ -549,6 +554,7 @@ function showNextNotification() {
     || !(notificationDetail instanceof HTMLButtonElement)) return;
 
   activeNotification = next;
+  setCharacterExpression(notificationExpression(next.kind));
   notificationBubble.setAttribute("aria-live", notificationMode(next.kind) === "quiet" ? "polite" : "assertive");
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
@@ -565,7 +571,8 @@ function dismissActiveNotification() {
   }
   activeNotification = undefined;
   if (notificationBubble instanceof HTMLElement) notificationBubble.hidden = true;
-  showNextNotification();
+  if (notificationStore.hasImmediate()) showNextNotification();
+  else updateStudyCharacter();
 }
 
 function updateNotificationBadge() {

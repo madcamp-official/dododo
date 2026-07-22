@@ -53,6 +53,7 @@ test("즉시 알림은 도착 순서대로 꺼내고 동일 알림은 중복 저
   assert.equal(store.push(second).accepted, true);
   assert.equal(store.takeImmediate()?.message, "첫 번째");
   assert.equal(store.takeImmediate()?.message, "두 번째");
+  assert.equal(store.hasImmediate(), false);
   assert.equal(store.takeImmediate(), undefined);
 });
 
