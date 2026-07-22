@@ -23,6 +23,17 @@ test("패널 창은 전용 Renderer 경로를 로드하고 배치 계산·coordi
   assert.match(panelWindow, /did-finish-load/);
 });
 
+// doyeonid 리뷰(PR #97) P1: 로드 전 navigate가 겹치면 stale한 초기 route가 나가던
+// 문제. navigate()가 routeGate를 거치지 않고 다시 곧장 send하는 회귀를 막는다.
+test("패널 창은 로드 전 navigate를 routeGate로 감싸 stale route를 보내지 않는다", async () => {
+  const panelWindow = await readFile("apps/desktop/src/main/windows/panelWindow.mjs", "utf8");
+
+  assert.match(panelWindow, /createPanelWindowRouteGate\(initialRoute\)/);
+  assert.match(panelWindow, /routeGate\.markReady\(\)/);
+  assert.match(panelWindow, /routeGate\.setRoute\(nextRoute\)/);
+  assert.doesNotMatch(panelWindow, /navigate: \(nextRoute\) => window\.webContents\.send/);
+});
+
 test("index.mjs는 발신 창을 검증하고 payload를 parsePanelRoute로 거른 뒤 배치를 계산한다", async () => {
   const main = await readFile("apps/desktop/src/main/index.mjs", "utf8");
 

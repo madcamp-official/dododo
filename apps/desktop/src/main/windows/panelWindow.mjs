@@ -3,6 +3,7 @@ import { BrowserWindow } from "electron";
 import { createPanelWindowCoordinator } from "./panelWindowCoordinator.ts";
 import { buildPanelWindowOptions, PANEL_SIZE } from "./panelWindowOptions.ts";
 import { layoutPanelWindow } from "./panelPlacement.ts";
+import { createPanelWindowRouteGate } from "./panelWindowRouteGate.ts";
 
 export const PANEL_NAVIGATE_CHANNEL = "panel:navigate";
 
@@ -21,10 +22,15 @@ export function createOpenPanel({ preloadPath, rendererPath }) {
         y: position.y,
       });
       window.setMenuBarVisibility(false);
-      // Renderer가 PANEL_NAVIGATE_CHANNEL 리스너를 등록할 시간을 주기 위해
-      // 로드가 끝난 뒤에만 첫 route를 보낸다 — 그 전에 보내면 유실된다.
+
+      // doyeonid 리뷰(PR #97) P1: 로드가 끝나기 전에 navigate()가 다시 호출되면
+      // (예: openPanel(today) 직후 openPanel(calendar)) 그 즉시 send는 Renderer
+      // 리스너 등록 전이라 유실되고, did-finish-load가 클로저로 캡처한 stale한
+      // initialRoute(today)만 전달됐다 — routeGate가 "아직 로드 전이면 최신 값만
+      // 기억해 두고 ready 시점에 그 최신 값을 보낸다"를 보장한다.
+      const routeGate = createPanelWindowRouteGate(initialRoute);
       window.webContents.once("did-finish-load", () => {
-        window.webContents.send(PANEL_NAVIGATE_CHANNEL, initialRoute);
+        window.webContents.send(PANEL_NAVIGATE_CHANNEL, routeGate.markReady());
       });
       void window.loadFile(rendererPath).catch((error) => {
         console.error("DoDoDo 패널 창 Renderer를 열지 못했습니다.", error);
@@ -34,7 +40,10 @@ export function createOpenPanel({ preloadPath, rendererPath }) {
         isDestroyed: () => window.isDestroyed(),
         show: () => window.show(),
         focus: () => window.focus(),
-        navigate: (nextRoute) => window.webContents.send(PANEL_NAVIGATE_CHANNEL, nextRoute),
+        navigate: (nextRoute) => {
+          const { shouldSendNow } = routeGate.setRoute(nextRoute);
+          if (shouldSendNow) window.webContents.send(PANEL_NAVIGATE_CHANNEL, nextRoute);
+        },
         onClosed: (listener) => window.on("closed", listener),
       };
     });
