@@ -60,7 +60,7 @@ function isPanelRoute(route) {
 
 function viewTitle(view) {
   return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", detail: "상세보기" })[view]
-    ?? "DoDoDo";
+    ?? "DoToRi";
 }
 
 function setTitle(title) {

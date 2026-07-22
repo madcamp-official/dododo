@@ -23,6 +23,23 @@ test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한�
   }
 });
 
+test("desktop 배포 이름·아이콘·Fixture 제외 설정은 DoToRi 기준이다", async () => {
+  const [packageJson, desktopContainer] = await Promise.all([
+    readFile("package.json", "utf8"),
+    readFile("apps/desktop/src/main/container.ts", "utf8"),
+  ]);
+  const manifest = JSON.parse(packageJson);
+
+  assert.equal(manifest.name, "dotori");
+  assert.equal(manifest.version, "0.1.1");
+  assert.equal(manifest.build.productName, "DoToRi");
+  assert.equal(manifest.build.appId, "dev.dotori.desktop");
+  assert.equal(manifest.build.icon, "apps/desktop/resources/character/idle.png");
+  assert.equal(manifest.build.files.includes("fixtures/**/*"), false);
+  assert.match(desktopContainer, /useFixtureFallback:\s*false/);
+  assert.match(desktopContainer, /"dotori\.db"/);
+});
+
 test("desktop mascot Renderer가 기본 idle 에셋과 preload를 함께 배포한다", async () => {
   await Promise.all([
     access("apps/desktop/src/renderer/character/index.html"),
@@ -161,7 +178,7 @@ test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보�
   assert.match(html, /data-notification-badge/);
   assert.match(renderer, /subscribeToNotifications\(\)/);
   assert.match(renderer, /notificationSubscriptionRetry = window\.setTimeout/);
-  assert.match(renderer, /console\.warn\("DoDoDo 알림 이벤트 브리지를 찾지 못해/);
+  assert.match(renderer, /console\.warn\("DoToRi 알림 이벤트 브리지를 찾지 못해/);
   assert.match(renderer, /unsubscribeNotifications\?\.\(\)/);
   assert.match(renderer, /notificationMode\(next\.kind\) === "quiet" \? "polite" : "assertive"/);
   assert.match(renderer, /notificationStore\.takeImmediate/);

@@ -16,7 +16,10 @@ export function getDesktopContainer(): CliContainer {
     // 실행되어 cwd가 설치 폴더거나 쓰기 권한이 없을 수 있다 — userData 아래 고정
     // 경로를 명시해 실행할 때마다 DB를 못 찾거나 새로 만드는 문제를 막는다
     // (ui-state.json이 이미 이렇게 하는 것과 동일한 이유, apps/desktop/src/main/ipc/index.ts 참고).
-    container = createCliContainer({ databasePath: join(app.getPath("userData"), "dododo.db") });
+    container = createCliContainer({
+      databasePath: join(app.getPath("userData"), "dotori.db"),
+      useFixtureFallback: false,
+    });
     // createCliContainer는 기본으로 ConsoleNotifier를 쓴다(CLI 전용) — 데스크톱은
     // 캐릭터 말풍선 IPC push로 갈아 끼운다. notifier는 CliContainer에서
     // readonly가 아니라 이렇게 교체 가능하다(apps/cli/src/commands/watch.ts의

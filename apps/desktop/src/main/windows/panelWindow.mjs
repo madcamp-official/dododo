@@ -33,7 +33,7 @@ export function createOpenPanel({ preloadPath, rendererPath }) {
         window.webContents.send(PANEL_NAVIGATE_CHANNEL, routeGate.markReady());
       });
       void window.loadFile(rendererPath).catch((error) => {
-        console.error("DoDoDo 패널 창 Renderer를 열지 못했습니다.", error);
+        console.error("DoToRi 패널 창 Renderer를 열지 못했습니다.", error);
       });
 
       return {
