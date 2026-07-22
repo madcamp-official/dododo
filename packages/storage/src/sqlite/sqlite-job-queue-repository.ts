@@ -116,16 +116,19 @@ export class SQLiteJobQueueRepository implements JobQueueRepository {
     return row === undefined ? undefined : rowToJob(row);
   }
 
-  async complete(id: string, leaseToken: string, now: Date): Promise<void> {
-    this.completeStatement.run(now.toISOString(), id, leaseToken);
+  async complete(id: string, leaseToken: string, now: Date): Promise<boolean> {
+    const result = this.completeStatement.run(now.toISOString(), id, leaseToken);
+    return Number(result.changes) > 0;
   }
 
-  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
-    this.retryStatement.run(nextRunAt.toISOString(), error, now.toISOString(), id, leaseToken);
+  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<boolean> {
+    const result = this.retryStatement.run(nextRunAt.toISOString(), error, now.toISOString(), id, leaseToken);
+    return Number(result.changes) > 0;
   }
 
-  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void> {
-    this.deadLetterStatement.run(error, now.toISOString(), id, leaseToken);
+  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<boolean> {
+    const result = this.deadLetterStatement.run(error, now.toISOString(), id, leaseToken);
+    return Number(result.changes) > 0;
   }
 
   async listDeadLetters(): Promise<Job[]> {

@@ -89,13 +89,15 @@ export interface JobQueueRepository {
   // 이상이 동시에 claim할 수 없다(doyeonid 리뷰 PR #100 P1).
   claimNext(types: JobType[], now: Date, leaseMs: number): Promise<Job | undefined>;
   // leaseToken은 claimNext가 이 Job에 발급한 값과 같아야 반영된다 — 다르면(이미 lease가
-  // 만료돼 다른 Worker가 재획득한 뒤 원래 Worker가 뒤늦게 부르는 경우) 조용히 무시한다.
-  complete(id: string, leaseToken: string, now: Date): Promise<void>;
+  // 만료돼 다른 Worker가 재획득한 뒤 원래 Worker가 뒤늦게 부르는 경우) 아무 것도 바꾸지
+  // 않고 false를 반환한다(stale). 실제로 반영됐으면 true를 반환한다 — 호출부(Worker)가
+  // 이 값으로 자신의 outcome 집계 여부를 판단한다(doyeonid 리뷰 PR #100 P1).
+  complete(id: string, leaseToken: string, now: Date): Promise<boolean>;
   // attempts를 늘리고 status를 pending으로, nextRunAt을 지정한 시각으로 되돌린다.
-  // leaseToken 검증은 complete와 같다.
-  retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void>;
-  // leaseToken 검증은 complete와 같다.
-  deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void>;
+  // leaseToken 검증과 반환값 의미는 complete와 같다.
+  retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<boolean>;
+  // leaseToken 검증과 반환값 의미는 complete와 같다.
+  deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<boolean>;
   listDeadLetters(): Promise<Job[]>;
   // leaseUntil이 now보다 과거인 leased Job을 pending으로 되돌린다(죽은 Worker 복구).
   // 되돌린 개수를 반환한다.

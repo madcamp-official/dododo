@@ -60,18 +60,23 @@ export async function runDueJobs(
 
     try {
       await handler(job.inputRef, now);
-      await queue.complete(job.id, leaseToken, now);
-      outcome.completed.push(job.id);
+      // doyeonid 리뷰(PR #100) P1(2차): complete가 false를 반환하면(lease 만료 후 다른
+      // Worker가 이미 재획득한 stale 호출) 이 작업은 더 이상 이 Worker 소유가 아니므로
+      // completed에 넣지 않는다 — 그렇지 않으면 실제로는 재처리 중인 Job을 성공한 것처럼
+      // 보고해 Desktop 알림 등이 실제 큐 상태와 어긋난다.
+      if (await queue.complete(job.id, leaseToken, now)) outcome.completed.push(job.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const attemptsAfterThis = job.attempts + 1;
       if (isRetryableError(error) && attemptsAfterThis < job.maxAttempts) {
         const delayMs = computeBackoffDelayMs(attemptsAfterThis);
-        await queue.retry(job.id, leaseToken, now, new Date(now.getTime() + delayMs), message);
-        outcome.retried.push(job.id);
+        if (await queue.retry(job.id, leaseToken, now, new Date(now.getTime() + delayMs), message)) {
+          outcome.retried.push(job.id);
+        }
       } else {
-        await queue.deadLetter(job.id, leaseToken, now, message);
-        outcome.deadLettered.push({ id: job.id, type: job.type, inputRef: job.inputRef, lastError: message });
+        if (await queue.deadLetter(job.id, leaseToken, now, message)) {
+          outcome.deadLettered.push({ id: job.id, type: job.type, inputRef: job.inputRef, lastError: message });
+        }
       }
     }
   }

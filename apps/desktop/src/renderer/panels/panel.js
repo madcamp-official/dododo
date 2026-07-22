@@ -65,6 +65,11 @@ function viewTitle(view) {
 
 function setTitle(title) {
   if (panelTitle !== null) panelTitle.textContent = title;
+  resetPanelScroll();
+}
+
+function resetPanelScroll() {
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
 }
 
 function renderLoading(message) {
@@ -287,6 +292,7 @@ async function runAction(action) {
 }
 
 function renderError(error) {
+  resetPanelScroll();
   panelContent.innerHTML = `<div class="state-message error">${escapeHtml(errorMessage(error, "요청 처리에 실패했습니다."))}</div>`;
 }
 

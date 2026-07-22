@@ -31,6 +31,7 @@ import { createStudyCaptureScheduler } from "../study/captureScheduler.ts";
 import { createCaptureSchedulerCoordinator } from "../study/captureSchedulerCoordinator.ts";
 import { createCaptureVisionPipeline } from "../study/captureVisionPipeline.ts";
 import { broadcastNotification } from "../notifier/broadcast.ts";
+import { isImageTransmissionAllowed } from "../../../../../packages/context-engine/src/index.ts";
 
 // docs/frontend-plan.md 6.1의 "영역:동작" 채널 이름 규칙. 이 상수만 preload와 공유하면
 // 되므로 여기 한 곳에 모아 둔다 — Renderer는 이 문자열을 직접 안 쓰고 preload가 감싼
@@ -74,7 +75,10 @@ export function registerIpcHandlers(container: CliContainer): void {
   const captureVisionPipeline = createCaptureVisionPipeline({
     getActiveSession: () => studySessions.getActive(),
     recordAdvice: (sessionId) => studySessions.recordAdvice(sessionId),
-    isRemoteProvider: () => container.llmConfig?.provider === "remote-job",
+    // advise.ts, extractScreenActivity와 같은 단일 기준(isImageTransmissionAllowed)을
+    // 쓴다 — llmConfig.provider 문자열이 아니라 실제 provider의 imageDataBoundary를
+    // 직접 확인해 중복·불일치 위험을 없앤다.
+    isRemoteProvider: () => !isImageTransmissionAllowed(container.llmProvider),
     llmProvider: container.llmProvider,
     captureLiveScreen: () => container.captureLiveScreen(),
     listContextItems: () => container.repository.listContextItems(),

@@ -61,6 +61,13 @@ test("desktop mascot은 Renderer가 응답 없을 때 click-through로 되돌아
   assert.match(main, /setIgnoreMouseEvents\(true, \{ forward: true \}\)/);
 });
 
+test("desktop mascot keeps an open menu or embedded panel interactive", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
+
+  assert.match(renderer, /popupMenu\?\.hidden === false \|\| panel\?\.hidden === false/);
+  assert.match(renderer, /!hasOpenInteractiveSurface && !interactive && !isOpaquePixel/);
+});
+
 test("desktop mascot 팝업 메뉴는 창 위쪽 경계 안에 배치된다", async () => {
   const [main, style] = await Promise.all([
     readFile("apps/desktop/src/main/index.mjs", "utf8"),

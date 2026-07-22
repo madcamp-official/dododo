@@ -186,6 +186,9 @@ test("runAdvise --screen --live는 Vision이 관련 Task를 찾으면 조언 문
     imageBase64: "fake-image-bytes",
   });
   container.llmProvider = {
+    // doyeonid 리뷰(PR #99) P1 이후 isImageTransmissionAllowed가 fail-closed라
+    // "local"을 명시해야 원격으로 오인돼 차단되지 않는다.
+    imageDataBoundary: "local",
     async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
       const value = {
         application: "브라우저",
@@ -213,6 +216,7 @@ test("runAdvise --screen --live는 민감한 내용이 감지되면 조언하지
     imageBase64: "fake-image-bytes",
   });
   container.llmProvider = {
+    imageDataBoundary: "local",
     async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
       const value = {
         application: "카카오톡",

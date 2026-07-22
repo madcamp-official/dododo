@@ -93,9 +93,14 @@ function isOpaquePixel(clientX, clientY) {
 
 function updateMousePassthrough(event) {
   if (draggingPointerId !== undefined) return;
+  const hasOpenInteractiveSurface = popupMenu?.hidden === false || panel?.hidden === false;
   const interactive = event.target instanceof Element
     && event.target.closest("[data-popup-menu], [data-panel], [data-menu-toggle], [data-notification-bubble], [data-notification-badge]") !== null;
-  const shouldIgnore = !interactive && !isOpaquePixel(event.clientX, event.clientY);
+  // Once a menu or embedded panel is open, keep the window interactive. If we
+  // re-enable passthrough while the pointer crosses the transparent gap, UI
+  // automation and keyboard users cannot recover focus without moving a
+  // physical mouse over a rendered control first.
+  const shouldIgnore = !hasOpenInteractiveSurface && !interactive && !isOpaquePixel(event.clientX, event.clientY);
   if (shouldIgnore === isIgnoringMouse) return;
   isIgnoringMouse = shouldIgnore;
   window.desktopMascot?.setMousePassthrough(shouldIgnore);
