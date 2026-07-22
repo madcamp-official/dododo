@@ -135,13 +135,17 @@ test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보�
 
   assert.match(html, /data-notification-bubble/);
   assert.match(html, /data-notification-badge/);
-  assert.match(renderer, /desktopEvents\?\.onNotification/);
+  assert.match(renderer, /subscribeToNotifications\(\)/);
+  assert.match(renderer, /notificationSubscriptionRetry = window\.setTimeout/);
+  assert.match(renderer, /console\.warn\("DoDoDo 알림 이벤트 브리지를 찾지 못해/);
   assert.match(renderer, /unsubscribeNotifications\?\.\(\)/);
+  assert.match(renderer, /notificationMode\(next\.kind\) === "quiet" \? "polite" : "assertive"/);
   assert.match(renderer, /notificationStore\.takeImmediate/);
   assert.match(renderer, /notificationStore\.markQuietRead/);
   assert.match(renderer, /openDetail\(event\.contextItemId\)/);
   assert.match(main, /DODODO_NOTIFICATION_PREVIEW/);
   assert.match(main, /webContents\.send\(NOTIFICATION_CHANNEL/);
   assert.match(style, /\.notification-bubble\s*\{/);
+  assert.match(style, /\.desktop-shell:has\(\.panel:not\(\[hidden\]\)\) \.notification-bubble/);
   assert.match(style, /\.notification-badge\s*\{/);
 });

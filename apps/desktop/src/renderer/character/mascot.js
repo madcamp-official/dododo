@@ -10,6 +10,7 @@ import {
 import {
   createNotificationStore,
   notificationKindLabel,
+  notificationMode,
 } from "./notification-state.mjs";
 
 const character = document.querySelector(".character");
@@ -33,6 +34,8 @@ const notificationStore = createNotificationStore();
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
+let notificationSubscriptionRetry;
+let unsubscribeNotifications;
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -139,9 +142,10 @@ notificationDetail?.addEventListener("click", () => {
   if (contextItemId !== undefined) openDetail(contextItemId);
 });
 
-const unsubscribeNotifications = window.desktopEvents?.onNotification?.(handleNotification);
+subscribeToNotifications();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
+  if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   unsubscribeNotifications?.();
 }, { once: true });
 
@@ -328,6 +332,24 @@ function handleNotification(payload) {
   showNextNotification();
 }
 
+function subscribeToNotifications() {
+  const onNotification = window.desktopEvents?.onNotification;
+  if (typeof onNotification === "function") {
+    unsubscribeNotifications = onNotification(handleNotification);
+    return;
+  }
+
+  notificationSubscriptionRetry = window.setTimeout(() => {
+    notificationSubscriptionRetry = undefined;
+    const retryOnNotification = window.desktopEvents?.onNotification;
+    if (typeof retryOnNotification === "function") {
+      unsubscribeNotifications = retryOnNotification(handleNotification);
+      return;
+    }
+    console.warn("DoDoDo 알림 이벤트 브리지를 찾지 못해 알림 구독을 시작하지 못했습니다.");
+  }, 0);
+}
+
 function showNextNotification() {
   if (activeNotification !== undefined) return;
   const next = notificationStore.takeImmediate();
@@ -338,6 +360,7 @@ function showNextNotification() {
     || !(notificationDetail instanceof HTMLButtonElement)) return;
 
   activeNotification = next;
+  notificationBubble.setAttribute("aria-live", notificationMode(next.kind) === "quiet" ? "polite" : "assertive");
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
   notificationDetail.hidden = next.contextItemId === undefined;
