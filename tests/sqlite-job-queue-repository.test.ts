@@ -70,33 +70,36 @@ test("SQLite: claimNext는 priority가 높은 작업을 먼저 뽑는다", async
   assert.equal(claimed?.id, "job-high");
 });
 
-test("SQLite: retry는 attempts를 늘리고 pending으로 되돌린다", async () => {
+test("SQLite: retry는 attempts를 늘리고 pending으로 되돌리며 true를 반환한다", async () => {
   const queue = createRepository();
   await queue.enqueue({ id: "extract_facts:raw-1", type: "extract_facts", inputRef: "raw-1", now: NOW });
   const claimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
 
-  await queue.retry(claimed!.id, claimed!.leaseToken!, NOW, NOW, "일시적 오류");
+  const retried = await queue.retry(claimed!.id, claimed!.leaseToken!, NOW, NOW, "일시적 오류");
+  assert.equal(retried, true);
 
   const reclaimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
   assert.equal(reclaimed?.attempts, 1);
   assert.equal(reclaimed?.lastError, "일시적 오류");
 });
 
-test("SQLite: complete 이후에는 다시 claim되지 않는다", async () => {
+test("SQLite: complete 이후에는 다시 claim되지 않고 true를 반환한다", async () => {
   const queue = createRepository();
   await queue.enqueue({ id: "extract_facts:raw-1", type: "extract_facts", inputRef: "raw-1", now: NOW });
   const claimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
-  await queue.complete(claimed!.id, claimed!.leaseToken!, NOW);
+  const completed = await queue.complete(claimed!.id, claimed!.leaseToken!, NOW);
+  assert.equal(completed, true);
 
   const reclaimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
   assert.equal(reclaimed, undefined);
 });
 
-test("SQLite: deadLetter로 보낸 작업은 listDeadLetters에 나오고 다시 claim되지 않는다", async () => {
+test("SQLite: deadLetter로 보낸 작업은 listDeadLetters에 나오고 다시 claim되지 않으며 true를 반환한다", async () => {
   const queue = createRepository();
   await queue.enqueue({ id: "extract_facts:raw-1", type: "extract_facts", inputRef: "raw-1", now: NOW });
   const claimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
-  await queue.deadLetter(claimed!.id, claimed!.leaseToken!, NOW, "영구 실패");
+  const deadLettered = await queue.deadLetter(claimed!.id, claimed!.leaseToken!, NOW, "영구 실패");
+  assert.equal(deadLettered, true);
 
   const reclaimed = await queue.claimNext(["extract_facts"], NOW, 60_000);
   assert.equal(reclaimed, undefined);
@@ -141,12 +144,14 @@ test("SQLite: 만료된 lease로 재획득된 Job은 원래 Worker의 뒤늦은 
   assert.notEqual(newClaim, undefined);
   assert.notEqual(newClaim!.leaseToken, staleClaim!.leaseToken);
 
-  await queue.complete(staleClaim!.id, staleClaim!.leaseToken!, later);
+  const staleCompleted = await queue.complete(staleClaim!.id, staleClaim!.leaseToken!, later);
+  assert.equal(staleCompleted, false);
 
   const stillLeased = await queue.claimNext(["extract_facts"], later, 60_000);
   assert.equal(stillLeased, undefined, "이미 leased 상태라 다시 claim되면 안 됨");
 
-  await queue.complete(newClaim!.id, newClaim!.leaseToken!, later);
+  const newCompleted = await queue.complete(newClaim!.id, newClaim!.leaseToken!, later);
+  assert.equal(newCompleted, true);
   assert.deepEqual(await queue.listDeadLetters(), []);
 });
 

@@ -53,9 +53,11 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
 
   // doyeonid 리뷰(PR #100) P1: leaseToken이 지금 저장된 값과 같을 때만 반영한다 —
   // SQLite 구현과 같은 소유권 검증(stale completion 무시)을 InMemory에도 맞춘다.
-  async complete(id: string, leaseToken: string, now: Date): Promise<void> {
+  // doyeonid 리뷰(PR #100) P1(2차): 반영 여부를 boolean으로 반환한다 — 무시된(stale)
+  // 호출인지 호출부(Worker)가 구분할 수 있어야 outcome을 잘못 집계하지 않는다.
+  async complete(id: string, leaseToken: string, now: Date): Promise<boolean> {
     const job = this.jobs.get(id);
-    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return false;
     this.jobs.set(id, {
       ...job,
       status: "done",
@@ -63,11 +65,12 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
       leaseToken: undefined,
       updatedAt: now.toISOString(),
     });
+    return true;
   }
 
-  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
+  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<boolean> {
     const job = this.jobs.get(id);
-    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return false;
     this.jobs.set(id, {
       ...job,
       status: "pending",
@@ -78,11 +81,12 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
       lastError: error,
       updatedAt: now.toISOString(),
     });
+    return true;
   }
 
-  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void> {
+  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<boolean> {
     const job = this.jobs.get(id);
-    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return false;
     this.jobs.set(id, {
       ...job,
       status: "dead_letter",
@@ -92,6 +96,7 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
       lastError: error,
       updatedAt: now.toISOString(),
     });
+    return true;
   }
 
   async listDeadLetters(): Promise<Job[]> {
