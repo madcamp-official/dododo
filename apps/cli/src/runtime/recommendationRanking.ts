@@ -1,4 +1,5 @@
 import type { ContextItem } from "../../../../packages/shared/src/index.ts";
+import { RuleBasedRecommendationEngine } from "../../../../packages/context-engine/src/index.ts";
 import { emptyProfile, type CliContainer } from "./container.ts";
 import { isSnoozed } from "./snooze.ts";
 
@@ -19,7 +20,10 @@ export async function rankItems(
   if (items.length === 0) return [];
 
   const profile = (await container.profileRepository.get()) ?? emptyProfile();
-  const recommendations = await container.recommendationEngine.recommend(items, profile, now);
+  // today/inbox는 사용자가 직접 연 조회 화면이다. 알림 발송용 engine에는 최근 30분
+  // 중복 억제 이력이 들어 있으므로 이를 그대로 쓰면 방금 알림으로 보낸 모든 항목이
+  // 목록에서도 사라진다. 조회에서는 상태·Snooze 정책만 유지하고 알림 이력은 제외한다.
+  const recommendations = await new RuleBasedRecommendationEngine().recommend(items, profile, now);
   const itemsById = new Map(items.map((item) => [item.id, item]));
 
   const ranked: RankedItem[] = [];
