@@ -1,12 +1,13 @@
 import type { SchoolSiteFetch } from "../school-site/http-loader.ts";
 import type { LmsHtmlSelectors } from "../lms/types.ts";
-import type { SchoolSiteSelectors } from "../school-site/types.ts";
+import type { SchoolSiteRecipe, SchoolSiteSelectors } from "../school-site/types.ts";
 
 export interface SchoolSiteSourceConfig {
   enabled?: boolean;
   sourceId?: string;
   url: string;
   selectors?: Partial<SchoolSiteSelectors>;
+  recipe?: SchoolSiteRecipe;
   timeoutMs?: number;
   maxResponseBytes?: number;
 }
