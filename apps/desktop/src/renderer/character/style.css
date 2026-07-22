@@ -482,6 +482,24 @@ h2 {
   cursor: pointer;
 }
 
+.study-progress,
+.study-summary {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f1e8d7;
+  gap: 12px;
+}
+
+.study-progress strong { font-size: 26px; font-variant-numeric: tabular-nums; }
+.study-progress p, .study-summary p { margin: 3px 0 0; color: #746556; font-size: 12px; }
+.study-status-dot { width: 12px; height: 12px; border-radius: 50%; background: #65a451; box-shadow: 0 0 0 6px rgb(101 164 81 / 15%); }
+.study-summary > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: #65a451; color: white; font-weight: 800; }
+.study-summary h2 { margin: 0; }
+body.is-studying .character { animation-duration: 5s; }
+
 .primary-button {
   border: 0;
   background: #74502f;

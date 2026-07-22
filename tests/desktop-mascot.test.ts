@@ -12,6 +12,8 @@ const desktopFiles = [
   "apps/desktop/src/renderer/character/profile-form.mjs",
   "apps/desktop/src/renderer/character/daily-summary.mjs",
   "apps/desktop/src/renderer/character/schedule-management.mjs",
+  "apps/desktop/src/renderer/character/study-session-ui.mjs",
+  "apps/desktop/src/renderer/character/character-expression.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -273,17 +275,34 @@ test("desktop calendar renders schedules as day and time groups", async () => {
 });
 
 test("desktop mascot provides study consent, start, end, and summary flow", async () => {
-  const [html, renderer] = await Promise.all([
+  const [html, renderer, expressions] = await Promise.all([
     readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
     readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/character-expression.mjs", "utf8"),
   ]);
   assert.match(html, /data-action="study"/);
   assert.match(renderer, /data-study-consent/);
   assert.match(renderer, /desktopApi\.studyStart/);
   assert.match(renderer, /desktopApi\.studyEnd/);
   assert.match(renderer, /desktopApi\.studyGet/);
-  assert.match(renderer, /restoreStudySession/);
+  assert.match(renderer, /const studySessionRestorePromise = restoreStudySession\(\)/);
+  assert.match(renderer, /openStudySession\(\).*await studySessionRestorePromise/s);
   assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
-  assert.match(renderer, /durationMinutes/);
+  assert.match(renderer, /studySummaryView/);
+  assert.match(renderer, /restingExpression/);
+  assert.match(expressions, /reading\.png/);
+  assert.match(renderer, /data-study-elapsed/);
+  assert.match(renderer, /data-study-status aria-live="polite"/);
+  assert.doesNotMatch(renderer, /study-progress" aria-live/);
+});
+
+test("desktop mascot changes expression for notifications and restores its activity state", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
+
+  assert.match(renderer, /setCharacterExpression\(notificationExpression\(next\.kind\)\)/);
+  assert.match(renderer, /notificationStore\.hasImmediate\(\).*showNextNotification\(\)/s);
+  assert.match(renderer, /else updateStudyCharacter\(\)/);
+  assert.match(renderer, /updateStudyCharacter\(\).*activeNotification !== undefined.*return.*restingExpression/s);
+  assert.match(renderer, /character\.addEventListener\("load", prepareAlphaMask/);
 });
