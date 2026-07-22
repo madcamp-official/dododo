@@ -13,6 +13,7 @@ import {
   notificationMode,
 } from "./notification-state.mjs";
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
+import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -613,12 +614,83 @@ async function runExclusivePanelAction(action) {
 function renderSettings() {
   panelContent.innerHTML = `
     <div class="settings-list">
-      <button type="button">프로필 <span>›</span></button>
+      <button type="button" data-settings-profile>프로필 <span>›</span></button>
       <button type="button">일정 관리 <span>›</span></button>
       <button type="button" data-settings-source>Source 관리 <span>›</span></button>
     </div>
-    <p class="hint">프로필·전체 일정 관리 화면은 순서대로 연결할 예정입니다.</p>`;
+    <p class="hint">전체 일정 관리 화면은 다음 단계에서 연결할 예정입니다.</p>`;
+  panelContent.querySelector("[data-settings-profile]")?.addEventListener("click", () => renderProfileSettings());
   panelContent.querySelector("[data-settings-source]")?.addEventListener("click", () => renderSourceSettings());
+}
+
+async function renderProfileSettings(notice) {
+  panelTitle.textContent = "프로필 설정";
+  panelContent.innerHTML = '<div class="state-message">프로필을 불러오는 중...</div>';
+  try {
+    const profile = profileToForm(unwrapResult(await desktopApi.profileGet()));
+    panelContent.innerHTML = `
+      ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
+      <form class="profile-form" data-profile-form>
+        <p class="state-message error compact" data-profile-error hidden></p>
+        <div class="form-row">
+          <div class="form-field"><label for="profile-school">학교</label><input id="profile-school" name="school" value="${escapeHtml(profile.school)}" required /></div>
+          <div class="form-field"><label for="profile-major">전공</label><input id="profile-major" name="major" value="${escapeHtml(profile.major)}" required /></div>
+        </div>
+        <div class="form-field"><label for="profile-year">학년</label><input id="profile-year" name="year" value="${escapeHtml(profile.year)}" placeholder="예: 3학년" required /></div>
+        ${profileListField("profile-interests", "interests", "관심 분야", profile.interests, "AI, 창업")}
+        ${profileListField("profile-activities", "activityTypes", "선호 활동", profile.activityTypes, "해커톤, 공모전")}
+        ${profileListField("profile-locations", "preferredLocations", "선호 장소", profile.preferredLocations, "서울, 교내")}
+        ${profileListField("profile-constraints", "explicitConstraints", "제외 조건", profile.explicitConstraints, "대학원생 전용")}
+        <fieldset class="quiet-hours-field">
+          <label class="checkbox-label"><input name="quietHoursEnabled" type="checkbox" ${profile.quietHoursEnabled ? "checked" : ""} data-quiet-hours-toggle /> 방해 금지 시간 사용</label>
+          <div class="form-row" data-quiet-hours-fields>
+            <div class="form-field"><label for="quiet-start">시작</label><input id="quiet-start" name="quietHoursStart" type="time" value="${escapeHtml(profile.quietHoursStart)}" /></div>
+            <div class="form-field"><label for="quiet-end">종료</label><input id="quiet-end" name="quietHoursEnd" type="time" value="${escapeHtml(profile.quietHoursEnd)}" /></div>
+          </div>
+        </fieldset>
+        <button class="primary-button" type="submit">프로필 저장</button>
+      </form>
+      <p class="hint">여러 값은 쉼표로 구분해주세요. 프로필은 추천 관련도와 Quiet Hours 정책에 사용됩니다.</p>`;
+    const form = panelContent.querySelector("[data-profile-form]");
+    form?.addEventListener("submit", runProfileSave);
+    form?.querySelector("[data-quiet-hours-toggle]")?.addEventListener("change", updateQuietHoursFields);
+    updateQuietHoursFields.call(form?.querySelector("[data-quiet-hours-toggle]"));
+  } catch (error) {
+    renderError(error);
+  }
+}
+
+function profileListField(id, name, label, value, placeholder) {
+  return `<div class="form-field"><label for="${id}">${label}</label><input id="${id}" name="${name}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" /></div>`;
+}
+
+function updateQuietHoursFields() {
+  const enabled = this instanceof HTMLInputElement && this.checked;
+  panelContent.querySelectorAll("[data-quiet-hours-fields] input").forEach((input) => {
+    input.disabled = !enabled;
+    input.required = enabled;
+  });
+}
+
+async function runProfileSave(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!(form instanceof HTMLFormElement)) return;
+  const submit = form.querySelector("button[type='submit']");
+  if (submit instanceof HTMLButtonElement) submit.disabled = true;
+  try {
+    const profile = profileFromFormData(new FormData(form));
+    unwrapResult(await desktopApi.profileSave(profile));
+    await renderProfileSettings("프로필을 저장했습니다.");
+  } catch (error) {
+    const target = form.querySelector("[data-profile-error]");
+    if (target instanceof HTMLElement) {
+      target.textContent = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
+      target.hidden = false;
+    }
+  } finally {
+    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
+  }
 }
 
 async function renderSourceSettings(notice) {

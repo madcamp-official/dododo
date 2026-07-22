@@ -9,6 +9,7 @@ const desktopFiles = [
   "apps/desktop/src/renderer/character/mascot.js",
   "apps/desktop/src/renderer/character/notification-state.mjs",
   "apps/desktop/src/renderer/character/schedule-form.mjs",
+  "apps/desktop/src/renderer/character/profile-form.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -194,4 +195,23 @@ test("desktop mascot settings connects Source management and restart guidance", 
   assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
   assert.match(style, /\.source-card\s*\{/);
   assert.match(style, /\.restart-notice\s*\{/);
+});
+
+test("desktop mascot settings connects profile fields and Quiet Hours", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /getProfile/);
+  assert.match(adapter, /saveProfile/);
+  assert.match(renderer, /data-settings-profile/);
+  assert.match(renderer, /desktopApi\.profileGet/);
+  assert.match(renderer, /desktopApi\.profileSave/);
+  assert.match(renderer, /data-quiet-hours-toggle/);
+  assert.match(renderer, /data-profile-error/);
+  assert.match(renderer, /프로필을 저장하지 못했습니다/);
+  assert.match(style, /\.profile-form\s*\{/);
+  assert.match(style, /\.quiet-hours-field\s*\{/);
 });
