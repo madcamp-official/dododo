@@ -27,10 +27,15 @@ export function startDesktopWatch(
     signal: controller.signal,
     onTick: (result, iteration) => {
       const tickNow = new Date();
-      const summary = summarizeSyncForNotification(result.syncedSources, tickNow);
-      if (summary !== undefined) broadcastNotification(summary);
+      // 추천·리마인더뿐 아니라 Main이 직접 만드는 IPC 이벤트도 Quiet Hours에는
+      // Renderer로 보내지 않는다. 충돌 완료 메타데이터 역시 watchTick이 보류하므로
+      // Quiet Hours 종료 후 다음 tick에서 다시 전달된다.
+      if (!result.withinQuietHours) {
+        const summary = summarizeSyncForNotification(result.syncedSources, tickNow);
+        if (summary !== undefined) broadcastNotification(summary);
 
-      for (const event of toConflictEvents(result.newConflicts, tickNow)) broadcastNotification(event);
+        for (const event of toConflictEvents(result.newConflicts, tickNow)) broadcastNotification(event);
+      }
       // 리마인더는 더 이상 여기서 따로 push하지 않는다 — watchTick.ts가 다른 추천과
       // 같은 gateNotification → container.notifier.send 경로를 타고, 그 경로 끝에서
       // ElectronDesktopNotifier가 classifyRecommendation으로 "reminder-" id를 인식해

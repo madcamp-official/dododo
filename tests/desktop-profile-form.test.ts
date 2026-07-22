@@ -44,6 +44,9 @@ test("폼 입력은 중복을 제거한 배열과 선택한 Quiet Hours로 변�
 
 test("Quiet Hours를 끄면 시각 값이 있어도 저장하지 않는다", () => {
   const data = new FormData();
+  data.set("school", "KAIST");
+  data.set("major", "CS");
+  data.set("year", "3학년");
   data.set("quietHoursStart", "22:00");
   data.set("quietHoursEnd", "07:00");
   assert.equal(profileFromFormData(data).quietHours, undefined);
@@ -51,10 +54,23 @@ test("Quiet Hours를 끄면 시각 값이 있어도 저장하지 않는다", () 
 
 test("Quiet Hours 시각 형식이 잘못되면 저장하지 않는다", () => {
   const data = new FormData();
+  data.set("school", "KAIST");
+  data.set("major", "CS");
+  data.set("year", "3학년");
   data.set("quietHoursEnabled", "on");
   data.set("quietHoursStart", "25:00");
   data.set("quietHoursEnd", "07:00");
   assert.throws(() => profileFromFormData(data), /시작과 종료 시각/);
+});
+
+test("학교·전공·학년 중 하나라도 비어 있으면 저장하지 않는다", () => {
+  for (const missing of ["school", "major", "year"]) {
+    const data = new FormData();
+    data.set("school", missing === "school" ? "   " : "KAIST");
+    data.set("major", missing === "major" ? "" : "CS");
+    data.set("year", missing === "year" ? "" : "3학년");
+    assert.throws(() => profileFromFormData(data), /학교, 전공, 학년/);
+  }
 });
 
 test("쉼표와 줄바꿈 목록은 빈 값과 중복을 제거한다", () => {
