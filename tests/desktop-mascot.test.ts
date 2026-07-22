@@ -269,5 +269,8 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.match(renderer, /restoreStudySession/);
   assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
-  assert.match(renderer, /durationMinutes/);
+  assert.match(renderer, /studySummaryView/);
+  assert.match(renderer, /reading\.png/);
+  assert.match(renderer, /data-study-elapsed/);
+  assert.match(renderer, /restoreStudySession/);
 });
