@@ -20,9 +20,12 @@ import {
   handleTaskSnooze,
   handleTaskUpdate,
   handleToday,
+  handleStudyEnd,
+  handleStudyStart,
   handleUiStateGet,
   handleUiStateSet,
 } from "./handlers.ts";
+import { StudySessionManager } from "./studySession.ts";
 
 // docs/frontend-plan.md 6.1의 "영역:동작" 채널 이름 규칙. 이 상수만 preload와 공유하면
 // 되므로 여기 한 곳에 모아 둔다 — Renderer는 이 문자열을 직접 안 쓰고 preload가 감싼
@@ -47,6 +50,8 @@ export const IPC_CHANNELS = {
   profileSave: "profile:save",
   uiStateGet: "ui-state:get",
   uiStateSet: "ui-state:set",
+  studyStart: "study:start",
+  studyEnd: "study:end",
 } as const;
 
 // payload 검증과 실제 처리는 handlers.ts(electron 미의존, node --test로 검증)에 있다 —
@@ -54,6 +59,7 @@ export const IPC_CHANNELS = {
 // 이미 생겨 있어야 등록할 수 있다 — index.mjs가 app.whenReady() 이후 container를
 // 만든 뒤 이 함수를 한 번만 호출한다.
 export function registerIpcHandlers(container: CliContainer): void {
+  const studySessions = new StudySessionManager();
   ipcMain.handle(IPC_CHANNELS.todayGet, () => handleToday(container));
   ipcMain.handle(IPC_CHANNELS.calendarGet, () => handleCalendar(container));
   ipcMain.handle(IPC_CHANNELS.inboxGet, () => handleInbox(container));
@@ -74,6 +80,8 @@ export function registerIpcHandlers(container: CliContainer): void {
   ipcMain.handle(IPC_CHANNELS.syncRun, () => handleSyncRun(container));
   ipcMain.handle(IPC_CHANNELS.profileGet, () => handleProfileGet(container));
   ipcMain.handle(IPC_CHANNELS.profileSave, (_event, input: unknown) => handleProfileSave(container, input));
+  ipcMain.handle(IPC_CHANNELS.studyStart, (_event, input: unknown) => handleStudyStart(studySessions, input));
+  ipcMain.handle(IPC_CHANNELS.studyEnd, (_event, input: unknown) => handleStudyEnd(studySessions, input));
 
   // app.getPath("userData")는 app.whenReady() 이전엔 일부 플랫폼에서 값이 없을 수 있어
   // (Electron 문서 권고), 이미 whenReady 이후에만 호출되는 registerIpcHandlers 안에서 계산한다.

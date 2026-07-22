@@ -170,7 +170,7 @@ test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를
   assert.match(renderer, /window\.confirm/);
   assert.match(renderer, /desktopApi\.delete/);
   assert.match(renderer, /desktopApi\.reminder/);
-  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 4);
+  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 6);
   assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
   assert.match(style, /\.danger-button\s*\{/);
   assert.match(style, /\.reminder-form\s*\{/);
@@ -254,4 +254,18 @@ test("desktop settings provides weekly schedule management with existing detail 
   assert.match(renderer, /data-management-refresh/);
   assert.match(style, /\.management-toolbar\s*\{/);
   assert.match(style, /\.schedule-groups\s*\{/);
+});
+
+test("desktop mascot provides study consent, start, end, and summary flow", async () => {
+  const [html, renderer] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+  ]);
+  assert.match(html, /data-action="study"/);
+  assert.match(renderer, /data-study-consent/);
+  assert.match(renderer, /desktopApi\.studyStart/);
+  assert.match(renderer, /desktopApi\.studyEnd/);
+  assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
+  assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
+  assert.match(renderer, /durationMinutes/);
 });

@@ -18,6 +18,7 @@ import {
 } from "./scheduleItem.ts";
 import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
+import { StudySessionManager } from "./studySession.ts";
 import { isNonEmptyString, isRecord, isUserProfileShape, isValidOffsetMinutes } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { isRegisteredSourceType } from "../../../../cli/src/runtime/sourceRegistration.ts";
@@ -175,4 +176,18 @@ export function handleUiStateSet(uiStatePath: string, input: unknown) {
     return Promise.resolve(fail("validation", "key/value가 필요합니다."));
   }
   return setUiState(uiStatePath, input.key, input.value);
+}
+
+export function handleStudyStart(manager: StudySessionManager, input: unknown) {
+  if (!isRecord(input) || typeof input.screenCaptureConsent !== "boolean") {
+    return Promise.resolve(fail("validation", "screenCaptureConsent는 boolean이어야 합니다."));
+  }
+  return Promise.resolve(manager.start(input.screenCaptureConsent));
+}
+
+export function handleStudyEnd(manager: StudySessionManager, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.sessionId)) {
+    return Promise.resolve(fail("validation", "sessionId는 문자열이어야 합니다."));
+  }
+  return Promise.resolve(manager.end(input.sessionId));
 }
