@@ -823,6 +823,8 @@ test("RuleBasedRecommendationEngine은 음수 llmPhrasingLimit을 0으로 처리
 
   assert.equal(callCount, 0);
   assert.equal(recommendations[0]?.action, "템플릿 항목을(를) 확인하세요.");
+  assert.equal(recommendations[0]?.reason, "확인이 필요한 항목이에요.");
+  assert.doesNotMatch(recommendations[0]?.reason ?? "", /미처리 Context/);
 });
 
 test("generateActionAndReason은 LLM이 유효한 응답을 주면 그대로 쓴다", async () => {
