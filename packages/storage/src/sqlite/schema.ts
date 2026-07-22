@@ -123,3 +123,26 @@ export function initializeContextSchema(database: DatabaseSync): void {
       ON recommendations(context_item_id, created_at);
   `);
 }
+
+// docs/llm-architecture.md §5의 Job Queue 테이블. status/next_run_at 조합으로
+// claimNext()가 "지금 처리할 수 있는 작업"을 빠르게 골라야 해서 인덱스를 둔다.
+export function initializeJobSchema(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      input_ref TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'leased', 'done', 'dead_letter')),
+      priority INTEGER NOT NULL,
+      attempts INTEGER NOT NULL,
+      max_attempts INTEGER NOT NULL,
+      next_run_at TEXT NOT NULL,
+      lease_until TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS jobs_claim_idx ON jobs(status, next_run_at);
+  `);
+}

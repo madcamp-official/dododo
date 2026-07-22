@@ -4,6 +4,8 @@ import { findDueReminders, markReminderSent, toReminderRecommendation } from "./
 import { checkScheduleConflicts, type ScheduleConflict } from "./scheduleConflict.ts";
 import { emptyProfile, type CliContainer } from "./container.ts";
 import { syncIncrementally } from "./incrementalSync.ts";
+import { createExtractFactsJobHandler } from "./jobQueue/extractFactsJob.ts";
+import { runDueJobs, type DeadLetteredJob } from "./jobQueue/worker.ts";
 import { isSnoozed } from "./snooze.ts";
 
 export interface WatchTickResult {
@@ -19,6 +21,10 @@ export interface WatchTickResult {
   // Desktop Main이 직접 만드는 sync-complete/conflict IPC 이벤트도 추천·리마인더와
   // 같은 Quiet Hours 정책을 적용할 수 있도록 tick 판정 결과를 전달한다.
   withinQuietHours: boolean;
+  // docs/llm-architecture.md §5 Job Queue: 이번 tick에서 재시도 한도를 다 써
+  // dead_letter로 넘어간 작업들 — 사용자에게 "이 항목은 더 이상 자동 재시도하지
+  // 않는다"를 알릴 수 있게 노출한다(Desktop이 notification으로 연결).
+  deadLetteredJobs: DeadLetteredJob[];
 }
 
 // docs/architecture.md §3 Watch Process 흐름 한 번(수집 스케줄 확인 → 동기화 →
@@ -31,12 +37,28 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
   const syncedSources = await container.syncLock.run(async () => {
     const results: SyncResult[] = [];
     for (const collector of container.collectors) {
-      const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
+      const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository, {
+        jobQueue: container.jobQueue,
+        now,
+      });
       container.syncStatus.record(result, now);
       results.push(result);
     }
     return results;
   });
+
+  // 위 동기화가 실패한 항목을 큐에 넣어 두면(incrementalSync.ts), 같은 tick 안에서
+  // 바로 드레인한다 — 별도 타이머 없이 watch tick 주기 자체가 Job Queue의 폴링
+  // 주기를 겸한다. extract_facts 외 다른 Job.type은 아직 Handler가 없어(§5 나머지
+  // 8종은 후속 작업) 여기 등록되기 전까지는 큐에 쌓여도 처리되지 않는다.
+  const jobOutcome = await container.syncLock.run(() => runDueJobs(
+    container.jobQueue,
+    { extract_facts: createExtractFactsJobHandler({
+      rawItemRepository: container.rawItemRepository,
+      pipeline: container.pipeline,
+    }) },
+    now,
+  ));
 
   const tasks = await container.repository.listContextItems("task");
   const events = await container.repository.listContextItems("event");
@@ -95,5 +117,6 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
     heldForQuietHours,
     newConflicts: conflictCheck.newConflicts,
     withinQuietHours,
+    deadLetteredJobs: jobOutcome.deadLettered,
   };
 }

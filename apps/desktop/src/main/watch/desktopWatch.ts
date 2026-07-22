@@ -2,6 +2,7 @@ import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { runWatchLoop } from "../../../../cli/src/runtime/watchLoop.ts";
 import { broadcastNotification } from "../notifier/broadcast.ts";
 import { toConflictEvents } from "./conflictEvents.ts";
+import { toJobFailureEvents } from "./jobFailureSummary.ts";
 import { summarizeSyncForNotification } from "./syncCompleteSummary.ts";
 
 // CLI의 watch 명령(apps/cli/src/commands/watch.ts)과 같은 기본 주기 — 값을 바꿀 땐
@@ -36,6 +37,12 @@ export function startDesktopWatch(
 
         for (const event of toConflictEvents(result.newConflicts, tickNow)) broadcastNotification(event);
       }
+
+      // job-failed는 Quiet Hours로 보류하지 않는다 — conflict/리마인더와 달리
+      // dead_letter는 이번 tick에서만 한 번 보고되는 상태 전이라(watchTick.ts가
+      // "이번 tick에 새로 dead-letter된 것"만 넘김), 여기서 누락하면 다음 tick에
+      // 다시 나타나지 않고 영영 사용자에게 전달되지 않는다.
+      for (const event of toJobFailureEvents(result.deadLetteredJobs, tickNow)) broadcastNotification(event);
       // 리마인더는 더 이상 여기서 따로 push하지 않는다 — watchTick.ts가 다른 추천과
       // 같은 gateNotification → container.notifier.send 경로를 타고, 그 경로 끝에서
       // ElectronDesktopNotifier가 classifyRecommendation으로 "reminder-" id를 인식해

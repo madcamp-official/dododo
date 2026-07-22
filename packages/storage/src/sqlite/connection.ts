@@ -1,6 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 
-import { initializeContextSchema, initializeProfileSchema, initializeRawItemSchema } from "./schema.ts";
+import {
+  initializeContextSchema,
+  initializeJobSchema,
+  initializeProfileSchema,
+  initializeRawItemSchema,
+} from "./schema.ts";
 
 export function openRawItemDatabase(path = ":memory:"): DatabaseSync {
   const database = new DatabaseSync(path);
@@ -10,6 +15,7 @@ export function openRawItemDatabase(path = ":memory:"): DatabaseSync {
   initializeRawItemSchema(database);
   initializeContextSchema(database);
   initializeProfileSchema(database);
+  initializeJobSchema(database);
   return database;
 }
 

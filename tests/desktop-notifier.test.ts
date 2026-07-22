@@ -4,6 +4,7 @@ import test from "node:test";
 import type { ContextItem, Recommendation, SyncResult } from "../packages/shared/src/index.ts";
 import { classifyRecommendation } from "../apps/desktop/src/main/notifier/classifyNotification.ts";
 import { toConflictEvents } from "../apps/desktop/src/main/watch/conflictEvents.ts";
+import { toJobFailureEvents } from "../apps/desktop/src/main/watch/jobFailureSummary.ts";
 import { summarizeSyncForNotification } from "../apps/desktop/src/main/watch/syncCompleteSummary.ts";
 
 function opportunity(): ContextItem {
@@ -119,4 +120,22 @@ test("toConflictEvents는 겹치는 두 일정을 conflict 이벤트로 바꾼�
   assert.equal(events[0].contextItemId, "evt-a");
   assert.equal(events[0].message, "\"영민이와 복싱 스파링\"와(과) \"춘봉이와 저녁\" 일정이 겹칩니다.");
   assert.equal(events[0].createdAt, now.toISOString());
+});
+
+test("toJobFailureEvents는 dead-letter된 Job마다 job-failed 이벤트를 만든다", () => {
+  const now = new Date("2026-07-22T09:00:00Z");
+
+  const events = toJobFailureEvents([
+    { id: "extract_facts:raw-1", type: "extract_facts", inputRef: "raw-1", lastError: "일시적 오류" },
+  ], now);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, "job-failed");
+  assert.equal(events[0].contextItemId, undefined);
+  assert.match(events[0].message, /extract_facts/);
+  assert.equal(events[0].createdAt, now.toISOString());
+});
+
+test("toJobFailureEvents는 dead-letter된 Job이 없으면 빈 배열을 반환한다", () => {
+  assert.deepEqual(toJobFailureEvents([], new Date()), []);
 });

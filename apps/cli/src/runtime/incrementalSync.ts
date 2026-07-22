@@ -1,4 +1,10 @@
-import type { Collector, RawItem, SourceType, SyncResult } from "../../../../packages/shared/src/index.ts";
+import type {
+  Collector,
+  JobQueueRepository,
+  RawItem,
+  SourceType,
+  SyncResult,
+} from "../../../../packages/shared/src/index.ts";
 import type { ContextPipeline } from "../../../../packages/context-engine/src/index.ts";
 import { readCollectorDiagnostics } from "../../../../packages/collectors/src/index.ts";
 import type { RawItemRepository } from "../../../../packages/storage/src/index.ts";
@@ -27,10 +33,20 @@ class FixedItemsCollector implements Collector {
   }
 }
 
+export interface SyncIncrementallyOptions {
+  // docs/llm-architecture.md §5의 Job Queue. 주어지면(선택 사항 — 기존 호출부·테스트는
+  // 안 넘겨도 동작이 그대로다) 배치 실패 시 재시도·Backoff·Dead Letter가 있는 큐로
+  // 넘긴다. 안 주어지면 기존처럼 배치 전체를 커밋하지 않고 다음 tick에 통째로 다시
+  // 시도한다(무한 재시도, Backoff 없음 — 지금까지의 기존 동작 그대로).
+  jobQueue?: JobQueueRepository;
+  now?: Date;
+}
+
 export async function syncIncrementally(
   collector: Collector,
   pipeline: ContextPipeline,
   rawItemRepository: RawItemRepository,
+  options: SyncIncrementallyOptions = {},
 ): Promise<SyncResult> {
   let rawItems: RawItem[];
   let changed: RawItem[];
@@ -60,6 +76,22 @@ export async function syncIncrementally(
   // 같이 재시도되는 건 보수적이지만, 실패한 항목이 영영 스킵되는 것보다는 안전하다.
   if (result.errors.length === 0) {
     for (const item of changed) await rawItemRepository.save(item);
+  } else if (options.jobQueue !== undefined) {
+    // Job Queue가 있으면 무한 재시도 대신 여기서 재시도 책임을 넘긴다: 관찰 자체는
+    // 지금 저장해 둔다(그래야 다음 tick이 "안 바뀜"으로 걸러 매번 반복하지 않는다)
+    // — Fact 추출·해석은 Queue의 extract_facts Job이 Backoff·Dead Letter와 함께
+    // 다시 시도한다. Job id는 RawItem id로 결정적이라 여러 tick에서 반복 enqueue해도
+    // 하나만 남는다.
+    const now = options.now ?? new Date();
+    for (const item of changed) {
+      await rawItemRepository.save(item);
+      await options.jobQueue.enqueue({
+        id: `extract_facts:${item.id}`,
+        type: "extract_facts",
+        inputRef: item.id,
+        now,
+      });
+    }
   }
 
   return { ...result, errors: [...result.errors, ...diagnostics] };

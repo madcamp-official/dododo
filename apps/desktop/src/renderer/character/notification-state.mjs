@@ -1,4 +1,6 @@
-const IMMEDIATE_KINDS = new Set(["priority", "conflict", "reminder", "advice", "distraction", "daily-summary"]);
+const IMMEDIATE_KINDS = new Set([
+  "priority", "conflict", "reminder", "advice", "distraction", "daily-summary", "job-failed",
+]);
 const QUIET_KINDS = new Set(["opportunity", "sync-complete"]);
 const ALL_KINDS = new Set([...IMMEDIATE_KINDS, ...QUIET_KINDS]);
 const MAX_REMEMBERED_KEYS = 100;

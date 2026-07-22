@@ -92,6 +92,26 @@ test("runWatchTick은 gate를 통과한 추천을 notifier.send로 전달한다"
   assert.deepEqual(notifier.sent.map((r) => r.id).sort(), result.notified.map((r) => r.id).sort());
 });
 
+test("runWatchTick은 tick마다 Job Queue에 밀린 작업을 drain한다(docs/llm-architecture.md §5)", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  const now = new Date("2026-07-20T10:00:00+09:00");
+  // RawItem이 없는 대상을 가리키는 extract_facts Job — createExtractFactsJobHandler는
+  // 이런 경우 "처리할 대상 없음"으로 보고 성공 처리한다(재처리 대상이 사라졌을 때와
+  // 같은 경로). 여기서는 watchTick이 실제로 큐를 drain하는지만 확인한다.
+  await container.jobQueue.enqueue({
+    id: "extract_facts:missing-raw-item",
+    type: "extract_facts",
+    inputRef: "missing-raw-item",
+    now,
+  });
+
+  const result = await runWatchTick(container, now);
+
+  assert.deepEqual(result.deadLetteredJobs, []);
+  // 이번 tick에서 처리(완료)됐으니 다음에 다시 claim되지 않는다.
+  assert.equal(await container.jobQueue.claimNext(["extract_facts"], now, 60_000), undefined);
+});
+
 test("runWatchTick은 변경 없는 RawItem을 다음 tick에서 재분석하지 않는다(팀 리뷰 반영)", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   await runWatchTick(container, new Date("2026-07-20T10:00:00+09:00"));
