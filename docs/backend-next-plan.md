@@ -89,9 +89,22 @@ P0 스택에 없는 것만 남는다.
    RawItem 생성만 막는다. 따라서 이미지 Privacy Gateway가 준비될 때까지
    `advise --screen --live`는 로컬 Ollama에서만 동작하고 remote-job 설정에서는
    캡처·전송 전에 거절한다. 세션 시작 시 1회 동의(frontend-plan 방향)는 여전히
-   프론트엔드와 조율이 필요하다. 방어를 호출부에만 맡기지 않도록 `LLMProvider`의
-   `imageDataBoundary`를 원격 Provider가 명시하고 `extractScreenActivity`도 직접
-   원격 이미지 요청을 거절한다.
+   프론트엔드와 조율이 필요하다.
+
+   **완료(부분).** 원격 차단 판단을 `packages/context-engine/src/llm/imagePrivacyPolicy.ts`의
+   `isImageTransmissionAllowed()` 하나로 모았다 — 예전엔 `extractScreenActivity`,
+   `advise.ts`(`apps/cli`), 데스크톱 `captureVisionPipeline.ts`(`apps/desktop`, 이번에
+   같이 반영)가 각자 `llmConfig.provider === "remote-job"` 또는 `imageDataBoundary`를
+   따로 확인해서, 새 호출부가 하나라도 그 확인을 빠뜨리면 원본이 새어 나갈 수 있었다.
+   `VisionScreenActivity` 추출 프롬프트도 민감 판단 기준(전화번호·주민등록번호·학번·
+   이메일·결제정보·로그인 화면·개인 메신저)을 구체적으로 나열하고 "애매하면 민감으로
+   본다"는 과다탐지 우선 원칙을 명시하도록 강화했다.
+
+   **아직 안 된 것.** 이건 원격 전송 차단과 프롬프트 강화일 뿐, 실제 픽셀 마스킹(예:
+   OCR로 화면 속 텍스트를 읽어 전화번호·주민등록번호 영역을 흐리게 처리)은 여전히
+   없다 — OCR/이미지 처리 라이브러리가 코드베이스에 전혀 없어 새 의존성 추가 결정이
+   먼저 필요하다(팀 논의 필요, AGENTS.md 의존성 정책). 로컬 Ollama 경로는 여전히
+   "화면 원본을 그대로 모델에 보내고 모델의 자기 보고만 믿는" 상태다.
 
 ## P2 — Data Ingestion 영역 문서·코드 정리
 
