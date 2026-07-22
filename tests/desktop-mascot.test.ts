@@ -12,6 +12,8 @@ const desktopFiles = [
   "apps/desktop/src/renderer/character/profile-form.mjs",
   "apps/desktop/src/renderer/character/daily-summary.mjs",
   "apps/desktop/src/renderer/character/schedule-management.mjs",
+  "apps/desktop/src/renderer/character/study-session-ui.mjs",
+  "apps/desktop/src/renderer/character/character-expression.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -257,9 +259,10 @@ test("desktop settings provides weekly schedule management with existing detail 
 });
 
 test("desktop mascot provides study consent, start, end, and summary flow", async () => {
-  const [html, renderer] = await Promise.all([
+  const [html, renderer, expressions] = await Promise.all([
     readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
     readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/character-expression.mjs", "utf8"),
   ]);
   assert.match(html, /data-action="study"/);
   assert.match(renderer, /data-study-consent/);
@@ -270,7 +273,17 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /studySummaryView/);
-  assert.match(renderer, /reading\.png/);
+  assert.match(renderer, /restingExpression/);
+  assert.match(expressions, /reading\.png/);
   assert.match(renderer, /data-study-elapsed/);
   assert.match(renderer, /restoreStudySession/);
+});
+
+test("desktop mascot changes expression for notifications and restores its activity state", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
+
+  assert.match(renderer, /setCharacterExpression\(notificationExpression\(next\.kind\)\)/);
+  assert.match(renderer, /notificationStore\.hasImmediate\(\).*showNextNotification\(\)/s);
+  assert.match(renderer, /else updateStudyCharacter\(\)/);
+  assert.match(renderer, /character\.addEventListener\("load", prepareAlphaMask/);
 });
