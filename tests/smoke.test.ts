@@ -780,6 +780,51 @@ test("RuleBasedRecommendationEngine의 llmPhrasingLimit 기본값은 5다", asyn
   assert.equal(callCount, 5);
 });
 
+test("RuleBasedRecommendationEngine은 일부 LLM 호출이 실패해도 다른 항목의 문구 생성을 유지한다", async () => {
+  const now = new Date("2026-07-18T09:00:00+09:00");
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON(request) {
+      callCount += 1;
+      if (callCount === 1) throw new Error("첫 번째 호출 실패");
+      const value = { action: "LLM 문구", reason: "LLM 근거" };
+      if (!request.validate(value)) throw new Error("unexpected");
+      return value;
+    },
+  };
+  const items = [
+    baseItem({ id: "ctx-failed", title: "실패 항목", deadline: "2026-07-18T18:00:00+09:00" }),
+    baseItem({ id: "ctx-succeeded", title: "성공 항목", deadline: "2026-07-20T18:00:00+09:00" }),
+  ];
+
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider, llmPhrasingLimit: 2 });
+  const recommendations = await engine.recommend(items, emptyProfile(), now);
+
+  assert.equal(callCount, 2);
+  assert.equal(recommendations[0]?.action, "실패 항목을(를) 확인하세요.");
+  assert.equal(recommendations[1]?.action, "LLM 문구");
+});
+
+test("RuleBasedRecommendationEngine은 음수 llmPhrasingLimit을 0으로 처리한다", async () => {
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON() {
+      callCount += 1;
+      throw new Error("호출되면 안 됨");
+    },
+  };
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider, llmPhrasingLimit: -1 });
+
+  const recommendations = await engine.recommend(
+    [baseItem({ title: "템플릿 항목" })],
+    emptyProfile(),
+    new Date("2026-07-18T09:00:00+09:00"),
+  );
+
+  assert.equal(callCount, 0);
+  assert.equal(recommendations[0]?.action, "템플릿 항목을(를) 확인하세요.");
+});
+
 test("generateActionAndReason은 LLM이 유효한 응답을 주면 그대로 쓴다", async () => {
   const provider: LLMProvider = {
     async completeJSON(request) {

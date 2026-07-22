@@ -39,7 +39,7 @@ export class RuleBasedRecommendationEngine implements RecommendationEngine {
   constructor(options: RuleBasedRecommendationEngineOptions = {}) {
     this.llmProvider = options.llmProvider;
     this.history = options.history;
-    this.llmPhrasingLimit = options.llmPhrasingLimit ?? DEFAULT_LLM_PHRASING_LIMIT;
+    this.llmPhrasingLimit = Math.max(0, options.llmPhrasingLimit ?? DEFAULT_LLM_PHRASING_LIMIT);
   }
 
   async recommend(items: ContextItem[], profile: UserProfile, now: Date): Promise<Recommendation[]> {
