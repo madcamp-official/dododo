@@ -391,24 +391,27 @@ function renderAsk() {
       <label for="question">무엇이 궁금한가요?</label>
       <textarea id="question" name="question" rows="3" placeholder="예: 이번 주 마감이 뭐야?" required></textarea>
       <button class="primary-button" type="submit">물어보기</button>
-    </form>
-    <div class="answer" data-answer hidden></div>`;
+    </form>`;
   panelContent.querySelector("[data-ask-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const submit = event.currentTarget.querySelector("button[type='submit']");
-    const answer = panelContent.querySelector("[data-answer]");
     const question = new FormData(event.currentTarget).get("question")?.toString().trim() ?? "";
-    if (!(answer instanceof HTMLElement) || question === "") return;
-    answer.hidden = false;
-    answer.textContent = "답변을 찾는 중...";
-    if (submit instanceof HTMLButtonElement) submit.disabled = true;
+    if (question === "") return;
+    const originalLabel = submit?.textContent ?? "물어보기";
+    if (submit instanceof HTMLButtonElement) {
+      submit.disabled = true;
+      submit.textContent = "답변을 기다리는 중...";
+    }
     try {
-      const result = unwrapResult(await desktopApi.ask(question));
-      answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
+      unwrapResult(await desktopApi.ask(question));
+      panel.hidden = true;
     } catch (error) {
-      answer.textContent = error instanceof Error ? error.message : "질문 처리에 실패했습니다.";
+      renderError(error instanceof Error ? error : new Error("질문 처리에 실패했습니다."));
     } finally {
-      if (submit instanceof HTMLButtonElement) submit.disabled = false;
+      if (submit instanceof HTMLButtonElement && submit.isConnected) {
+        submit.disabled = false;
+        submit.textContent = originalLabel;
+      }
     }
   });
 }

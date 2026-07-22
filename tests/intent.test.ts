@@ -377,7 +377,7 @@ test("answerContextQuestion은 일반 계획 질문에 deadline 없는 Event와 
   const noDateAnswer = await answerContextQuestion("뭐부터 할까?", [noDateTask], NOW);
 
   assert.match(eventAnswer.answer, /저녁 약속/);
-  assert.match(eventAnswer.answer, /2026-07-18T18:00:00\+09:00/);
+  assert.doesNotMatch(eventAnswer.answer, /\([^)]*\)/);
   assert.match(noDateAnswer.answer, /자료 읽기/);
 });
 

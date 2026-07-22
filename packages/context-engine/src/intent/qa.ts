@@ -219,11 +219,7 @@ function isGeneralPlanningQuestion(question: string): boolean {
 
 function templateAnswer(items: ContextItem[]): string {
   if (items.length > 1) {
-    const summaries = items.map((item) => {
-      const at = item.deadline ?? item.startAt;
-      return at === undefined ? item.title : `${item.title} (${at})`;
-    });
-    return `확인할 항목은 ${summaries.join(", ")}입니다.`;
+    return `확인할 항목은 ${items.map((item) => item.title).join(", ")}입니다.`;
   }
   const item = items[0]!;
   const reason = item.deadline !== undefined
