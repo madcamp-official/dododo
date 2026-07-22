@@ -41,6 +41,15 @@ test("독립 상세 패널은 완료·미룸·수정·삭제·리마인더 액�
   assert.ok((script.match(/startVersion !== navigationVersion/g) ?? []).length >= 4);
 });
 
+test("panel view changes reset document scroll before rendering the next view", async () => {
+  const script = await readFile(scriptPath, "utf8");
+
+  assert.match(script, /function resetPanelScroll\(\)/);
+  assert.match(script, /window\.scrollTo\(\{ top: 0, left: 0, behavior: "instant" \}\)/);
+  assert.match(script, /function setTitle[\s\S]*?resetPanelScroll\(\)/);
+  assert.match(script, /function renderError[\s\S]*?resetPanelScroll\(\)/);
+});
+
 test("캐릭터 메뉴와 알림 상세 버튼은 독립 패널 창을 연다", async () => {
   const script = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
   assert.match(script, /desktopWindow\?\.openPanel/);
