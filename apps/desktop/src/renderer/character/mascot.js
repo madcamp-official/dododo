@@ -37,6 +37,7 @@ let draggingPointerId;
 let currentListView = "today";
 const runExclusiveTaskAction = createExclusiveActionRunner();
 const notificationStore = createNotificationStore();
+const STANDALONE_PANEL_VIEWS = new Set(["today", "calendar", "inbox", "ask"]);
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
@@ -154,8 +155,8 @@ notificationDetail?.addEventListener("click", () => {
   const contextItemId = activeNotification?.contextItemId;
   const targetView = activeNotification?.targetView;
   dismissActiveNotification();
-  if (targetView === "today") openView("today");
-  else if (contextItemId !== undefined) openDetail(contextItemId);
+  if (targetView !== undefined) openStandalonePanel({ view: targetView });
+  else if (contextItemId !== undefined) openStandalonePanel({ view: "detail", itemId: contextItemId });
 });
 
 subscribeToNotifications();
@@ -176,10 +177,17 @@ popupMenu?.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if (!(button instanceof HTMLButtonElement)) return;
   const view = button.dataset.view;
-  if (view !== undefined) await openView(view);
+  if (view !== undefined && STANDALONE_PANEL_VIEWS.has(view)) {
+    popupMenu.hidden = true;
+    openStandalonePanel({ view });
+  } else if (view !== undefined) await openView(view);
   if (button.dataset.action === "sync") await runSync(button);
   if (button.dataset.action === "study") await openStudySession();
 });
+
+function openStandalonePanel(route) {
+  window.desktopWindow?.openPanel(route);
+}
 
 async function openStudySession() {
   await studySessionRestorePromise;
