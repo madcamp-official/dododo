@@ -170,6 +170,17 @@ function createCharacterWindow() {
 let desktopWatchHandle;
 
 app.whenReady().then(() => {
+  // Source 등록 설정(dododo.sources.json)은 DODODO_SOURCE_CONFIG 미설정 시
+  // process.cwd() 기준 상대 경로로 찾는다(apps/cli/src/runtime/sourceInputConfig.ts) —
+  // 패키지 앱은 더블클릭으로 실행돼 cwd가 설치 폴더거나 실행 방식마다 달라질 수 있어,
+  // source:register로 쓴 설정을 다음 실행에서 못 찾는 문제가 생긴다(doyeonid, PR #84 리뷰).
+  // DODODO_SOURCE_CONFIG를 강제로 채우면 "명시적으로 지정했는데 파일이 없다"는
+  // 별개의 오류 경로를 타 버려(container.ts) 소스 미등록 상태의 Fixture 데모 폴백이
+  // 깨진다 — 대신 cwd 자체를 userData로 옮겨서 기존 "미설정 시 기본 상대 경로" 분기를
+  // 그대로 타게 한다. DB 경로 기본값(dbConfig.ts)도 같은 방식으로 cwd 상대라 이 chdir로
+  // 함께 안정되지만, DB는 아래 databasePath로 명시 지정도 유지한다(이중 안전장치).
+  process.chdir(app.getPath("userData"));
+
   // apps/cli의 createCliContainer를 그대로 재사용한다(container.ts) — CLI 명령마다
   // 새로 만들고 버리는 것과 달리, 앱 실행 내내 하나만 만들어 모든 IPC 호출이 공유한다.
   const container = getDesktopContainer();
