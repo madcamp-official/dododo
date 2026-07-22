@@ -46,6 +46,8 @@ const CHANNELS = {
   profileSave: "profile:save",
   uiStateGet: "ui-state:get",
   uiStateSet: "ui-state:set",
+  studyStart: "study:start",
+  studyEnd: "study:end",
 };
 
 // Result<T>({ ok, data } | { ok, error })를 그대로 돌려준다 — Renderer가 .ok로 분기한다
@@ -71,6 +73,8 @@ contextBridge.exposeInMainWorld("desktopApi", {
   saveProfile: (profile) => ipcRenderer.invoke(CHANNELS.profileSave, profile),
   getUiState: (key) => ipcRenderer.invoke(CHANNELS.uiStateGet, { key }),
   setUiState: (key, value) => ipcRenderer.invoke(CHANNELS.uiStateSet, { key, value }),
+  startStudy: (screenCaptureConsent) => ipcRenderer.invoke(CHANNELS.studyStart, { screenCaptureConsent }),
+  endStudy: (sessionId) => ipcRenderer.invoke(CHANNELS.studyEnd, { sessionId }),
 });
 
 // apps/desktop/src/main/notifier/notificationEvent.ts의 NOTIFICATION_CHANNEL과 같은

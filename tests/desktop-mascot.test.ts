@@ -237,3 +237,15 @@ test("desktop settings provides weekly schedule management with existing detail 
   assert.match(style, /\.management-toolbar\s*\{/);
   assert.match(style, /\.schedule-groups\s*\{/);
 });
+
+test("desktop mascot provides study consent, start, end, and summary flow", async () => {
+  const [html, renderer] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+  ]);
+  assert.match(html, /data-action="study"/);
+  assert.match(renderer, /data-study-consent/);
+  assert.match(renderer, /desktopApi\.studyStart/);
+  assert.match(renderer, /desktopApi\.studyEnd/);
+  assert.match(renderer, /durationMinutes/);
+});

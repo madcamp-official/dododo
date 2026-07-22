@@ -37,6 +37,7 @@ const notificationStore = createNotificationStore();
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
+let activeStudySessionId;
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -160,7 +161,48 @@ popupMenu?.addEventListener("click", async (event) => {
   const view = button.dataset.view;
   if (view !== undefined) await openView(view);
   if (button.dataset.action === "sync") await runSync(button);
+  if (button.dataset.action === "study") await openStudySession();
 });
+
+async function openStudySession() {
+  popupMenu.hidden = true;
+  panel.hidden = false;
+  panelTitle.textContent = "같이 공부하기";
+  if (activeStudySessionId === undefined) {
+    panelContent.innerHTML = `
+      <p>세션 중 현재 화면을 분석해 관련 과제와 구체적인 조언을 찾습니다.</p>
+      <label class="consent-row"><input type="checkbox" data-study-consent> 화면 캡처와 LLM 분석에 동의합니다.</label>
+      <p class="hint">원격 LLM을 사용 중이면 스크린샷이 팀 서버로 전송될 수 있으며 원본은 분석 직후 폐기됩니다.</p>
+      <button class="primary-button" type="button" data-study-start>시작</button>`;
+    panelContent.querySelector("[data-study-start]")?.addEventListener("click", startStudySession);
+  } else {
+    panelContent.innerHTML = `
+      <p>도토리와 같이 공부하는 중입니다.</p>
+      <button class="danger-button" type="button" data-study-end>세션 종료</button>`;
+    panelContent.querySelector("[data-study-end]")?.addEventListener("click", endStudySession);
+  }
+}
+
+async function startStudySession() {
+  const consent = panelContent.querySelector("[data-study-consent]")?.checked === true;
+  try {
+    const result = unwrapResult(await desktopApi.studyStart(consent));
+    activeStudySessionId = result.sessionId;
+    await openStudySession();
+  } catch (error) { renderError(error); }
+}
+
+async function endStudySession() {
+  try {
+    const result = unwrapResult(await desktopApi.studyEnd(activeStudySessionId));
+    activeStudySessionId = undefined;
+    panelContent.innerHTML = `
+      <h2>${escapeHtml(result.summaryText)}</h2>
+      <p>${result.durationMinutes}분 · 조언 ${result.adviceCount}회</p>
+      <button class="primary-button" type="button" data-study-restart>다시 시작</button>`;
+    panelContent.querySelector("[data-study-restart]")?.addEventListener("click", openStudySession);
+  } catch (error) { renderError(error); }
+}
 
 async function openView(view, { throwOnError = false } = {}) {
   popupMenu.hidden = true;
