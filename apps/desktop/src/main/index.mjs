@@ -7,9 +7,11 @@ import { registerIpcHandlers } from "./ipc/index.ts";
 import { startDesktopWatch } from "./watch/desktopWatch.ts";
 import { layoutWindowForCharacter } from "./dragGeometry.ts";
 import { NOTIFICATION_CHANNEL } from "./notifier/notificationEvent.ts";
+import { createOpenSettings } from "./windows/settingsWindow.mjs";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
+const settingsRendererPath = path.join(currentDirectory, "../renderer/settings/index.html");
 const preloadPath = path.join(currentDirectory, "../preload/index.cjs");
 const characterWindows = new Set();
 
@@ -18,6 +20,18 @@ const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
 const CHARACTER_PLACEMENT = "desktop:character-placement";
+const OPEN_SETTINGS = "desktop:open-settings";
+const openSettings = createOpenSettings({ preloadPath, rendererPath: settingsRendererPath });
+
+// 설정 창 열기는 데이터를 주고받는 Result<T> IPC(ipc/index.ts)가 아니라 순수 창
+// 제어라 그 등록부와 분리해 여기(캐릭터 창 관련 다른 send 채널들과 같은 자리)에 둔다
+// (docs/frontend-plan.md 6.7). 발신 창이 DoDoDo가 만든 캐릭터 창인지 확인해 다른
+// send 채널들과 같은 방식으로 외부 payload를 신뢰하지 않는다.
+ipcMain.on(OPEN_SETTINGS, (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow === null || !characterWindows.has(senderWindow)) return;
+  openSettings();
+});
 const characterDragOrigins = new WeakMap();
 const characterPlacements = new WeakMap();
 const EXPANDED_SIZE = { width: 680, height: 420 };

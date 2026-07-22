@@ -1,0 +1,76 @@
+:root { color: #30271f; background: #f4ecdd; font-family: Inter, "Noto Sans KR", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { min-width: 640px; min-height: 520px; margin: 0; background: linear-gradient(135deg, #f8f1e4, #eee1cb); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+.settings-shell { display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: 100vh; }
+.settings-sidebar { padding: 24px 14px; border-right: 1px solid #ddceb5; background: rgba(255, 252, 246, .76); }
+.brand { display: flex; align-items: center; padding: 0 10px 26px; gap: 10px; }
+.brand > span { color: #805633; font-size: 28px; }
+.brand div { display: grid; }
+.brand strong { font-size: 17px; }
+.brand small { color: #8a7968; }
+nav { display: grid; gap: 5px; }
+nav button { padding: 11px 12px; border: 0; border-radius: 11px; background: transparent; color: #615143; text-align: left; }
+nav button[aria-current="page"] { background: #795332; color: white; font-weight: 700; }
+nav button:hover:not([aria-current="page"]), nav button:focus-visible { background: #eadcc5; outline: none; }
+.settings-main { min-width: 0; padding: 28px clamp(24px, 5vw, 54px) 44px; }
+.settings-main > header { padding-bottom: 20px; border-bottom: 1px solid #dfd1ba; }
+.settings-main > header p { margin: 0 0 4px; color: #9a7041; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 0; font-size: 25px; }
+h2 { margin-bottom: 9px; font-size: 15px; }
+.settings-content { max-width: 780px; padding-top: 22px; }
+.settings-form { display: grid; padding: 20px; border: 1px solid #e1d3bc; border-radius: 17px; background: #fffdf8; gap: 13px; box-shadow: 0 10px 26px rgba(92, 66, 39, .06); }
+.form-grid { display: grid; gap: 12px; }
+.form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.form-field, .source-form { display: grid; gap: 6px; }
+label { color: #56483b; font-size: 13px; font-weight: 700; }
+input { width: 100%; padding: 10px 11px; border: 1px solid #d8c7aa; border-radius: 10px; background: white; color: #30271f; }
+input:focus { border-color: #8e6843; outline: 2px solid #ead7bc; }
+fieldset { min-width: 0; margin: 2px 0 0; padding: 14px; border: 1px solid #e4d7c1; border-radius: 12px; }
+fieldset > label { display: flex; align-items: center; margin-bottom: 12px; gap: 7px; }
+fieldset input[type="checkbox"] { width: auto; }
+.primary, .secondary, .danger, .back-button { padding: 9px 13px; border-radius: 10px; }
+.primary { border: 0; background: #76502f; color: white; }
+.secondary, .back-button { border: 1px solid #d5c2a3; background: #fff9ef; color: #4f4136; }
+.danger { border: 1px solid #e2b6ab; background: #fff3ef; color: #a33f32; }
+.form-actions { display: flex; justify-content: flex-end; }
+.hint { margin: 0; color: #7a6b5c; font-size: 12px; line-height: 1.5; }
+.notice { padding: 11px 13px; border: 1px solid #bdd2af; border-radius: 11px; background: #eef6e8; color: #4e7142; }
+.state-card { display: grid; min-height: 180px; padding: 24px; place-items: center; border: 1px dashed #d5c6ae; border-radius: 15px; color: #796a5a; text-align: center; }
+.state-card.compact { min-height: 100px; }
+.state-card.error { color: #9d4438; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.toolbar p { margin: 0; color: #756656; font-size: 13px; }
+.schedule-groups, .item-list, .source-list, .weekly-calendar { display: grid; gap: 10px; }
+.schedule-groups { gap: 18px; }
+.item-card { display: grid; width: 100%; padding: 12px 14px; border: 1px solid #e3d5be; border-radius: 13px; background: #fffdf8; gap: 4px; text-align: left; }
+.item-card small { color: #766759; }
+.pill { width: fit-content; padding: 3px 8px; border-radius: 999px; background: #eaf1df; color: #557147; font-size: 10px; font-weight: 800; }
+.back-button { margin-bottom: 14px; }
+.detail-card { margin-bottom: 14px; padding: 18px; border: 1px solid #e2d5bf; border-radius: 15px; background: #fffdf8; }
+.detail-card h2 { margin-top: 9px; font-size: 18px; }
+.detail-card dl { display: grid; gap: 6px; }
+.detail-card dl div { display: grid; grid-template-columns: 60px 1fr; }
+.detail-card dt { color: #81705f; }
+.detail-card dd { margin: 0; }
+.inline-form { display: flex; align-items: end; margin: 14px 0; padding: 14px; border: 1px solid #e3d5be; border-radius: 13px; background: #fffdf8; gap: 8px; }
+.inline-form label { align-self: center; }
+.inline-form input { width: 100px; }
+.inline-form span { align-self: center; }
+.calendar-day { display: grid; grid-template-columns: 110px 1fr; padding: 14px; border: 1px solid #dfd1ba; border-radius: 15px; background: #fffdf8; gap: 12px; }
+.calendar-day > header { display: grid; align-content: start; gap: 4px; }
+.calendar-day > header time { font-weight: 800; }
+.calendar-day > header span { color: #9a7041; font-size: 11px; }
+.calendar-day > div { display: grid; gap: 7px; }
+.calendar-day button { display: grid; grid-template-columns: 52px 1fr; padding: 9px; border: 0; border-left: 4px solid #d09257; border-radius: 10px; background: #fff3e6; gap: 8px; text-align: left; }
+.calendar-day button > time { color: #746556; font-size: 11px; font-weight: 700; }
+.calendar-day button > span { display: grid; gap: 2px; }
+.calendar-day button small { color: #806e5c; }
+.source-list article { display: flex; align-items: center; justify-content: space-between; padding: 14px; border: 1px solid #e3d5be; border-radius: 13px; background: #fffdf8; gap: 12px; }
+.source-list article div { display: grid; min-width: 0; gap: 4px; }
+.source-list small { overflow-wrap: anywhere; color: #756656; }
+.source-form { margin-top: 16px; }
+button:disabled, input:disabled { cursor: not-allowed; opacity: .58; }
+@media (max-width: 720px) { body { min-width: 0; } .settings-shell { grid-template-columns: 1fr; } .settings-sidebar { padding: 12px; border-right: 0; border-bottom: 1px solid #ddceb5; } .brand { padding: 0 6px 10px; } nav { grid-template-columns: repeat(4, 1fr); } nav button { text-align: center; } .settings-main { padding: 22px 16px 34px; } .form-grid.two, .calendar-day { grid-template-columns: 1fr; } }

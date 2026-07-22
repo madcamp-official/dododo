@@ -5,6 +5,7 @@ const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
 const CHARACTER_PLACEMENT = "desktop:character-placement";
+const OPEN_SETTINGS = "desktop:open-settings";
 
 contextBridge.exposeInMainWorld("desktopMascot", {
   setMousePassthrough(shouldIgnore) {
@@ -25,6 +26,14 @@ contextBridge.exposeInMainWorld("desktopMascot", {
     const listener = (_event, placement) => callback(placement);
     ipcRenderer.on(CHARACTER_PLACEMENT, listener);
     return () => ipcRenderer.removeListener(CHARACTER_PLACEMENT, listener);
+  },
+});
+
+// docs/frontend-plan.md 6.7: 창 제어용 단방향 채널이라 Result<T> 데이터 IPC(desktopApi)와
+// 분리한다. Renderer는 ipcRenderer나 Electron 객체를 직접 받지 않는다.
+contextBridge.exposeInMainWorld("desktopWindow", {
+  openSettings() {
+    ipcRenderer.send(OPEN_SETTINGS);
   },
 });
 
