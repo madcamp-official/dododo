@@ -172,3 +172,26 @@ test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를
   assert.match(style, /\.danger-button\s*\{/);
   assert.match(style, /\.reminder-form\s*\{/);
 });
+
+test("desktop mascot settings connects Source management and restart guidance", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /listSources/);
+  assert.match(adapter, /registerSource/);
+  assert.match(adapter, /removeSource/);
+  assert.match(renderer, /data-settings-source/);
+  assert.match(renderer, /desktopApi\.sourceList/);
+  assert.match(renderer, /desktopApi\.sourceRegister\("school-site", value\)/);
+  assert.match(renderer, /desktopApi\.sourceRemove/);
+  assert.match(renderer, /data-existing-value/);
+  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
+  assert.match(renderer, /showSourceError\(error\)/);
+  assert.doesNotMatch(renderer, /result\.restartRequired \?/);
+  assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
+  assert.match(style, /\.source-card\s*\{/);
+  assert.match(style, /\.restart-notice\s*\{/);
+});
