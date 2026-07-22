@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "apps/desktop/src/main/index.mjs",
   "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env apps/cli/src/index.ts",
     "desktop": "electron apps/desktop/src/main/index.mjs",
+    "desktop:pack": "electron-builder --dir",
+    "desktop:dist:win": "electron-builder --win",
+    "desktop:dist:mac": "electron-builder --mac",
     "gateway:start": "node --env-file-if-exists=.env.gateway apps/inference-gateway/src/index.ts",
     "gateway:activation-code": "node --env-file-if-exists=.env.gateway apps/inference-gateway/src/admin.ts",
     "dev": "node --watch --env-file-if-exists=.env apps/cli/src/index.ts",
@@ -20,10 +24,33 @@
     "@types/mailparser": "^3.4.6",
     "@types/node": "^22.0.0",
     "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
     "mailparser": "^3.9.14"
+  },
+  "build": {
+    "appId": "dev.dododo.desktop",
+    "productName": "DoDoDo",
+    "asar": true,
+    "icon": "apps/desktop/resources/dotori.png",
+    "files": [
+      "package.json",
+      "apps/desktop/src/**/*",
+      "apps/desktop/resources/**/*",
+      "apps/cli/src/**/*",
+      "packages/*/src/**/*",
+      "!**/*.test.ts",
+      "!**/node_modules/**/{test,tests,*.md,*.markdown,*.map}"
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.productivity"
+    }
   }
 }
