@@ -10,7 +10,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   const bridge = Object.fromEntries([
     "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
-    "deleteTask", "setReminderOffset", "listSources", "registerSource",
+    "deleteTask", "setReminderOffset", "listSources", "listSourceItems", "registerSource",
     "removeSource", "getProfile", "saveProfile", "getUiState", "setUiState", "sync",
     "startStudy", "endStudy", "getStudySession",
   ].map((method) => [method, (...args: unknown[]) => {
@@ -32,6 +32,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.delete("task-1");
   await api.reminder("task-1", 60);
   await api.sourceList();
+  await api.sourceItems();
   await api.sourceRegister("school-site", "https://school.example/notices");
   await api.sourceRemove("school-site");
   const profile = { school: "KAIST", major: "CS", year: "3", interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [] };
@@ -57,6 +58,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "deleteTask", args: ["task-1"] },
     { method: "setReminderOffset", args: ["task-1", 60] },
     { method: "listSources", args: [] },
+    { method: "listSourceItems", args: [] },
     { method: "registerSource", args: ["school-site", "https://school.example/notices"] },
     { method: "removeSource", args: ["school-site"] },
     { method: "getProfile", args: [] },
