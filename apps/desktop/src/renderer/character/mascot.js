@@ -341,7 +341,9 @@ function renderScheduleManagement(entries) {
             <button class="context-card" type="button" data-managed-item-id="${escapeHtml(item.id)}">
               <span class="card-kind">${item.kind === "event" ? "일정" : "마감"}</span>
               <strong>${escapeHtml(item.title)}</strong>
-              <span>${escapeHtml(formatDateTime(at))}</span>
+              <span>${escapeHtml(item.kind === "event" && item.endAt !== undefined
+                ? `${formatDateTime(at)} ~ ${formatDateTime(item.endAt)}`
+                : formatDateTime(at))}</span>
               <small>${escapeHtml(statusLabel(item.status))}</small>
             </button>`).join("")}</div>
         </section>`).join("")}</div>`;

@@ -232,6 +232,8 @@ test("desktop settings provides weekly schedule management with existing detail 
   assert.match(renderer, /openView\("schedule-settings"\)/);
   assert.match(renderer, /groupScheduledItems/);
   assert.match(renderer, /data-managed-item-id/);
+  assert.match(renderer, /item\.kind === "event" && item\.endAt !== undefined/);
+  assert.match(renderer, /formatDateTime\(at\).*formatDateTime\(item\.endAt\)/s);
   assert.match(renderer, /data-management-add/);
   assert.match(renderer, /data-management-refresh/);
   assert.match(style, /\.management-toolbar\s*\{/);

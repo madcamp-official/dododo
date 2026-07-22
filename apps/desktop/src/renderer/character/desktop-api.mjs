@@ -88,11 +88,12 @@ export function formatSyncSummary({ collected, created }) {
   return `${collected}개 항목을 확인했고, 새 항목 ${created}개를 저장했어요.`;
 }
 
-export function formatDateTime(value) {
+export function formatDateTime(value, timeZone = "Asia/Seoul") {
   if (value === undefined) return "시간 정보 없음";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "시간 확인 필요";
   return new Intl.DateTimeFormat("ko-KR", {
+    timeZone,
     month: "numeric",
     day: "numeric",
     hour: "numeric",
