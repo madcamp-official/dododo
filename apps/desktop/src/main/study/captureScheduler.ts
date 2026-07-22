@@ -45,15 +45,19 @@ export function createStudyCaptureScheduler(
   let handle: unknown;
 
   function pollOnce(): void {
+    // doyeonid 리뷰(PR #92) P2: now()를 한 번만 읽어 판정·lastCaptureAt·onTrigger에
+    // 같은 시각을 쓴다 — 두 번 호출하면 전진하는 clock에서 최소 간격 판정 기준과
+    // 실제 트리거 시각이 어긋난다.
+    const at = now();
     const decision = decideCaptureTrigger(state, {
-      now: now(),
+      now: at,
       idleSeconds: dependencies.getIdleSeconds(),
       idleThresholdSeconds,
       minIntervalMs,
     });
     state = decision.nextState;
     if (decision.trigger && decision.reason !== undefined) {
-      dependencies.onTrigger(decision.reason, now());
+      dependencies.onTrigger(decision.reason, at);
     }
   }
 

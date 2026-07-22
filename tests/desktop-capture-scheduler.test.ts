@@ -85,3 +85,37 @@ test("pollOnce는 실제 타이머 없이 즉시 판정한다", () => {
 
   assert.deepEqual(triggers, ["idle-to-active"]);
 });
+
+// doyeonid 리뷰(PR #92) P2: now()를 한 poll 안에서 두 번 읽으면(판정용 한 번, onTrigger
+// 전달용 한 번) 전진하는 clock에서 최소 간격 판정과 실제 보고 시각이 어긋난다 —
+// now()가 poll당 정확히 한 번만 불리는지, 그리고 그 값이 onTrigger에 그대로 전달되는지
+// 확인한다.
+test("pollOnce는 판정과 onTrigger에 같은 시각을 쓴다(now()는 poll당 한 번만 호출)", () => {
+  let callCount = 0;
+  let current = new Date("2026-07-22T00:00:00Z");
+  const now = () => {
+    callCount += 1;
+    return current;
+  };
+  let idle = 0;
+  const triggeredAt: Date[] = [];
+  const scheduler = createStudyCaptureScheduler({
+    getIdleSeconds: () => idle,
+    now,
+    onTrigger: (_reason, at) => triggeredAt.push(at),
+  });
+
+  scheduler.pollOnce();
+  assert.equal(callCount, 1);
+
+  idle = 90;
+  scheduler.pollOnce();
+  assert.equal(callCount, 2);
+
+  current = new Date(current.getTime() + 5000); // clock이 전진한다
+  idle = 0;
+  scheduler.pollOnce(); // idle→active 트리거
+  assert.equal(callCount, 3);
+  assert.equal(triggeredAt.length, 1);
+  assert.equal(triggeredAt[0]?.getTime(), current.getTime());
+});
