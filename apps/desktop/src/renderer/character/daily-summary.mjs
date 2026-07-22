@@ -32,12 +32,31 @@ export function buildDailySummary(entries) {
   const titles = entries.slice(0, 2).map(({ item }) => `“${item.title}”`).join(", ");
   const remaining = entries.length - 2;
   const suffix = remaining > 0 ? ` 외 ${remaining}개` : "";
-  return `오늘 확인할 일이 ${entries.length}개 있어요. ${titles}${suffix}부터 살펴볼까요?`;
+  return `오늘 확인할 일이 ${entries.length}개 있어요. ${titles}${suffix}를 살펴볼까요?`;
 }
 
 export function shouldShowDailySummary(lastShownDate, profile, now = new Date(), timeZone = DEFAULT_TIME_ZONE) {
   const today = localDateKey(now, timeZone);
   return { today, show: lastShownDate !== today && !isWithinQuietHours(profile, now, timeZone) };
+}
+
+export function dailySummaryRetryDelayMs(profile, now = new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  if (!isWithinQuietHours(profile, now, timeZone)) return undefined;
+  const end = parseTime(profile?.quietHours?.end);
+  if (end === undefined) return undefined;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const currentMinutes = get("hour") * 60 + get("minute");
+  let remainingMinutes = end - currentMinutes;
+  if (remainingMinutes <= 0) remainingMinutes += 24 * 60;
+  return Math.max(1_000, (remainingMinutes * 60 - get("second")) * 1_000 - now.getMilliseconds());
 }
 
 function parseTime(value) {
