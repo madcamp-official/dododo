@@ -48,6 +48,19 @@ export class StudySessionManager {
     return ok({ sessionId: active.sessionId, startedAt: active.startedAt });
   }
 
+  // 공부 캡처 파이프라인(captureVisionPipeline.ts)이 실제로 advice/distraction
+  // 알림을 보낸 뒤에만 호출한다 — 그래서 여기서 다시 sessionId를 대조해, 캡처·Vision
+  // 처리 중에 사용자가 세션을 끝냈다면 이미 지워진 세션의 adviceCount를 되살리지
+  // 않는다(파일이 없으면 not-found로 실패해 호출부가 조용히 무시할 수 있다).
+  async recordAdvice(sessionId: string) {
+    const active = await this.readActive();
+    if (active === undefined || active.sessionId !== sessionId) {
+      return fail("not-found", "진행 중인 같이 공부하기 세션을 찾을 수 없습니다.");
+    }
+    await this.writeActive({ ...active, adviceCount: active.adviceCount + 1 });
+    return ok(undefined);
+  }
+
   async end(sessionId: string, now = new Date()) {
     const active = await this.readActive();
     if (active === undefined || active.sessionId !== sessionId) {

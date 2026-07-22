@@ -44,6 +44,39 @@ test("세션은 프로세스가 다시 만들어져도 복원되고 종료 시 �
   assert.deepEqual(await restartedProcess.getActive(), { ok: true, data: undefined });
 });
 
+test("recordAdvice는 실제로 발행한 조언 수만큼 adviceCount를 늘리고 종료 응답에 그대로 반영된다", async (t) => {
+  const path = await statePath(t);
+  const manager = new StudySessionManager(path);
+  const started = await manager.start(true, new Date("2026-07-22T10:00:00+09:00"));
+  assert.equal(started.ok, true);
+  if (!started.ok) return;
+
+  assert.equal((await manager.recordAdvice(started.data.sessionId)).ok, true);
+  assert.equal((await manager.recordAdvice(started.data.sessionId)).ok, true);
+
+  const ended = await manager.end(started.data.sessionId, new Date("2026-07-22T10:30:00+09:00"));
+  assert.equal(ended.ok, true);
+  if (!ended.ok) return;
+  assert.equal(ended.data.adviceCount, 2);
+});
+
+test("recordAdvice는 세션이 이미 끝났거나 다른 세션이면 not-found로 실패한다(늦게 도착한 조언 격리)", async (t) => {
+  const path = await statePath(t);
+  const manager = new StudySessionManager(path);
+
+  const noSession = await manager.recordAdvice("session-x");
+  assert.equal(noSession.ok, false);
+  if (!noSession.ok) assert.equal(noSession.error.code, "not-found");
+
+  const started = await manager.start(true, new Date("2026-07-22T10:00:00+09:00"));
+  assert.equal(started.ok, true);
+  if (!started.ok) return;
+
+  const wrongSession = await manager.recordAdvice("다른-세션-id");
+  assert.equal(wrongSession.ok, false);
+  if (!wrongSession.ok) assert.equal(wrongSession.error.code, "not-found");
+});
+
 test("손상된 세션 파일은 앱 시작을 막지 않고 활성 세션 없음으로 처리한다", async (t) => {
   const path = await statePath(t);
   await writeFile(path, "{broken", "utf8");
