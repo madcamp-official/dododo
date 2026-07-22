@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import { createMutex, type Mutex } from "../../../../cli/src/runtime/mutex.ts";
 import { fail, ok } from "./result.ts";
 
 interface StoredStudySession {
@@ -20,6 +21,15 @@ function isStoredStudySession(value: unknown): value is StoredStudySession {
 
 export class StudySessionManager {
   private readonly statePath: string;
+  // doyeonid 리뷰(PR #96) P1: start/end/recordAdvice가 각각 readActive() 후
+  // write/unlink하는 read-modify-write인데 서로 직렬화되지 않으면, 예를 들어
+  // recordAdvice가 기존 세션을 읽은 뒤 end가 먼저 끝나 파일을 지워도 recordAdvice가
+  // 그 stale한 값을 다시 써서 이미 끝난 세션을 되살릴 수 있었다(동시 recordAdvice
+  // 두 건이 겹치면 증가분을 잃는 것도 같은 문제). container.ts의 syncLock과 같은
+  // 이유로 별도 락 라이브러리 없이 Promise 체인 하나로 세 메서드를 직렬화한다.
+  // getActive()는 읽기 전용이고 writeActive가 tmp 파일 작성 후 rename하는 원자적
+  // 교체라 락 없이도 항상 완전한 파일만 보이므로 대상에서 뺐다.
+  private readonly lock: Mutex = createMutex();
 
   constructor(statePath: string) {
     this.statePath = statePath;
@@ -34,18 +44,20 @@ export class StudySessionManager {
   }
 
   async start(consent: boolean, now = new Date()) {
-    if (!consent) return fail("validation", "화면 분석 동의가 필요합니다.");
-    if (await this.readActive() !== undefined) {
-      return fail("validation", "이미 같이 공부하기 세션이 진행 중입니다.");
-    }
+    return this.lock.run(async () => {
+      if (!consent) return fail("validation", "화면 분석 동의가 필요합니다.");
+      if (await this.readActive() !== undefined) {
+        return fail("validation", "이미 같이 공부하기 세션이 진행 중입니다.");
+      }
 
-    const active: StoredStudySession = {
-      sessionId: randomUUID(),
-      startedAt: now.toISOString(),
-      adviceCount: 0,
-    };
-    await this.writeActive(active);
-    return ok({ sessionId: active.sessionId, startedAt: active.startedAt });
+      const active: StoredStudySession = {
+        sessionId: randomUUID(),
+        startedAt: now.toISOString(),
+        adviceCount: 0,
+      };
+      await this.writeActive(active);
+      return ok({ sessionId: active.sessionId, startedAt: active.startedAt });
+    });
   }
 
   // 공부 캡처 파이프라인(captureVisionPipeline.ts)이 실제로 advice/distraction
@@ -53,27 +65,31 @@ export class StudySessionManager {
   // 처리 중에 사용자가 세션을 끝냈다면 이미 지워진 세션의 adviceCount를 되살리지
   // 않는다(파일이 없으면 not-found로 실패해 호출부가 조용히 무시할 수 있다).
   async recordAdvice(sessionId: string) {
-    const active = await this.readActive();
-    if (active === undefined || active.sessionId !== sessionId) {
-      return fail("not-found", "진행 중인 같이 공부하기 세션을 찾을 수 없습니다.");
-    }
-    await this.writeActive({ ...active, adviceCount: active.adviceCount + 1 });
-    return ok(undefined);
+    return this.lock.run(async () => {
+      const active = await this.readActive();
+      if (active === undefined || active.sessionId !== sessionId) {
+        return fail("not-found", "진행 중인 같이 공부하기 세션을 찾을 수 없습니다.");
+      }
+      await this.writeActive({ ...active, adviceCount: active.adviceCount + 1 });
+      return ok(undefined);
+    });
   }
 
   async end(sessionId: string, now = new Date()) {
-    const active = await this.readActive();
-    if (active === undefined || active.sessionId !== sessionId) {
-      return fail("not-found", "진행 중인 같이 공부하기 세션을 찾을 수 없습니다.");
-    }
-    await this.clearActive();
-    const durationMinutes = Math.max(0, Math.floor((now.getTime() - Date.parse(active.startedAt)) / 60_000));
-    return ok({
-      summaryText: durationMinutes === 0
-        ? "같이 공부하기 세션을 종료했어요."
-        : `${durationMinutes}분 동안 같이 공부했어요.`,
-      durationMinutes,
-      adviceCount: active.adviceCount,
+    return this.lock.run(async () => {
+      const active = await this.readActive();
+      if (active === undefined || active.sessionId !== sessionId) {
+        return fail("not-found", "진행 중인 같이 공부하기 세션을 찾을 수 없습니다.");
+      }
+      await this.clearActive();
+      const durationMinutes = Math.max(0, Math.floor((now.getTime() - Date.parse(active.startedAt)) / 60_000));
+      return ok({
+        summaryText: durationMinutes === 0
+          ? "같이 공부하기 세션을 종료했어요."
+          : `${durationMinutes}분 동안 같이 공부했어요.`,
+        durationMinutes,
+        adviceCount: active.adviceCount,
+      });
     });
   }
 
