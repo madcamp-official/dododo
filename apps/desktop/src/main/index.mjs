@@ -7,9 +7,12 @@ import { registerIpcHandlers } from "./ipc/index.ts";
 import { startDesktopWatch } from "./watch/desktopWatch.ts";
 import { layoutWindowForCharacter } from "./dragGeometry.ts";
 import { NOTIFICATION_CHANNEL } from "./notifier/notificationEvent.ts";
+import { createOpenPanel } from "./windows/panelWindow.mjs";
+import { parsePanelRoute } from "./windows/panelPayload.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
+const panelRendererPath = path.join(currentDirectory, "../renderer/panels/index.html");
 const preloadPath = path.join(currentDirectory, "../preload/index.cjs");
 const characterWindows = new Set();
 
@@ -18,10 +21,28 @@ const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
 const CHARACTER_PLACEMENT = "desktop:character-placement";
+const OPEN_PANEL = "desktop:open-panel";
 const characterDragOrigins = new WeakMap();
 const characterPlacements = new WeakMap();
 const EXPANDED_SIZE = { width: 680, height: 420 };
 const CHARACTER_SIZE = { width: 174, height: 174 };
+const openPanel = createOpenPanel({ preloadPath, rendererPath: panelRendererPath });
+
+// docs/frontend-plan.md 6.8.2: 결과 패널 열기도 Result<T> 데이터 IPC가 아니라 순수
+// 창 제어라 그 등록부(ipc/index.ts)와 분리한다. 발신 창이 DoDoDo가 만든 캐릭터
+// 창인지 확인하고, payload는 parsePanelRoute로 허용 값만 통과시킨다(외부 URL·
+// 임의 경로 거절). 배치는 발신 창(캐릭터)의 현재 위치·구석·모니터 workArea
+// 기준으로 계산한다.
+ipcMain.on(OPEN_PANEL, (event, payload) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  if (senderWindow === null || !characterWindows.has(senderWindow)) return;
+  const route = parsePanelRoute(payload);
+  if (route === undefined) return;
+
+  const characterPlacement = characterPlacements.get(senderWindow) ?? "bottom-right";
+  const workArea = screen.getDisplayMatching(senderWindow.getBounds()).workArea;
+  openPanel(route, { characterPlacement, workArea });
+});
 
 // Renderer가 mouse-ignore 초기 상태의 단독 소유자다(위 mousemove 주석 참고). Renderer
 // 스크립트가 실패하거나 아직 SET_MOUSE_PASSTHROUGH를 한 번도 못 보낸 상태로 남으면
