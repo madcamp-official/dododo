@@ -508,31 +508,28 @@ function renderScheduleEdit(detail) {
       ...(item.kind === "event" ? { endTime: optional("endTime") } : {}),
       location: optional("location"),
     };
-    const buttons = target.querySelectorAll("button");
-    for (const button of buttons) button.disabled = true;
-    try {
-      unwrapResult(await desktopApi.update(item.id, input));
-      await openDetail(item.id);
-    } catch (error) {
-      renderError(error);
-    } finally {
-      for (const button of buttons) if (button.isConnected) button.disabled = false;
-    }
+    await runExclusivePanelAction(async () => {
+      try {
+        unwrapResult(await desktopApi.update(item.id, input));
+        await openDetail(item.id);
+      } catch (error) {
+        renderError(error);
+      }
+    });
   });
 }
 
 async function runDeleteSchedule(button, item) {
   if (!(button instanceof HTMLButtonElement)) return;
   if (!window.confirm(`“${item.title}”을(를) 삭제할까요? 목록에서 숨겨지며 근거는 보존됩니다.`)) return;
-  button.disabled = true;
-  try {
-    unwrapResult(await desktopApi.delete(item.id));
-    await openView(currentListView);
-  } catch (error) {
-    renderError(error);
-  } finally {
-    if (button.isConnected) button.disabled = false;
-  }
+  await runExclusivePanelAction(async () => {
+    try {
+      unwrapResult(await desktopApi.delete(item.id));
+      await openView(currentListView);
+    } catch (error) {
+      renderError(error);
+    }
+  });
 }
 
 async function runReminderUpdate(event, id) {
@@ -544,43 +541,48 @@ async function runReminderUpdate(event, id) {
     renderError(new Error("알림 시간은 1분 이상의 정수로 입력해주세요."));
     return;
   }
-  const submit = form.querySelector("button[type='submit']");
-  if (submit instanceof HTMLButtonElement) submit.disabled = true;
-  try {
-    unwrapResult(await desktopApi.reminder(id, offset));
-    await openDetail(id);
-  } catch (error) {
-    renderError(error);
-  } finally {
-    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
-  }
+  await runExclusivePanelAction(async () => {
+    try {
+      unwrapResult(await desktopApi.reminder(id, offset));
+      await openDetail(id);
+    } catch (error) {
+      renderError(error);
+    }
+  });
 }
 
 async function runTaskAction(button, action) {
   if (!(button instanceof HTMLButtonElement)) return;
-  await runExclusiveTaskAction(async () => {
-    const actionButtons = button.closest(".action-row")?.querySelectorAll("button") ?? [button];
-    for (const actionButton of actionButtons) actionButton.disabled = true;
+  await runExclusivePanelAction(async () => {
     try {
-      try {
-        unwrapResult(await action());
-      } catch (error) {
-        renderError(error);
-        return;
-      }
-      try {
-        await openView(currentListView, { throwOnError: true });
-      } catch (error) {
-        // openView가 실패하기 전에 이미 panelTitle을 목록 뷰 제목으로 바꿔놨다 —
-        // 이 안내는 목록이 아니라 처리 결과이므로 제목도 내용에 맞게 다시 맞춘다.
-        const detail = error instanceof Error ? error.message : "알 수 없는 오류";
-        panelTitle.textContent = "처리 완료";
-        renderError(new Error(`처리는 완료됐지만 목록 갱신에 실패했습니다. ${detail}`));
-      }
+      unwrapResult(await action());
+    } catch (error) {
+      renderError(error);
+      return;
+    }
+    try {
+      await openView(currentListView, { throwOnError: true });
+    } catch (error) {
+      // openView가 실패하기 전에 이미 panelTitle을 목록 뷰 제목으로 바꿔놨다 —
+      // 이 안내는 목록이 아니라 처리 결과이므로 제목도 내용에 맞게 다시 맞춘다.
+      const detail = error instanceof Error ? error.message : "알 수 없는 오류";
+      panelTitle.textContent = "처리 완료";
+      renderError(new Error(`처리는 완료됐지만 목록 갱신에 실패했습니다. ${detail}`));
+    }
+  });
+}
+
+async function runExclusivePanelAction(action) {
+  return runExclusiveTaskAction(async () => {
+    const controls = [...panelContent.querySelectorAll("button, input, textarea")];
+    const disabledStates = controls.map((control) => control.disabled);
+    for (const control of controls) control.disabled = true;
+    try {
+      await action();
     } finally {
-      for (const actionButton of actionButtons) {
-        if (actionButton.isConnected) actionButton.disabled = false;
-      }
+      controls.forEach((control, index) => {
+        if (control.isConnected) control.disabled = disabledStates[index];
+      });
     }
   });
 }

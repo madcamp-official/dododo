@@ -119,7 +119,8 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.complete/);
   assert.match(renderer, /desktopApi\.snooze/);
   assert.match(renderer, /desktopApi\.add/);
-  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /runExclusivePanelAction/);
+  assert.match(renderer, /panelContent\.querySelectorAll\("button, input, textarea"\)/);
   assert.match(renderer, /createExclusiveActionRunner/);
   assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
   assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
@@ -162,6 +163,7 @@ test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를
   assert.match(renderer, /window\.confirm/);
   assert.match(renderer, /desktopApi\.delete/);
   assert.match(renderer, /desktopApi\.reminder/);
+  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 4);
   assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
   assert.match(style, /\.danger-button\s*\{/);
   assert.match(style, /\.reminder-form\s*\{/);
