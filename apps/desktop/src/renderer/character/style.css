@@ -430,6 +430,23 @@ h2 {
   gap: 7px;
 }
 
+.management-toolbar {
+  display: grid;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.management-toolbar p {
+  margin: 0;
+  color: #746556;
+  font-size: 12px;
+}
+
+.management-toolbar div { display: flex; gap: 7px; }
+.schedule-groups { display: grid; gap: 14px; }
+.schedule-group { display: grid; gap: 7px; }
+.schedule-group h2 { margin: 0; color: #5e4b3a; font-size: 13px; }
+
 .reminder-form {
   display: grid;
   margin-top: 12px;

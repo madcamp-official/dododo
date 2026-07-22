@@ -11,6 +11,7 @@ const desktopFiles = [
   "apps/desktop/src/renderer/character/schedule-form.mjs",
   "apps/desktop/src/renderer/character/profile-form.mjs",
   "apps/desktop/src/renderer/character/daily-summary.mjs",
+  "apps/desktop/src/renderer/character/schedule-management.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -235,4 +236,22 @@ test("desktop mascot shows a once-per-day summary bubble linked to Today", async
   assert.match(renderer, /openView\("today"\)/);
   assert.match(notificationState, /daily-summary/);
   assert.match(renderer, /next\.targetView === "today" \? "오늘 보기" : "자세히 보기"/);
+});
+
+test("desktop settings provides weekly schedule management with existing detail actions", async () => {
+  const [renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(renderer, /data-settings-schedule/);
+  assert.match(renderer, /openView\("schedule-settings"\)/);
+  assert.match(renderer, /groupScheduledItems/);
+  assert.match(renderer, /data-managed-item-id/);
+  assert.match(renderer, /item\.kind === "event" && item\.endAt !== undefined/);
+  assert.match(renderer, /formatDateTime\(at\).*formatDateTime\(item\.endAt\)/s);
+  assert.match(renderer, /data-management-add/);
+  assert.match(renderer, /data-management-refresh/);
+  assert.match(style, /\.management-toolbar\s*\{/);
+  assert.match(style, /\.schedule-groups\s*\{/);
 });

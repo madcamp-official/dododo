@@ -15,6 +15,7 @@ import {
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
+import { groupScheduledItems } from "./schedule-management.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -183,6 +184,10 @@ async function openView(view, { throwOnError = false } = {}) {
       currentListView = view;
       renderRecommendations(unwrapResult(await desktopApi.inbox()).items);
     }
+    else if (view === "schedule-settings") {
+      currentListView = view;
+      renderScheduleManagement(unwrapResult(await desktopApi.calendar()).items);
+    }
     else if (view === "ask") renderAsk();
     else if (view === "add") renderAdd();
     else renderSettings();
@@ -329,6 +334,39 @@ async function openDetail(id) {
   } catch (error) {
     renderError(error);
   }
+}
+
+function renderScheduleManagement(entries) {
+  const groups = groupScheduledItems(entries);
+  const content = groups.length === 0
+    ? '<div class="state-message">이번 주에 관리할 일정이 없습니다.</div>'
+    : `<div class="schedule-groups">${groups.map((group) => `
+        <section class="schedule-group">
+          <h2>${escapeHtml(group.label)}</h2>
+          <div class="card-list">${group.entries.map(({ item, at }) => `
+            <button class="context-card" type="button" data-managed-item-id="${escapeHtml(item.id)}">
+              <span class="card-kind">${item.kind === "event" ? "일정" : "마감"}</span>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.kind === "event" && item.endAt !== undefined
+                ? `${formatDateTime(at)} ~ ${formatDateTime(item.endAt)}`
+                : formatDateTime(at))}</span>
+              <small>${escapeHtml(statusLabel(item.status))}</small>
+            </button>`).join("")}</div>
+        </section>`).join("")}</div>`;
+  panelContent.innerHTML = `
+    <div class="management-toolbar">
+      <p>이번 주 Task와 Event를 수정하거나 처리할 수 있습니다.</p>
+      <div>
+        <button class="primary-button" type="button" data-management-add>일정 추가</button>
+        <button class="secondary-button" type="button" data-management-refresh>새로고침</button>
+      </div>
+    </div>
+    ${content}`;
+  panelContent.querySelector("[data-management-add]")?.addEventListener("click", () => openView("add"));
+  panelContent.querySelector("[data-management-refresh]")?.addEventListener("click", () => openView("schedule-settings"));
+  panelContent.querySelectorAll("[data-managed-item-id]").forEach((button) => {
+    button.addEventListener("click", () => openDetail(button.dataset.managedItemId));
+  });
 }
 
 function handleNotification(payload) {
@@ -654,11 +692,12 @@ function renderSettings() {
   panelContent.innerHTML = `
     <div class="settings-list">
       <button type="button" data-settings-profile>프로필 <span>›</span></button>
-      <button type="button">일정 관리 <span>›</span></button>
+      <button type="button" data-settings-schedule>이번 주 일정 관리 <span>›</span></button>
       <button type="button" data-settings-source>Source 관리 <span>›</span></button>
     </div>
-    <p class="hint">전체 일정 관리 화면은 다음 단계에서 연결할 예정입니다.</p>`;
+    <p class="hint">현재 calendar:get 범위에 맞춰 이번 주 일정만 관리합니다.</p>`;
   panelContent.querySelector("[data-settings-profile]")?.addEventListener("click", () => renderProfileSettings());
+  panelContent.querySelector("[data-settings-schedule]")?.addEventListener("click", () => openView("schedule-settings"));
   panelContent.querySelector("[data-settings-source]")?.addEventListener("click", () => renderSourceSettings());
 }
 
@@ -843,7 +882,7 @@ function closePanel() {
 }
 
 function viewTitle(view) {
-  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가", settings: "설정" })[view] ?? "DoDoDo";
+  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가", settings: "설정", "schedule-settings": "이번 주 일정 관리" })[view] ?? "DoDoDo";
 }
 
 function escapeHtml(value) {
