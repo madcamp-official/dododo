@@ -159,6 +159,9 @@ function loadScreenCollector(): Collector {
 
 export interface CliContainerOptions {
   env?: NodeJS.ProcessEnv;
+  // CLI 개발·평가에서는 설정이 없을 때 대표 Fixture를 유지하되, 실제 데스크톱
+  // 배포본은 예시 데이터가 사용자 DB에 들어가지 않도록 false를 명시한다.
+  useFixtureFallback?: boolean;
   // 명시하면 DODODO_DB_PATH보다 우선한다 — 테스트나 다른 진입점이 저장 위치를 직접
   // 통제해야 할 때 쓴다(#43/#45와 통일한 시그니처, PR #40 리뷰 nit). InMemory를 원하면
   // dbConfig.ts와 같은 규칙으로 ":memory:"를 넘긴다.
@@ -167,6 +170,7 @@ export interface CliContainerOptions {
 
 export function createCliContainer(options: CliContainerOptions = {}): CliContainer {
   const env = options.env ?? process.env;
+  const useFixtureFallback = options.useFixtureFallback ?? true;
   // 미설정이면 기본 영속 경로(./.dododo/dododo.db)를 쓴다 — issue #27(빈 저장소에서
   // 대표 시나리오 재현)이 .env 설정 여부에 안 걸리게 한다(PR #40 리뷰, 김도현 지적).
   // DODODO_DB_PATH=:memory:를 명시했을 때만 InMemory로 돌아간다. SQLite면 같은 커넥션을
@@ -200,7 +204,9 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
 
   const notifier = new ConsoleNotifier();
   const syncStatus = new SyncStatusStore();
-  const screenCollector = loadScreenCollector();
+  const screenCollector = useFixtureFallback
+    ? loadScreenCollector()
+    : new ScreenCollector("screen-manual", []);
   const llmConfig = resolveLlmConfig(env);
   const llmProvider = createLlmProvider(env);
 
@@ -218,7 +224,7 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
   try {
     const loaded = loadSourceInputConfig(env);
     if (loaded === undefined) {
-      collectors = loadFixtureCollectors();
+      collectors = useFixtureFallback ? loadFixtureCollectors() : [];
     } else {
       collectors = createSourceCollectors(loaded.config);
       sourcesConfigPath = loaded.path;

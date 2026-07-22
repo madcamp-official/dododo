@@ -339,7 +339,7 @@ function showCharacterEffect(asset, durationMs = 900) {
 function beginThinking() {
   cancelPatrol();
   if (activeNotification !== undefined) return;
-  setCharacterExpression({ asset: "thinking.png", alt: "생각 중인 DoDoDo 도토리 캐릭터" });
+  setCharacterExpression({ asset: "thinking.png", alt: "생각 중인 DoToRi 도토리 캐릭터" });
   showCharacterEffect("question.png", 1_200);
 }
 
@@ -359,10 +359,10 @@ function wait(milliseconds) {
 function startWalkFrames(sideways) {
   let frame = 0;
   const assets = sideways ? ["walk-side-01.png", "walk-side-02.png"] : ["walk-01.png", "walk-02.png"];
-  setCharacterExpression({ asset: assets[0], alt: "화면을 산책하는 DoDoDo 도토리 캐릭터" });
+  setCharacterExpression({ asset: assets[0], alt: "화면을 산책하는 DoToRi 도토리 캐릭터" });
   patrolFrameTimer = window.setInterval(() => {
     frame = (frame + 1) % assets.length;
-    setCharacterExpression({ asset: assets[frame], alt: "화면을 산책하는 DoDoDo 도토리 캐릭터" });
+    setCharacterExpression({ asset: assets[frame], alt: "화면을 산책하는 DoToRi 도토리 캐릭터" });
   }, 180);
 }
 
@@ -687,7 +687,7 @@ function subscribeToNotifications() {
       unsubscribeNotifications = retryOnNotification(handleNotification);
       return;
     }
-    console.warn("DoDoDo 알림 이벤트 브리지를 찾지 못해 알림 구독을 시작하지 못했습니다.");
+    console.warn("DoToRi 알림 이벤트 브리지를 찾지 못해 알림 구독을 시작하지 못했습니다.");
   }, 0);
 }
 
@@ -993,7 +993,7 @@ function closePanel() {
 }
 
 function viewTitle(view) {
-  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가" })[view] ?? "DoDoDo";
+  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가" })[view] ?? "DoToRi";
 }
 
 function escapeHtml(value) {

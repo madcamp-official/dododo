@@ -1,6 +1,6 @@
 {
-  "name": "dododo",
-  "version": "0.1.0",
+  "name": "dotori",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "apps/desktop/src/main/index.mjs",
@@ -32,17 +32,16 @@
     "mailparser": "^3.9.14"
   },
   "build": {
-    "appId": "dev.dododo.desktop",
-    "productName": "DoDoDo",
+    "appId": "dev.dotori.desktop",
+    "productName": "DoToRi",
     "asar": true,
-    "icon": "apps/desktop/resources/dotori.png",
+    "icon": "apps/desktop/resources/character/idle.png",
     "files": [
       "package.json",
       "apps/desktop/src/**/*",
       "apps/desktop/resources/**/*",
       "apps/cli/src/**/*",
       "packages/*/src/**/*",
-      "fixtures/**/*",
       "!**/*.test.ts",
       "!**/node_modules/**/{test,tests,*.md,*.markdown,*.map}"
     ],

@@ -39,6 +39,20 @@ test("container keeps screenCollector separate from the auto-synced collectors",
   assert.equal(container.collectors.some((collector) => collector.sourceType === "screen"), false);
 });
 
+test("desktop 배포 모드는 Source 설정이 없어도 예시 Fixture를 자동으로 불러오지 않는다", async () => {
+  const container = createCliContainer({
+    databasePath: ":memory:",
+    env: {},
+    useFixtureFallback: false,
+  });
+
+  assert.equal(container.collectors.some(({ sourceId }) => (
+    sourceId === "school-site-main" || sourceId === "school-email-main" || sourceId === "lms-main"
+  )), false);
+  assert.deepEqual(await container.screenCollector.sync(), []);
+  container.close();
+});
+
 test("privacyGateway는 conversation sourceType을 허용한다(ask/추천 문장 생성이 쓰는 합성 RawItem, PR #33 리뷰 반영)", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   const prepared = await container.privacyGateway.prepare({

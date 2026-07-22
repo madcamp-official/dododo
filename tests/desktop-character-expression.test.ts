@@ -18,7 +18,7 @@ test("알림 종류에 맞는 캐릭터 표정을 선택한다", () => {
 test("알 수 없는 알림도 기본 알림 표정으로 안전하게 표시한다", () => {
   assert.deepEqual(notificationExpression("unknown"), {
     asset: "alert.png",
-    alt: "알림을 전하는 DoDoDo 도토리 캐릭터",
+    alt: "알림을 전하는 DoToRi 도토리 캐릭터",
   });
 });
 

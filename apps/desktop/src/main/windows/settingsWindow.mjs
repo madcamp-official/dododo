@@ -13,7 +13,7 @@ export function createOpenSettings({ preloadPath, rendererPath }) {
     const window = new BrowserWindow(buildSettingsWindowOptions(preloadPath));
     window.setMenuBarVisibility(false);
     void window.loadFile(rendererPath).catch((error) => {
-      console.error("DoDoDo 설정 창 Renderer를 열지 못했습니다.", error);
+      console.error("DoToRi 설정 창 Renderer를 열지 못했습니다.", error);
     });
 
     return {

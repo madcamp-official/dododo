@@ -204,7 +204,7 @@ function createCharacterWindow() {
       characterWindow.setShape([{ x: 76, y: 16, width: 168, height: 272 }]);
     }
   }).catch((error) => {
-    console.error("DoDoDo 데스크톱 Renderer를 열지 못했습니다.", error);
+    console.error("DoToRi 데스크톱 Renderer를 열지 못했습니다.", error);
   });
 }
 
