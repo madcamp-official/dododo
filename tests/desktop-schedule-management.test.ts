@@ -45,11 +45,21 @@ test("주간 캘린더는 날짜와 시각순으로 정렬하고 서울 시각 �
   assert.deepEqual(calendar[0].entries.map((entry: { timeLabel: string }) => entry.timeLabel), ["08:00", "16:30"]);
 });
 
+test("주간 캘린더는 서울 자정을 24:00이 아닌 00:00으로 표시한다", () => {
+  const calendar = buildWeeklyCalendar([
+    { item: { id: "midnight" }, at: "2026-07-21T15:00:00.000Z" },
+  ]);
+
+  assert.equal(calendar[0].key, "2026-07-22");
+  assert.equal(calendar[0].entries[0].timeLabel, "00:00");
+});
+
 test("주간 캘린더는 잘못된 시각을 제외한다", () => {
   const calendar = buildWeeklyCalendar([
+    { item: { id: "late" }, at: "2026-07-21T02:00:00.000Z" },
     { item: { id: "invalid" }, at: "not-a-date" },
-    { item: { id: "valid" }, at: "2026-07-21T00:00:00.000Z" },
+    { item: { id: "early" }, at: "2026-07-21T00:00:00.000Z" },
   ]);
   assert.equal(calendar.length, 1);
-  assert.equal(calendar[0].entries[0].item.id, "valid");
+  assert.deepEqual(calendar[0].entries.map((entry: { item: { id: string } }) => entry.item.id), ["early", "late"]);
 });

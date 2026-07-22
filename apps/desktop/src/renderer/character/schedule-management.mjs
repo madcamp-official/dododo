@@ -25,8 +25,9 @@ export function groupScheduledItems(entries, timeZone = DEFAULT_TIME_ZONE) {
 }
 
 export function buildWeeklyCalendar(entries, timeZone = DEFAULT_TIME_ZONE) {
+  const validEntries = entries.filter((entry) => !Number.isNaN(new Date(entry.at).getTime()));
   return groupScheduledItems(
-    [...entries].sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime()),
+    validEntries.sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime()),
     timeZone,
   ).map((group) => ({
     ...group,
@@ -51,6 +52,6 @@ function dateLabel(date, timeZone) {
 
 function timeLabel(date, timeZone) {
   return new Intl.DateTimeFormat("ko-KR", {
-    timeZone, hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).format(date);
 }
