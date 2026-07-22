@@ -451,3 +451,88 @@ payload 형태와 필수 필드를 확인하고, 어긋나면 `fail("validation"
 | `location` | 사용자가 폼에 입력한 장소(전용 필드 없음) | 신규(6.1 `add:submit`) |
 | `reminderOffsetMinutes` | 이 항목 전용 리마인더 오프셋(없으면 프로필 기본값) | 신규(2.4) |
 | `reminderSentAt` | 이미 보낸 리마인더 시각(중복 알림 방지) | 신규(2.4) |
+
+### 6.7 독립 설정 창 구현 계약과 인계
+
+현재 프로필·일정·캘린더·Source 관리 UI는 기능적으로 구현돼 있지만 캐릭터 Renderer의
+`mascot.js`와 같은 DOM 패널 안에서 열린다. 6.3의 목표 구조에 맞추려면 설정을 일반
+`BrowserWindow`와 전용 Renderer로 분리해야 한다. 이 작업은 새로운 도메인 계산이나
+저장소 API를 만드는 백엔드 작업이 아니다. 설정 화면에 필요한
+`profile:*`·`calendar:get`·`task:*`·`source:*` IPC는 이미 존재하므로 그대로 재사용한다.
+
+#### 박도현 — Main/Preload 설정 창 기반
+
+1. 설정 창을 생성·관리하는 Main 모듈을 추가한다.
+   - 권장 경로: `apps/desktop/src/main/windows/settingsWindow.mjs`
+   - 일반 프레임, `alwaysOnTop: false`, 크기 조절 가능
+   - `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
+   - 기존 `apps/desktop/src/preload/index.cjs`를 재사용
+   - `apps/desktop/src/renderer/settings/index.html`을 로드
+2. 설정 창은 앱 전체에서 하나만 유지한다.
+   - 이미 열려 있으면 새 창을 만들지 않고 `show()`와 `focus()` 실행
+   - 닫힌 뒤에는 참조를 정리해 다시 열 수 있게 함
+   - 설정 창만 닫혀도 캐릭터 창과 앱은 계속 실행
+3. 캐릭터 Renderer가 설정 창을 열 수 있는 최소 브리지를 Preload에 제공한다.
+
+```js
+window.desktopWindow.openSettings();
+// 내부 send 채널: "desktop:open-settings"
+```
+
+`desktop:open-settings`는 창 제어용 단방향 채널이며 `Result<T>` 데이터 IPC에 추가하지
+않는다. Main은 발신자가 DoDoDo가 만든 BrowserWindow인지 확인하고 외부 payload는 받지
+않는다. Renderer는 `ipcRenderer`나 Electron 객체를 직접 노출받지 않는다.
+
+4. 다음 Main 회귀 테스트를 추가한다.
+   - 여러 번 열어도 설정 창이 하나뿐임
+   - 기존 창이 있으면 focus됨
+   - 닫은 뒤 다시 열 수 있음
+   - `alwaysOnTop`이 아니며 안전한 `webPreferences`를 사용함
+   - 설정 Renderer와 Preload의 실제 경로를 로드함
+
+#### 김도연 — 전용 설정 Renderer와 기존 UI 이동
+
+1. 다음 전용 Renderer 구조를 만든다.
+
+```text
+apps/desktop/src/renderer/settings/
+├── index.html
+├── settings.js
+├── style.css
+├── profile-view.mjs
+├── schedule-view.mjs
+├── calendar-view.mjs
+└── source-view.mjs
+```
+
+2. `profile | schedule | calendar | source` 네 탭과 로딩·빈 상태·오류·저장 완료 상태를
+   제공한다. 일정 관리는 추가·수정·삭제·리마인더를 담당하고, 캘린더는 주간 조회를
+   담당한다.
+3. 캐릭터 패널에 있는 `renderSettings`·`renderProfileSettings`·
+   `renderScheduleManagement`·`renderSourceSettings` 계열 코드를 설정 Renderer로 옮긴다.
+   `desktop-api.mjs`·`profile-form.mjs`·`schedule-form.mjs`·
+   `schedule-management.mjs` 순수 모듈은 복사하지 않고 재사용한다.
+4. 캐릭터 메뉴의 설정 버튼은 패널을 렌더링하는 대신
+   `window.desktopWindow.openSettings()`를 호출한다. 설정 창 연결이 끝난 뒤 캐릭터
+   패널 안의 중복 설정 화면을 제거한다.
+5. 탭 전환, 프로필/Quiet Hours 저장, 일정 CRUD·리마인더, Source 등록·변경·삭제,
+   재시작 안내, IPC 실패, 중복 제출 방지를 Renderer 테스트로 검증한다.
+
+#### 작업 순서와 완료 조건
+
+1. 박도현이 Main/Preload 창 기반 PR을 `main` 대상으로 먼저 연다.
+2. 김도연은 그 브랜치를 base로 설정 Renderer stacked PR을 연다.
+3. Main PR 병합 후 Renderer PR의 base를 `main`으로 변경하고 최신 main에서 다시 검증한다.
+4. 실제 Electron에서 설정 버튼 연타, 창 닫기·재열기, 네 탭 저장 흐름을 공동 확인한다.
+
+완료 시 다음 흐름이 성립해야 한다.
+
+```text
+캐릭터 메뉴의 설정 클릭
+  → 독립 일반 설정 창 하나를 열거나 기존 창에 focus
+  → 기존 desktopApi로 프로필·일정·캘린더·Source 조회/변경
+  → 설정 창을 닫아도 캐릭터·watch는 계속 실행
+```
+
+별도 백엔드 작업은 현재 범위에 포함하지 않는다. 이후 school-email/LMS 등록 필드처럼
+기존 IPC가 지원하지 않는 기능을 추가할 때만 김도현과 새 계약을 별도로 조율한다.
