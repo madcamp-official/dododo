@@ -404,7 +404,6 @@ function renderAsk() {
     }
     try {
       unwrapResult(await desktopApi.ask(question));
-      panel.hidden = true;
     } catch (error) {
       renderError(error instanceof Error ? error : new Error("질문 처리에 실패했습니다."));
     } finally {

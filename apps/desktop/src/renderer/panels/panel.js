@@ -142,7 +142,6 @@ function renderAsk() {
     }
     try {
       unwrapResult(await desktopApi.ask(question));
-      window.close();
     } catch (error) {
       renderError(new Error(errorMessage(error, "질문 처리에 실패했습니다.")));
     } finally {
