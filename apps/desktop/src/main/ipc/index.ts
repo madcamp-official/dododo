@@ -90,10 +90,22 @@ export function registerIpcHandlers(container: CliContainer): void {
       console.error(`[study] 캡처/Vision 처리 실패(이번 trigger만 건너뜀): ${error instanceof Error ? error.message : String(error)}`);
     },
   });
+  const qaStudyIdleSeconds = Number(process.env.DODODO_STUDY_IDLE_QA_SECONDS);
   const captureScheduler = createStudyCaptureScheduler({
     getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+    ...(!Number.isFinite(qaStudyIdleSeconds) || qaStudyIdleSeconds <= 0 ? {} : {
+      longIdleThresholdSeconds: qaStudyIdleSeconds,
+      pollIntervalMs: 1_000,
+    }),
     onTrigger: (reason, at) => {
       void captureVisionPipeline.run(reason, at);
+    },
+    onLongIdle: (at) => {
+      broadcastNotification({
+        kind: "distraction",
+        message: "지금 오랫동안 같은 화면인데 자고 계시는 거 아니죠?",
+        createdAt: at.toISOString(),
+      });
     },
   });
   // 앱이 재시작됐는데 이전 세션이 아직 진행 중으로 복원되면(studySession.ts의 영속화)

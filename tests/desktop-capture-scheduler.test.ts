@@ -119,3 +119,26 @@ test("pollOnce는 판정과 onTrigger에 같은 시각을 쓴다(now()는 poll�
   assert.equal(triggeredAt.length, 1);
   assert.equal(triggeredAt[0]?.getTime(), current.getTime());
 });
+
+test("같이 공부하기 중 10분 이상 유휴 상태면 집중 확인을 한 번만 알린다", () => {
+  let idle = 0;
+  const longIdleEvents: Date[] = [];
+  const now = new Date("2026-07-23T00:00:00Z");
+  const scheduler = createStudyCaptureScheduler({
+    getIdleSeconds: () => idle,
+    now: () => now,
+    onTrigger: () => {},
+    onLongIdle: (at) => longIdleEvents.push(at),
+  });
+
+  scheduler.start();
+  idle = 599; scheduler.pollOnce();
+  idle = 600; scheduler.pollOnce();
+  idle = 900; scheduler.pollOnce();
+  assert.deepEqual(longIdleEvents, [now]);
+
+  idle = 0; scheduler.pollOnce();
+  idle = 600; scheduler.pollOnce();
+  assert.deepEqual(longIdleEvents, [now, now]);
+  scheduler.stop();
+});

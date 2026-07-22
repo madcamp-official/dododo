@@ -89,6 +89,21 @@ body[data-character-placement$="right"] .character-button { left: auto; right: 4
 .character-button.is-walking .character { animation: none; }
 .character-button[data-walk-direction="left"] .character { transform: scaleX(-1); }
 .character-button[data-walk-direction="left"] .character-effect { right: auto; left: -8px; transform: scaleX(-1); }
+.character-button.is-walking .character-effect[data-effect="speed-lines.png"] {
+  z-index: 2;
+  top: 48px;
+  width: 92px;
+  height: 78px;
+}
+.character-button[data-walk-direction="right"] .character-effect[data-effect="speed-lines.png"] {
+  right: auto;
+  left: -15px;
+}
+.character-button[data-walk-direction="left"] .character-effect[data-effect="speed-lines.png"] {
+  right: -15px;
+  left: auto;
+  scale: -1 1;
+}
 
 .menu-toggle {
   position: absolute;
