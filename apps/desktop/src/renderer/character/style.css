@@ -347,6 +347,40 @@ h2 {
   gap: 8px;
 }
 
+.weekly-calendar { display: grid; gap: 10px; }
+.calendar-day {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  padding: 10px;
+  border: 1px solid #e9dcc3;
+  border-radius: 15px;
+  background: #fffdf8;
+  gap: 10px;
+}
+.calendar-day > header { display: grid; align-content: start; gap: 3px; }
+.calendar-day > header time { color: #5e4b3a; font-size: 13px; font-weight: 800; }
+.calendar-day > header span { color: #9a7041; font-size: 11px; }
+.calendar-day-items { display: grid; gap: 6px; }
+.calendar-entry {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  padding: 8px;
+  border: 0;
+  border-left: 4px solid #8ca576;
+  border-radius: 10px;
+  background: #f1f5ea;
+  color: #2d241d;
+  gap: 7px;
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-entry.deadline { border-left-color: #d79658; background: #fff4e8; }
+.calendar-entry > time { color: #746556; font-size: 11px; font-weight: 700; }
+.calendar-entry > span { display: grid; min-width: 0; gap: 2px; }
+.calendar-entry strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-entry small { color: #746556; font-size: 10px; }
+.calendar-entry:hover, .calendar-entry:focus-visible { filter: brightness(.97); outline: 2px solid #c9ae84; }
+
 .context-card {
   display: grid;
   padding: 10px 12px;

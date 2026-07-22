@@ -15,7 +15,7 @@ import {
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
-import { groupScheduledItems } from "./schedule-management.mjs";
+import { buildWeeklyCalendar, groupScheduledItems } from "./schedule-management.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -277,17 +277,20 @@ function renderRankedItems(entries, emptyMessage) {
 }
 
 function renderScheduledItems(entries) {
-  if (entries.length === 0) {
+  const days = buildWeeklyCalendar(entries);
+  if (days.length === 0) {
     panelContent.innerHTML = '<div class="state-message">이번 주 일정이 없습니다.</div>';
     return;
   }
-  panelContent.innerHTML = `<div class="card-list">${entries.map(({ item, at }) => `
-    <button class="context-card" type="button" data-item-id="${escapeHtml(item.id)}">
-      <span class="card-kind">${item.kind === "event" ? "일정" : "마감"}</span>
-      <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(formatDateTime(at))}</span>
-      <small>${escapeHtml(statusLabel(item.status))}</small>
-    </button>`).join("")}</div>`;
+  panelContent.innerHTML = `<div class="weekly-calendar" aria-label="이번 주 일정">${days.map((day) => `
+    <section class="calendar-day">
+      <header><time datetime="${escapeHtml(day.key)}">${escapeHtml(day.label)}</time><span>${day.entries.length}개</span></header>
+      <div class="calendar-day-items">${day.entries.map(({ item, timeLabel }) => `
+        <button class="calendar-entry ${item.kind === "event" ? "event" : "deadline"}" type="button" data-item-id="${escapeHtml(item.id)}">
+          <time>${escapeHtml(timeLabel)}</time>
+          <span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(`${item.kind === "event" ? "일정" : "마감"} · ${statusLabel(item.status)}`)}</small></span>
+        </button>`).join("")}</div>
+    </section>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
     button.addEventListener("click", () => openDetail(button.dataset.itemId));
   });

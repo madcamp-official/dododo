@@ -24,6 +24,19 @@ export function groupScheduledItems(entries, timeZone = DEFAULT_TIME_ZONE) {
   return groups;
 }
 
+export function buildWeeklyCalendar(entries, timeZone = DEFAULT_TIME_ZONE) {
+  return groupScheduledItems(
+    [...entries].sort((left, right) => new Date(left.at).getTime() - new Date(right.at).getTime()),
+    timeZone,
+  ).map((group) => ({
+    ...group,
+    entries: group.entries.map((entry) => ({
+      ...entry,
+      timeLabel: timeLabel(new Date(entry.at), timeZone),
+    })),
+  }));
+}
+
 function dateKey(date, timeZone) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone, year: "numeric", month: "2-digit", day: "2-digit",
@@ -33,5 +46,11 @@ function dateKey(date, timeZone) {
 function dateLabel(date, timeZone) {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone, month: "long", day: "numeric", weekday: "short",
+  }).format(date);
+}
+
+function timeLabel(date, timeZone) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone, hour: "2-digit", minute: "2-digit", hour12: false,
   }).format(date);
 }
