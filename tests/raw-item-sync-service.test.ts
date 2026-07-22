@@ -159,4 +159,8 @@ class FailingRawItemRepository implements RawItemRepository {
   findByUri(sourceId: string, uri: string): Promise<RawItem | undefined> {
     return this.delegate.findByUri(sourceId, uri);
   }
+
+  listBySourceType(sourceType: RawItem["sourceType"], limit: number): Promise<RawItem[]> {
+    return this.delegate.listBySourceType(sourceType, limit);
+  }
 }

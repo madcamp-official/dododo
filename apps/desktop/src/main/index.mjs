@@ -54,8 +54,14 @@ ipcMain.on(OPEN_PANEL, (event, payload) => {
   if (route === undefined) return;
 
   const characterPlacement = characterPlacements.get(senderWindow) ?? "bottom-right";
-  const workArea = screen.getDisplayMatching(senderWindow.getBounds()).workArea;
-  openPanel(route, { characterPlacement, workArea });
+  const windowBounds = senderWindow.getBounds();
+  const workArea = screen.getDisplayMatching(windowBounds).workArea;
+  const characterBounds = {
+    x: windowBounds.x + (characterPlacement.endsWith("left") ? 4 : EXPANDED_SIZE.width - CHARACTER_SIZE.width - 4),
+    y: windowBounds.y + (characterPlacement.startsWith("top") ? 4 : EXPANDED_SIZE.height - CHARACTER_SIZE.height - 4),
+    ...CHARACTER_SIZE,
+  };
+  openPanel(route, { characterBounds, workArea });
 });
 
 // Renderer가 mouse-ignore 초기 상태의 단독 소유자다(위 mousemove 주석 참고). Renderer

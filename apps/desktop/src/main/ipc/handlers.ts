@@ -9,6 +9,7 @@ import { getCalendar, getInbox, getToday } from "./context.ts";
 import { getProfile, saveProfile } from "./profile.ts";
 import { fail } from "./result.ts";
 import { listSources, registerSource, removeSource } from "./source.ts";
+import { listSchoolSiteItems } from "./sourceItems.ts";
 import { runSync } from "./sync.ts";
 import {
   deleteScheduleItem,
@@ -128,6 +129,10 @@ export function handleTaskSetReminderOffset(container: CliContainer, input: unkn
 
 export function handleSourceList() {
   return listSources();
+}
+
+export function handleSourceItems(container: CliContainer) {
+  return listSchoolSiteItems(container);
 }
 
 export function handleSourceRegister(input: unknown) {

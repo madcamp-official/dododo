@@ -1,4 +1,4 @@
-import type { RawItem } from "../../shared/src/index.ts";
+import type { RawItem, SourceType } from "../../shared/src/index.ts";
 
 export type RawItemSaveStatus = "created" | "updated" | "skipped";
 
@@ -16,4 +16,5 @@ export interface RawItemRepository {
     externalId: string,
   ): Promise<RawItem | undefined>;
   findByUri(sourceId: string, uri: string): Promise<RawItem | undefined>;
+  listBySourceType(sourceType: SourceType, limit: number): Promise<RawItem[]>;
 }

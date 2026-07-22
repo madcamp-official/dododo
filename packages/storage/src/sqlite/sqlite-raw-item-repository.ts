@@ -12,6 +12,7 @@ export class SQLiteRawItemRepository implements RawItemRepository {
   private readonly findByUriStatement: StatementSync;
   private readonly insertStatement: StatementSync;
   private readonly updateStatement: StatementSync;
+  private readonly listBySourceTypeStatement: StatementSync;
 
   constructor(database: DatabaseSync) {
     this.findByIdStatement = database.prepare(`${SELECT_RAW_ITEM} WHERE id = ?`);
@@ -40,6 +41,9 @@ export class SQLiteRawItemRepository implements RawItemRepository {
           metadata_json = ?
       WHERE id = ?
     `);
+    this.listBySourceTypeStatement = database.prepare(
+      `${SELECT_RAW_ITEM} WHERE source_type = ? ORDER BY observed_at DESC, id ASC LIMIT ?`,
+    );
   }
 
   async save(item: RawItem): Promise<RawItemSaveResult> {
@@ -85,6 +89,13 @@ export class SQLiteRawItemRepository implements RawItemRepository {
 
   async findByUri(sourceId: string, uri: string): Promise<RawItem | undefined> {
     return rowToRawItem(this.findByUriStatement.get(sourceId, uri));
+  }
+
+  async listBySourceType(sourceType: SourceType, limit: number): Promise<RawItem[]> {
+    return this.listBySourceTypeStatement
+      .all(sourceType, Math.max(0, limit))
+      .map((row) => rowToRawItem(row))
+      .filter((item): item is RawItem => item !== undefined);
   }
 
   private async findExisting(item: RawItem): Promise<RawItem | undefined> {

@@ -2,19 +2,21 @@ import { createHash } from "node:crypto";
 
 import type { RawItem } from "../../../shared/src/index.ts";
 import { BaseCollector } from "../base.ts";
-import { parseSchoolNoticeHtml } from "./parser.ts";
-import type { SchoolSiteSelectors } from "./types.ts";
+import { parseSchoolNoticeDetailHtml, parseSchoolNoticeHtml } from "./parser.ts";
+import type { ParsedSchoolNotice, SchoolSiteRecipe, SchoolSiteSelectors } from "./types.ts";
 
 export interface SchoolSiteCollectorOptions {
   sourceId?: string;
   baseUrl: string;
-  loadHtml: () => Promise<string>;
+  loadHtml: (url?: string) => Promise<string>;
   selectors?: Partial<SchoolSiteSelectors>;
+  recipe?: SchoolSiteRecipe;
   now?: () => Date;
 }
 
 export class SchoolSiteCollector extends BaseCollector {
   private readonly options: SchoolSiteCollectorOptions;
+  private errors: Array<{ sourceUri?: string; message: string }> = [];
 
   constructor(options: SchoolSiteCollectorOptions) {
     super(options.sourceId ?? "school-site", "school-site");
@@ -22,12 +24,33 @@ export class SchoolSiteCollector extends BaseCollector {
   }
 
   async sync(): Promise<RawItem[]> {
+    this.errors = [];
     const html = await this.options.loadHtml();
     const observedAt = (this.options.now ?? (() => new Date()))().toISOString();
-    const notices = parseSchoolNoticeHtml(html, {
+    let notices = parseSchoolNoticeHtml(html, {
       baseUrl: this.options.baseUrl,
       selectors: this.options.selectors,
+      recipe: this.options.recipe,
     });
+    if (this.options.recipe !== undefined
+      && (this.options.recipe.errorOnEmpty ?? true)
+      && notices.length === 0) {
+      throw new Error(`학교 사이트 Recipe가 공지 항목을 찾지 못했습니다: ${this.options.baseUrl}`);
+    }
+    if (this.options.recipe?.detail !== undefined) {
+      notices = await mapWithConcurrency(notices, 4, async (notice) => {
+        try {
+          return await this.loadDetail(notice);
+        } catch (error) {
+          this.errors.push({
+            sourceUri: notice.uri,
+            message: `상세 공지를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}`,
+          });
+          return notice;
+        }
+      });
+    }
+    notices = [...new Map(notices.map((notice) => [notice.externalId, notice])).values()];
 
     return notices.map((notice) => {
       const metadata: Record<string, unknown> = {
@@ -55,11 +78,45 @@ export class SchoolSiteCollector extends BaseCollector {
       } satisfies RawItem;
     });
   }
+
+  listErrors(): Array<{ sourceUri?: string; message: string }> {
+    return [...this.errors];
+  }
+
+  private async loadDetail(notice: ParsedSchoolNotice): Promise<ParsedSchoolNotice> {
+    const detailRecipe = this.options.recipe?.detail;
+    if (detailRecipe === undefined) return notice;
+    const html = await this.options.loadHtml(notice.uri);
+    const detail = parseSchoolNoticeDetailHtml(html, notice.uri, detailRecipe);
+    return {
+      ...notice,
+      content: detail.content || notice.content,
+      attachmentUrls: [...new Set([...notice.attachmentUrls, ...detail.attachmentUrls])],
+    };
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(values[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export * from "./parser.ts";
 export * from "./types.ts";
 export * from "./http-loader.ts";
+export * from "./presets.ts";
 
 function stableRawItemId(sourceId: string, externalId: string): string {
   const digest = createHash("sha256")

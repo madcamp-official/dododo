@@ -135,3 +135,14 @@ test("반환하거나 조회한 객체를 수정해도 저장된 RawItem은 바�
   assert.equal(stored?.content, "보고서 PDF와 소스코드 ZIP을 제출합니다.");
   assert.equal(stored?.metadata.course, "운영체제");
 });
+
+test("Source 종류별 최근 RawItem을 관찰 시각 역순과 limit으로 조회한다", async () => {
+  const repository = new InMemoryRawItemRepository();
+  await repository.save(rawItem({ id: "site-old", sourceId: "site", sourceType: "school-site", externalId: "old", observedAt: "2026-07-20T00:00:00Z" }));
+  await repository.save(rawItem({ id: "site-new", sourceId: "site", sourceType: "school-site", externalId: "new", observedAt: "2026-07-22T00:00:00Z" }));
+  await repository.save(rawItem({ id: "mail", sourceId: "mail", sourceType: "school-email", externalId: "mail" }));
+
+  const items = await repository.listBySourceType("school-site", 1);
+
+  assert.deepEqual(items.map((item) => item.id), ["site-new"]);
+});
