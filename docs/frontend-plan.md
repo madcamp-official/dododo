@@ -543,3 +543,86 @@ apps/desktop/src/renderer/settings/
 
 별도 백엔드 작업은 현재 범위에 포함하지 않는다. 이후 school-email/LMS 등록 필드처럼
 기존 IPC가 지원하지 않는 기능을 추가할 때만 김도현과 새 계약을 별도로 조율한다.
+
+### 6.8 박도현 Main/Preload 잔여 작업 백로그
+
+6.7의 독립 설정 창 외에도 Main/Preload 영역에는 실제 공부 캡처 배선과 독립 결과 패널
+기반이 남아 있다. 우선순위는 아래와 같다.
+
+| 우선순위 | 작업 | 현재 상태 | 김도연 후속 |
+|---|---|---|---|
+| 1 | 독립 설정 창 Main/Preload 기반 | 미구현(6.7 계약 확정) | 설정 Renderer 이동 |
+| 2 | 공부 트리거에서 실제 캡처·Vision·알림 연결 | Idle→Active 스케줄러만 구현 | 말풍선·요약 통합 QA |
+| 3 | 독립 결과 패널 BrowserWindow 기반 | 미구현(계약 합의 필요) | 패널 Renderer 이동 |
+
+#### 6.8.1 공부 캡처·Vision 실제 호출 연결
+
+PR #79로 Vision 추출 함수가, PR #92로 Idle→Active 트리거 판정과 스케줄러가 main에
+병합됐다. 그러나 #92의 `onTrigger`는 현재 로그만 남기므로 아래 수직 흐름은 아직
+완성되지 않았다.
+
+```text
+Idle→Active 감지
+  → 활성 공부 세션과 화면 캡처 동의 확인
+  → 현재 화면 일시 캡처
+  → extractScreenActivity 호출
+  → Activity와 관련 Context 연결 및 조언 생성
+  → advice 또는 distraction notification 전송
+  → 세션 adviceCount 증가
+```
+
+박도현은 기존 Main의 캡처 Runtime·Vision 함수·notification broadcaster·세션 저장을
+연결한다. 새 계산 로직을 중복 구현하지 않고 각 기존 계약을 조합한다.
+
+- 활성 공부 세션이며 캡처 동의가 있을 때만 실행한다.
+- 세션 종료 시 스케줄러를 즉시 중지하고 진행 중 결과가 종료된 세션에 반영되지 않게 한다.
+- 복원된 활성 세션은 앱 시작 후 스케줄러를 다시 시작한다.
+- 원격 LLM 사용 고지와 Privacy Gateway 경계를 유지한다.
+- 캡처 원본은 영구 저장하지 않고 분석 후 폐기한다.
+- 캡처·Vision·조언 실패는 해당 trigger에 격리해 다음 trigger와 watch를 중단하지 않는다.
+- 최소 캡처 간격과 동일 알림 반복 방지 정책을 유지한다.
+- 실제 발행한 조언만 `adviceCount`에 반영한다.
+
+필수 테스트:
+
+- 비활성 세션 또는 동의 없는 세션에서는 캡처·Vision을 호출하지 않음
+- Idle→Active 한 번당 호출 한 번, 최소 간격 내 중복 호출 없음
+- 세션 종료 후 호출·알림·횟수 증가 없음
+- Vision 실패 후 다음 trigger는 정상 처리
+- 조언/이탈 결과가 각각 `advice`/`distraction` notification으로 전달됨
+- 세션 종료 응답의 `adviceCount`가 실제 발행 횟수와 일치함
+
+#### 6.8.2 독립 결과 패널 창 기반
+
+6.3은 결과 패널을 캐릭터 창과 분리된 재사용 창으로 정의하지만, 현재 today/calendar/
+inbox/ask/detail은 캐릭터 창 안 DOM 패널에서 렌더링된다. 박도현은 Main에서 결과 패널
+BrowserWindow를 하나만 생성·재사용하고, 김도연과 먼저 다음 창 제어 계약을 확정한다.
+
+```js
+window.desktopWindow.openPanel({
+  view: "today" | "calendar" | "inbox" | "ask" | "detail",
+  itemId?: string,
+});
+```
+
+- 이미 열려 있으면 새 창 대신 route와 itemId만 갱신하고 focus한다.
+- 캐릭터 위치와 모니터 workArea를 기준으로 빈 공간 쪽에 배치한다.
+- 패널을 닫아도 캐릭터·watch·설정 창은 계속 실행한다.
+- 외부 URL이나 임의 파일 경로를 payload로 받지 않고 view 허용 값과 itemId를 검증한다.
+- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`를 유지한다.
+- 창 중복·route 전환·닫기·재열기·위치 계산·payload 거절을 테스트한다.
+
+김도연은 기반 PR 위에서 현재 캐릭터 DOM 패널의 결과 Renderer를 전용 패널 Renderer로
+옮기고, 캐릭터 메뉴와 notification 상세 버튼을 `openPanel()` 계약에 연결한다.
+
+#### 6.8.3 박도현 권장 진행 순서
+
+1. 6.7 독립 설정 창 Main/Preload PR
+2. 김도연 설정 Renderer stacked PR 통합 지원
+3. PR #92 trigger의 실제 캡처·Vision·알림·adviceCount 배선 PR
+4. 김도연과 실제 Electron 공부 세션 통합 검증
+5. 독립 결과 패널 계약 합의 및 Main 창 기반 PR
+6. 김도연 패널 Renderer stacked PR 통합 지원
+
+위 작업은 Electron 창 관리와 기존 기능 배선이 중심이다. 새로운 Source·Context 계산이나
+저장소 계약이 필요해지는 경우에만 백엔드 담당 김도현과 별도 변경 절차를 시작한다.
