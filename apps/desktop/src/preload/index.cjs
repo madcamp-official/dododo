@@ -68,6 +68,7 @@ const CHANNELS = {
   taskDelete: "task:delete",
   taskSetReminderOffset: "task:setReminderOffset",
   sourceList: "source:list",
+  sourceItems: "source:items",
   sourceRegister: "source:register",
   sourceRemove: "source:remove",
   syncRun: "sync:run",
@@ -96,6 +97,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   setReminderOffset: (id, offsetMinutes) =>
     ipcRenderer.invoke(CHANNELS.taskSetReminderOffset, { id, offsetMinutes }),
   listSources: () => ipcRenderer.invoke(CHANNELS.sourceList),
+  listSourceItems: () => ipcRenderer.invoke(CHANNELS.sourceItems),
   registerSource: (type, value) => ipcRenderer.invoke(CHANNELS.sourceRegister, { type, value }),
   removeSource: (id) => ipcRenderer.invoke(CHANNELS.sourceRemove, { id }),
   sync: () => ipcRenderer.invoke(CHANNELS.syncRun),

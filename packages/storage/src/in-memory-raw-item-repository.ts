@@ -1,4 +1,4 @@
-import type { RawItem } from "../../shared/src/index.ts";
+import type { RawItem, SourceType } from "../../shared/src/index.ts";
 import type {
   RawItemRepository,
   RawItemSaveResult,
@@ -55,6 +55,14 @@ export class InMemoryRawItemRepository implements RawItemRepository {
   async findByUri(sourceId: string, uri: string): Promise<RawItem | undefined> {
     const id = this.idByUriKey.get(identityKey(sourceId, uri));
     return id === undefined ? undefined : cloneOptional(this.itemsById.get(id));
+  }
+
+  async listBySourceType(sourceType: SourceType, limit: number): Promise<RawItem[]> {
+    return [...this.itemsById.values()]
+      .filter((item) => item.sourceType === sourceType)
+      .sort((left, right) => right.observedAt.localeCompare(left.observedAt))
+      .slice(0, Math.max(0, limit))
+      .map((item) => structuredClone(item));
   }
 
   private findExisting(item: RawItem): RawItem | undefined {

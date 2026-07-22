@@ -55,7 +55,7 @@ test("설정 Renderer는 기존 desktopApi와 순수 폼 모듈을 재사용한�
   const renderer = await readFile("apps/desktop/src/renderer/settings/settings.js", "utf8");
   for (const call of [
     "profileGet", "profileSave", "calendar", "add", "detail", "update", "delete", "reminder",
-    "sourceList", "sourceRegister", "sourceRemove",
+    "sourceList", "sourceItems", "sourceRegister", "sourceRemove", "sync",
   ]) assert.match(renderer, new RegExp(`desktopApi\\.${call}`));
   assert.match(renderer, /profileFromFormData/);
   assert.match(renderer, /scheduleItemToForm/);
@@ -72,4 +72,7 @@ test("설정 Renderer는 Source 재시작 안내와 변경·삭제 확인을 제
   assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
   assert.match(renderer, /Source를 삭제할까요/);
   assert.match(renderer, /window\.confirm/);
+  assert.match(renderer, /최근 수집 항목/);
+  assert.match(renderer, /data-source-refresh/);
+  assert.match(renderer, /item\.content/);
 });
