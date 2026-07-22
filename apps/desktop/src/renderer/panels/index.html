@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DoDoDo 결과 패널</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="panel-shell">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">DoDoDo</p>
+          <h1 data-panel-title>결과</h1>
+        </div>
+        <button class="icon-button" type="button" data-close-panel aria-label="패널 닫기">×</button>
+      </header>
+      <section class="panel-content" data-panel-content aria-live="polite">
+        <div class="state-message">화면을 준비하고 있어요.</div>
+      </section>
+    </main>
+    <script type="module" src="./panel.js"></script>
+  </body>
+</html>

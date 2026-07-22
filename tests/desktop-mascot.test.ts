@@ -208,7 +208,7 @@ test("desktop mascot shows a once-per-day summary bubble linked to Today", async
   assert.match(renderer, /dailySummaryRetryTimer = window\.setTimeout/);
   assert.match(renderer, /window\.clearTimeout\(dailySummaryRetryTimer\)/);
   assert.match(renderer, /targetView === "today"/);
-  assert.match(renderer, /openView\("today"\)/);
+  assert.match(renderer, /openStandalonePanel\(\{ view: targetView \}\)/);
   assert.match(notificationState, /daily-summary/);
   assert.match(renderer, /next\.targetView === "today" \? "오늘 보기" : "자세히 보기"/);
 });
