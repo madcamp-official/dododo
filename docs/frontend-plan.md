@@ -385,7 +385,9 @@ type NotificationKind =
   | "opportunity"   // Opportunity 능동 푸시
   | "sync-complete" // 자동 수집 알림
   | "advice"        // 같이 공부하기 세션 중 화면 조언(2.5)
-  | "distraction";  // 같이 공부하기 세션 중 이탈 감지(2.5)
+  | "distraction"   // 같이 공부하기 세션 중 이탈 감지(2.5)
+  | "job-failed";   // 백그라운드 재분석 Job이 재시도 한도를 넘어 Dead Letter로 넘어감
+                     // (docs/llm-architecture.md §5, docs/backend-next-plan.md P1)
 
 interface NotificationEvent {
   kind: NotificationKind;

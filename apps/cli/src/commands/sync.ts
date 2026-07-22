@@ -19,7 +19,10 @@ export async function runSync(container: CliContainer, now: Date = new Date()): 
   }
 
   for (const collector of container.collectors) {
-    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository);
+    const result = await syncIncrementally(collector, container.pipeline, container.rawItemRepository, {
+      jobQueue: container.jobQueue,
+      now,
+    });
     container.syncStatus.record(result, now);
 
     const errorSuffix = result.errors.length > 0 ? ` · 오류: ${result.errors.join(", ")}` : "";

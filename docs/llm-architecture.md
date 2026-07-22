@@ -35,7 +35,7 @@
 | `ask`·`add`·`watch`·`advise`·`evidence` | O | O | Intelligence / CLI |
 | 실제 이미지 Vision 분석 (`extractScreenActivity`) | O | O(`advise --live`, `.env` 미설정 시 캡처만 보고) | Intelligence / CLI |
 | Embedding / RAG | X | X | Intelligence |
-| 클라이언트 측 백그라운드 재분석 Job Queue(§5) | X | X | 공동 |
+| 클라이언트 측 백그라운드 재분석 Job Queue(§5) | 부분(`extract_facts`만) | O(`watchTick.ts`가 매 tick drain) | 공동 |
 
 ### 원격 Gateway 구현 상태 (2026-07-21)
 
@@ -64,7 +64,11 @@ LLM 런타임 연결(`OllamaProvider`/`RemoteJobLLMProvider` 주입), Context SQ
 SQLite 영속화(`SQLiteProfileRepository`, `apps/cli/src/runtime/container.ts`에서 SQLite 모드일 때 배선됨),
 LLM 실패와 "결과 없음"의 구분(`extractWithStatus`/`RetryAwareFactExtractor`)은 모두 완료되었다. 남은 것:
 
-1. **`watch`가 단순 반복문**이라 재시도·Backoff·Dead Letter가 없다 — 아래 §5의 Job Queue 도입 전제. (CLI + 공동)
+1. ~~**`watch`가 단순 반복문**이라 재시도·Backoff·Dead Letter가 없다~~ — **부분 완료.**
+   `extract_facts`는 이제 §5의 Job Queue(`packages/storage`의 `JobQueueRepository`,
+   `apps/cli/src/runtime/jobQueue/`)를 타 배치 실패 시 무한 재시도 대신 Backoff 후
+   재시도하고, 한도를 넘으면 Dead Letter로 넘어간다. 나머지 8개 `JobType`
+   (`docs/backend-next-plan.md` P1 참고)은 아직 Handler가 없다. (CLI + 공동)
 2. **`today`/`inbox`/`watch`가 항목마다 LLM 문장 생성을 순차 호출**한다(`RuleBasedRecommendationEngine.recommend`). 항목 수만큼 직렬 대기 시간이 늘어난다 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화가 필요하다. (Intelligence)
 
 ## 5. 확장 구조: 이벤트 기반 비동기 작업 파이프라인

@@ -3,3 +3,4 @@ export * from "./schema.ts";
 export * from "./sqlite-raw-item-repository.ts";
 export * from "./sqlite-context-repository.ts";
 export * from "./sqlite-profile-repository.ts";
+export * from "./sqlite-job-queue-repository.ts";

@@ -20,9 +20,11 @@ import { InMemoryProfileRepository } from "../../../../packages/profile/src/inde
 import { ConsoleNotifier, SyncStatusStore } from "../../../../packages/scheduler/src/index.ts";
 import {
   InMemoryContextRepository,
+  InMemoryJobQueueRepository,
   InMemoryRawItemRepository,
   openContextDatabase,
   SQLiteContextRepository,
+  SQLiteJobQueueRepository,
   SQLiteProfileRepository,
   SQLiteRawItemRepository,
 } from "../../../../packages/storage/src/index.ts";
@@ -30,6 +32,7 @@ import type { RawItemRepository } from "../../../../packages/storage/src/index.t
 import type {
   Collector,
   ContextRepository,
+  JobQueueRepository,
   Notifier,
   PrivacyGateway,
   ProfileRepository,
@@ -70,6 +73,10 @@ export interface CliContainer {
   // 다음 tick에 재시도된다 — 그래서 Collector를 감싸는 대신 이 저장소 자체를
   // 공개해 호출부가 직접 순서를 통제하게 한다.
   rawItemRepository: RawItemRepository;
+  // docs/llm-architecture.md §5의 Job Queue. incrementalSync.ts가 배치 실패 시 이
+  // 큐로 extract_facts 재시도(Backoff·Dead Letter)를 넘기고, watchTick.ts가 매
+  // tick 밀린 작업을 drain한다.
+  jobQueue: JobQueueRepository;
   // watch tick의 자동 동기화와 수동 sync(CLI sync 명령, 데스크톱 sync:run IPC)가
   // 같은 collectors/pipeline을 동시에 건드리지 않도록 "동기화 한 번"을 이 락으로
   // 감싼다(mutex.ts, doyeonid 리뷰 PR #61) — CLI는 원래 한 진입점만 쓰지만 데스크톱은
@@ -169,11 +176,13 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
   const dbPath = options.databasePath !== undefined ? normalizeDbPath(options.databasePath) : resolveDbPath(env);
   let repository: ContextRepository;
   let rawItemRepository: RawItemRepository;
+  let jobQueue: JobQueueRepository;
   let profileRepository: ProfileRepository;
   let close: () => void;
   if (dbPath === undefined) {
     repository = new InMemoryContextRepository();
     rawItemRepository = new InMemoryRawItemRepository();
+    jobQueue = new InMemoryJobQueueRepository();
     profileRepository = new InMemoryProfileRepository();
     close = () => {};
   } else {
@@ -181,6 +190,7 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
     const database = openContextDatabase(dbPath);
     repository = new SQLiteContextRepository(database);
     rawItemRepository = new SQLiteRawItemRepository(database);
+    jobQueue = new SQLiteJobQueueRepository(database);
     // setup이 저장한 프로필이 프로세스 재시작 후에도 남아야 today/inbox/watch의
     // 관련도 계산(relevance/index.ts)이 매번 빈 프로필로 폴백하지 않는다
     // (docs/llm-architecture.md §4에서 지적된 병목).
@@ -279,6 +289,7 @@ export function createCliContainer(options: CliContainerOptions = {}): CliContai
     syncStatus,
     pipeline,
     rawItemRepository,
+    jobQueue,
     syncLock: createMutex(),
     collectors,
     screenCollector,

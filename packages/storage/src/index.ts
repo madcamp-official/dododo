@@ -11,6 +11,7 @@ import type {
 } from "../../shared/src/index.ts";
 import { hasSameActiveFacts } from "./analysis-idempotency.ts";
 
+export * from "./in-memory-job-queue-repository.ts";
 export * from "./in-memory-raw-item-repository.ts";
 export * from "./raw-item-repository.ts";
 export * from "./raw-item-sync-service.ts";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { syncIncrementally } from "../apps/cli/src/runtime/incrementalSync.ts";
+import { InMemoryJobQueueRepository } from "../packages/storage/src/index.ts";
 import { RetryAwareFactExtractor } from "../apps/cli/src/runtime/retryAwareFactExtractor.ts";
 import {
   ContextPipeline,
@@ -149,6 +150,51 @@ test("syncIncrementally는 변경 없으면 collector.sync()로 값은 받아오
 
   await syncIncrementally(collector, pipeline, rawItemRepository);
   assert.equal(prepareCalls, 1, "변경 없는 두 번째 호출은 privacyGateway를 다시 부르면 안 됨");
+});
+
+test("jobQueue가 주어지면 배치 실패 시에도 RawItem을 저장하고 extract_facts Job을 enqueue한다", async () => {
+  const rawItemRepository = new InMemoryRawItemRepository();
+  const jobQueue = new InMemoryJobQueueRepository();
+  // 항상 실패하는 게이트웨이 — Job Queue로 재시도를 넘기는 경로만 확인한다.
+  const pipeline = new ContextPipeline({
+    repository: new InMemoryContextRepository(),
+    privacyGateway: new FlakyPrivacyGateway(Number.POSITIVE_INFINITY),
+    factExtractor: NOOP_FACT_EXTRACTOR,
+    contextResolver: new DeterministicContextResolver(),
+  });
+  const item = sampleRawItem();
+  const collector = fixedCollector(item);
+  const now = new Date("2026-07-22T10:00:00Z");
+
+  const result = await syncIncrementally(collector, pipeline, rawItemRepository, { jobQueue, now });
+
+  assert.ok(result.errors.length > 0);
+  // jobQueue가 없을 때(위 첫 테스트)와 달리, 관찰 자체는 저장돼 다음 tick에
+  // "안 바뀜"으로 걸러진다 — 무한 재시도 대신 Job Queue가 재시도를 맡는다.
+  assert.notEqual(await rawItemRepository.findByUri(item.sourceId, item.uri), undefined);
+
+  const claimed = await jobQueue.claimNext(["extract_facts"], now, 60_000);
+  assert.equal(claimed?.id, `extract_facts:${item.id}`);
+  assert.equal(claimed?.inputRef, item.id);
+});
+
+test("jobQueue가 주어져도 성공한 배치는 기존과 동일하게 동작한다(Job을 만들지 않음)", async () => {
+  const rawItemRepository = new InMemoryRawItemRepository();
+  const jobQueue = new InMemoryJobQueueRepository();
+  const pipeline = new ContextPipeline({
+    repository: new InMemoryContextRepository(),
+    privacyGateway: { async prepare(rawItem: RawItem) { return rawItem; } },
+    factExtractor: NOOP_FACT_EXTRACTOR,
+    contextResolver: new DeterministicContextResolver(),
+  });
+  const item = sampleRawItem();
+  const collector = fixedCollector(item);
+  const now = new Date("2026-07-22T10:00:00Z");
+
+  const result = await syncIncrementally(collector, pipeline, rawItemRepository, { jobQueue, now });
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(await jobQueue.claimNext(["extract_facts"], now, 60_000), undefined);
 });
 
 test("Collector 부분 오류는 정상 RawItem을 저장하면서 SyncResult에 보존한다", async () => {

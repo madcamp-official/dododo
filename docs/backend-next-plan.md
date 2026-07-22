@@ -40,17 +40,43 @@ Notifier/watch 배선, Task/Event 수정·삭제 IPC, 일정 충돌 감지, 마�
 
 ## P1 — Job Queue Worker 경계 정리 (llm-architecture §10-1)
 
-Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영역이 됐다
-(`apps/cli/src/runtime/watchTick.ts` 포함). 큐가 들어오기 전에 Worker가 호출할
-함수 경계를 정리한다.
+**완료(핵심 1개 타입).** 백엔드 담당자 부재로 예외적으로 진행(사용자 승인) —
+"경계 정리"에 그치지 않고 실제로 동작하는 슬라이스까지 만들었다.
 
-1. `Job.type`별 호출 대상 매핑: `extract_facts` → `LLMFactExtractor.extractWithStatus`,
-   `resolve_context` → Resolver, `recalculate_relevance/priority` → `computePriority`,
-   `generate_advice` → 화면 조언 정책, `generate_daily_plan` → 신규.
-2. 위 함수들의 실패 반환이 `llm/errors.ts`의 `category`/`retryable`과 이미 맞는지
-   확인 — 안 맞는 함수만 좁게 조정한다.
-3. `watchTick.ts`가 지금 단순 반복문이라 재시도·Backoff·Dead Letter가 없다(§4-1
-   병목) — Job Queue가 붙기 전 이 부분의 실패 처리 경계를 명확히 해 둔다.
+- `packages/shared/src/domain.ts`/`contracts.ts`: `Job`/`JobType`/`JobStatus`/
+  `JobQueueRepository` 계약 추가. `JobType`은 §5가 나열한 9종을 전부 미리 정의해
+  뒀지만(`extract_facts`, `generate_embedding`, `resolve_context`,
+  `review_ambiguous_merge`, `recalculate_relevance`, `recalculate_priority`,
+  `generate_daily_plan`, `analyze_screen`, `generate_advice`, `reprocess_failed`),
+  실제로 Handler가 붙어 처리되는 건 `extract_facts`뿐이다.
+- `packages/storage/`: `SQLiteJobQueueRepository`(`jobs` 테이블, node:sqlite)와
+  `InMemoryJobQueueRepository`. `enqueue`는 같은 id가 pending/leased면 멱등,
+  `claimNext`는 priority desc·nextRunAt asc로 하나 뽑아 lease, `recoverExpiredLeases`로
+  죽은 Worker가 잡아 둔 leased 작업을 되돌린다.
+- `apps/cli/src/runtime/jobQueue/`: `backoff.ts`(30초 시작, 2배씩, 1시간 상한),
+  `worker.ts`(`runDueJobs` — claim·재시도 판정·Dead Letter 오케스트레이션,
+  Handler가 없는 `JobType`은 건드리지 않는다), `extractFactsJob.ts`(큐에서 꺼낸
+  RawItem id로 `pipeline.sync()`를 1건짜리 Collector로 다시 태운다).
+- `incrementalSync.ts`: 새 옵션 인자(`{ jobQueue?, now? }`, 기본값 없이 호출하면
+  기존 동작 100% 동일 — 회귀 없음)로, 배치 실패 시 무한 재시도 대신 RawItem을
+  저장해 두고(관찰 자체는 잃지 않는다) `extract_facts` Job을 enqueue한다.
+- `watchTick.ts`: 매 tick 큐를 drain하고, dead-letter된 작업을
+  `WatchTickResult.deadLetteredJobs`로 노출한다.
+- 데스크톱(`apps/desktop`, 프론트엔드 몫도 이번에 같이 반영): 새
+  `NotificationKind: "job-failed"`와 `jobFailureSummary.ts` — dead-letter는
+  Quiet Hours로 보류하지 않는다(그 tick에서만 한 번 보고되는 상태 전이라, 보류하면
+  영영 전달되지 않는다).
+
+**남은 것(§5의 나머지 8개 Job.type)**: `generate_embedding`/`resolve_context`/
+`review_ambiguous_merge`/`recalculate_relevance`/`recalculate_priority`/
+`generate_daily_plan`/`analyze_screen`/`generate_advice`/`reprocess_failed`는
+타입만 정의돼 있고 Handler가 없다 — `runDueJobs(queue, handlers, ...)`의
+`handlers` 객체에 타입별 함수를 추가하기만 하면 같은 큐·재시도·Dead Letter
+인프라를 그대로 탄다. `extract_facts`의 재시도 분류(`isRetryableError`)는
+`pipeline.sync()`가 오류를 문자열로만 반환해(원래 `RetryAwareFactExtractor`도
+`LLMExtractionError`를 일반 `Error`로 바꿔 던짐) 항상 "재시도 가능"으로 기본
+처리한다 — 더 정밀한 분류가 필요하면 `pipeline.ts`가 원본 오류(cause)를 보존하도록
+바꾸는 후속 작업이 필요하다(공동 소유 파일이라 별도 조율).
 
 ## P1 — LLM 활용 확대 (llm-architecture §8)
 

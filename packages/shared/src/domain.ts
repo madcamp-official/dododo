@@ -169,3 +169,47 @@ export interface SyncResult {
   skipped: number;
   errors: string[];
 }
+
+// docs/llm-architecture.md §5: 클라이언트 측 백그라운드 재분석 Job Queue. 지금은
+// extract_facts만 실제로 큐를 타고(apps/cli/src/runtime/jobQueue/), 나머지 타입은
+// 앞으로 같은 큐에 붙일 작업 종류를 미리 정해 둔 것이다(§5 원본 목록 그대로).
+export type JobType =
+  | "extract_facts"
+  | "generate_embedding"
+  | "resolve_context"
+  | "review_ambiguous_merge"
+  | "recalculate_relevance"
+  | "recalculate_priority"
+  | "generate_daily_plan"
+  | "analyze_screen"
+  | "generate_advice"
+  | "reprocess_failed";
+
+// pending: 실행 대기(nextRunAt 도래 전일 수도 있음). leased: Worker가 지금 처리 중
+// (leaseUntil까지). done: 성공. dead_letter: maxAttempts를 다 써서 더 이상 재시도하지
+// 않음(사람이 봐야 하는 영구 실패).
+export type JobStatus = "pending" | "leased" | "done" | "dead_letter";
+
+export interface Job {
+  // 호출부가 결정적으로 만든다(예: `extract_facts:${rawItemId}`) — 같은 작업을
+  // 중복 enqueue해도 하나만 남는다(멱등).
+  id: string;
+  type: JobType;
+  // 작업 대상을 가리키는 참조(예: RawItem id). 어떤 문자열을 참조로 쓸지는 Job.type별
+  // Handler가 정한다 — Job 자체는 의미를 모른다.
+  inputRef: string;
+  status: JobStatus;
+  priority: number;
+  attempts: number;
+  maxAttempts: number;
+  nextRunAt: string;
+  leaseUntil?: string;
+  // doyeonid 리뷰(PR #100) P1: claim마다 새로 발급하는 소유권 토큰. complete/retry/
+  // deadLetter는 이 토큰이 지금 저장된 값과 같을 때만 반영된다 — lease가 만료돼
+  // 다른 Worker가 재획득한 뒤, 원래 Worker가 뒤늦게 끝내며 그 결과를 반영하려 해도
+  // (stale completion) 토큰이 안 맞아 조용히 무시된다. leased 상태일 때만 값이 있다.
+  leaseToken?: string;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
