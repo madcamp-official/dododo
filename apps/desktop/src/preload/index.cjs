@@ -5,6 +5,8 @@ const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
 const CHARACTER_PLACEMENT = "desktop:character-placement";
+const OPEN_PANEL = "desktop:open-panel";
+const PANEL_NAVIGATE = "panel:navigate";
 const OPEN_SETTINGS = "desktop:open-settings";
 
 contextBridge.exposeInMainWorld("desktopMascot", {
@@ -29,9 +31,21 @@ contextBridge.exposeInMainWorld("desktopMascot", {
   },
 });
 
-// docs/frontend-plan.md 6.7: 창 제어용 단방향 채널이라 Result<T> 데이터 IPC(desktopApi)와
-// 분리한다. Renderer는 ipcRenderer나 Electron 객체를 직접 받지 않는다.
+// docs/frontend-plan.md 6.7/6.8.2: 창 제어용 단방향 채널이라 Result<T> 데이터 IPC
+// (desktopApi)와 분리한다. openPanel은 캐릭터 Renderer가 결과 패널을 열 때,
+// onPanelNavigate는 패널 Renderer 자신이 route/itemId 변경을 받을 때, openSettings는
+// 캐릭터 Renderer가 설정 창을 열 때 쓴다 — 셋 다 같은 preload를 캐릭터·패널·설정
+// 창이 함께 재사용하므로 한 global에 같이 둔다. Renderer는 ipcRenderer나 Electron
+// 객체를 직접 받지 않는다.
 contextBridge.exposeInMainWorld("desktopWindow", {
+  openPanel(route) {
+    ipcRenderer.send(OPEN_PANEL, route);
+  },
+  onPanelNavigate(callback) {
+    const listener = (_event, route) => callback(route);
+    ipcRenderer.on(PANEL_NAVIGATE, listener);
+    return () => ipcRenderer.removeListener(PANEL_NAVIGATE, listener);
+  },
   openSettings() {
     ipcRenderer.send(OPEN_SETTINGS);
   },
