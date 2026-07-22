@@ -178,46 +178,19 @@ test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를
   assert.match(style, /\.reminder-form\s*\{/);
 });
 
-test("desktop mascot settings connects Source management and restart guidance", async () => {
-  const [renderer, adapter, style] = await Promise.all([
+test("desktop mascot opens the standalone settings window without embedded settings UI", async () => {
+  const [renderer, preload] = await Promise.all([
     readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
-    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
-    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+    readFile("apps/desktop/src/preload/index.cjs", "utf8"),
   ]);
 
-  assert.match(adapter, /listSources/);
-  assert.match(adapter, /registerSource/);
-  assert.match(adapter, /removeSource/);
-  assert.match(renderer, /data-settings-source/);
-  assert.match(renderer, /desktopApi\.sourceList/);
-  assert.match(renderer, /desktopApi\.sourceRegister\("school-site", value\)/);
-  assert.match(renderer, /desktopApi\.sourceRemove/);
-  assert.match(renderer, /data-existing-value/);
-  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
-  assert.match(renderer, /showSourceError\(error\)/);
-  assert.doesNotMatch(renderer, /result\.restartRequired \?/);
-  assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
-  assert.match(style, /\.source-card\s*\{/);
-  assert.match(style, /\.restart-notice\s*\{/);
-});
-
-test("desktop mascot settings connects profile fields and Quiet Hours", async () => {
-  const [renderer, adapter, style] = await Promise.all([
-    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
-    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
-    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
-  ]);
-
-  assert.match(adapter, /getProfile/);
-  assert.match(adapter, /saveProfile/);
-  assert.match(renderer, /data-settings-profile/);
-  assert.match(renderer, /desktopApi\.profileGet/);
-  assert.match(renderer, /desktopApi\.profileSave/);
-  assert.match(renderer, /data-quiet-hours-toggle/);
-  assert.match(renderer, /data-profile-error/);
-  assert.match(renderer, /프로필을 저장하지 못했습니다/);
-  assert.match(style, /\.profile-form\s*\{/);
-  assert.match(style, /\.quiet-hours-field\s*\{/);
+  assert.match(renderer, /view === "settings"\) openSettingsWindow\(\)/);
+  assert.match(renderer, /window\.desktopWindow\?\.openSettings/);
+  assert.match(renderer, /설정 창을 열 수 없습니다/);
+  assert.doesNotMatch(renderer, /function renderSettings/);
+  assert.doesNotMatch(renderer, /data-settings-profile/);
+  assert.doesNotMatch(renderer, /data-settings-source/);
+  assert.match(preload, /openSettings/);
 });
 
 test("desktop mascot shows a once-per-day summary bubble linked to Today", async () => {
@@ -238,24 +211,6 @@ test("desktop mascot shows a once-per-day summary bubble linked to Today", async
   assert.match(renderer, /openStandalonePanel\(\{ view: targetView \}\)/);
   assert.match(notificationState, /daily-summary/);
   assert.match(renderer, /next\.targetView === "today" \? "오늘 보기" : "자세히 보기"/);
-});
-
-test("desktop settings provides weekly schedule management with existing detail actions", async () => {
-  const [renderer, style] = await Promise.all([
-    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
-    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
-  ]);
-
-  assert.match(renderer, /data-settings-schedule/);
-  assert.match(renderer, /openView\("schedule-settings"\)/);
-  assert.match(renderer, /groupScheduledItems/);
-  assert.match(renderer, /data-managed-item-id/);
-  assert.match(renderer, /item\.kind === "event" && item\.endAt !== undefined/);
-  assert.match(renderer, /formatDateTime\(at\).*formatDateTime\(item\.endAt\)/s);
-  assert.match(renderer, /data-management-add/);
-  assert.match(renderer, /data-management-refresh/);
-  assert.match(style, /\.management-toolbar\s*\{/);
-  assert.match(style, /\.schedule-groups\s*\{/);
 });
 
 test("desktop calendar renders schedules as day and time groups", async () => {

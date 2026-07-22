@@ -37,6 +37,8 @@ test("독립 상세 패널은 완료·미룸·수정·삭제·리마인더 액�
   assert.match(script, /desktopApi\.delete/);
   assert.match(script, /desktopApi\.reminder/);
   assert.match(script, /createExclusiveActionRunner/);
+  assert.match(script, /runDetailAction/);
+  assert.ok((script.match(/startVersion !== navigationVersion/g) ?? []).length >= 4);
 });
 
 test("캐릭터 메뉴와 알림 상세 버튼은 독립 패널 창을 연다", async () => {

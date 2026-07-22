@@ -176,14 +176,14 @@ function renderDetail(detail) {
         <div><input id="reminder-offset" name="offsetMinutes" type="number" min="1" step="1" value="${escapeHtml(form.reminderOffsetMinutes ?? "")}" placeholder="예: 60" required /><span>분 전</span><button class="secondary-button" type="submit">저장</button></div>
       </form>` : ""}
     </article>`;
-  panelContent.querySelector("[data-complete]")?.addEventListener("click", () => runAction(async () => {
-    unwrapResult(await desktopApi.complete(item.id));
-    await openDetail(item.id);
-  }));
-  panelContent.querySelector("[data-snooze]")?.addEventListener("click", () => runAction(async () => {
-    unwrapResult(await desktopApi.snooze(item.id, tomorrowAtSameTime()));
-    await openDetail(item.id);
-  }));
+  panelContent.querySelector("[data-complete]")?.addEventListener("click", () => runDetailAction(
+    () => desktopApi.complete(item.id),
+    item.id,
+  ));
+  panelContent.querySelector("[data-snooze]")?.addEventListener("click", () => runDetailAction(
+    () => desktopApi.snooze(item.id, tomorrowAtSameTime()),
+    item.id,
+  ));
   panelContent.querySelector("[data-edit]")?.addEventListener("click", () => renderEdit(detail));
   panelContent.querySelector("[data-delete]")?.addEventListener("click", () => runDelete(item));
   panelContent.querySelector("[data-reminder-form]")?.addEventListener("submit", (event) => runReminder(event, item.id));
@@ -206,6 +206,7 @@ function renderEdit(detail) {
 
 async function runEdit(event, item) {
   event.preventDefault();
+  const startVersion = navigationVersion;
   const data = new FormData(event.currentTarget);
   const optional = (name) => data.get(name)?.toString().trim() || undefined;
   await runAction(async () => {
@@ -213,14 +214,17 @@ async function runEdit(event, item) {
       title: optional("title") ?? "", date: optional("date") ?? "", time: optional("time") ?? "",
       ...(item.kind === "event" ? { endTime: optional("endTime") } : {}), location: optional("location"),
     }));
+    if (startVersion !== navigationVersion) return;
     await openDetail(item.id);
   });
 }
 
 async function runDelete(item) {
   if (!window.confirm(`'${item.title}'을(를) 삭제할까요? 목록에서는 숨겨지고 근거는 보존됩니다.`)) return;
+  const startVersion = navigationVersion;
   await runAction(async () => {
     unwrapResult(await desktopApi.delete(item.id));
+    if (startVersion !== navigationVersion) return;
     setTitle("삭제 완료");
     panelContent.innerHTML = '<div class="state-message success">항목을 삭제했습니다.</div>';
   });
@@ -228,6 +232,7 @@ async function runDelete(item) {
 
 async function runReminder(event, id) {
   event.preventDefault();
+  const startVersion = navigationVersion;
   const offset = parseReminderOffset(new FormData(event.currentTarget).get("offsetMinutes"));
   if (offset === undefined) {
     renderError(new Error("알림 시간은 1분 이상의 정수로 입력해 주세요."));
@@ -235,6 +240,16 @@ async function runReminder(event, id) {
   }
   await runAction(async () => {
     unwrapResult(await desktopApi.reminder(id, offset));
+    if (startVersion !== navigationVersion) return;
+    await openDetail(id);
+  });
+}
+
+async function runDetailAction(action, id) {
+  const startVersion = navigationVersion;
+  await runAction(async () => {
+    unwrapResult(await action());
+    if (startVersion !== navigationVersion) return;
     await openDetail(id);
   });
 }
