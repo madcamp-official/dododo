@@ -1,11 +1,11 @@
-# Context Assistant (`dododo`)
+# DoToRi (`dododo`)
 
 > KAIST 몰입캠프 공통과제 III — Option 1. Build the Core (3인 1팀)
 
 **한 줄 소개:** 학교 사이트·학교 이메일·LMS·파일·캘린더·화면 활동을 로컬 Context로 통합하고, 근거와 함께 다음 행동을 추천하는 대학생용 AI 비서.
 
-> 현재 단계는 핵심 파이프라인을 검증하는 Node.js 기반 CLI MVP다. Windows/macOS 설치형
-> Electron 데스크톱 UI는 같은 Core를 재사용해 병렬로 구현 중이다([프론트엔드 기획](docs/frontend-plan.md)).
+> Node.js CLI Core와 Electron 데스크톱 UI를 함께 제공한다. Windows 제품명과 실행
+> 파일명은 **DoToRi**이며, 저장소·CLI의 `dododo` 이름은 기존 호환성을 위해 유지한다.
 
 **슬로건:** 흩어진 정보를, 하나의 최신 Task Context로.
 
@@ -56,6 +56,9 @@
 
 ### 제3자 설치 및 원격 LLM 연결
 
+Windows 사용자는 [DoToRi v0.1.1 설치 파일](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)을
+바로 사용할 수 있다. 소스에서 CLI 또는 Desktop을 실행하려면 아래 순서를 따른다.
+
 ```bash
 # 1. 저장소 복제
 git clone https://github.com/madcamp-official/dododo.git
@@ -71,7 +74,7 @@ npm start -- setup
 # 4. 공개 Gateway와 실제 인증 추론 확인
 npm start -- doctor --llm-test
 
-# 5. Fixture 기반 첫 사용
+# 5. CLI Fixture 기반 첫 사용
 npm start -- sync
 npm start -- inbox
 npm start -- today
@@ -85,10 +88,11 @@ npm start -- ask "운영체제"
 > 원격 Gateway를 사용할 사람은 먼저 `cp .env.example .env`를 실행할 필요가 없다.
 > `.env.example`의 기본값은 로컬 Ollama를 직접 운영하는 개발자를 위한 예시다.
 
-`dododo.sources.json`을 만들지 않은 첫 실행은 학교 사이트·학교 이메일·LMS Fixture로
-동작한다. 실제 Source를 쓰려면 학교 사이트 URL과 Selector, 이메일 `.eml` 디렉터리,
-LMS HTML 경로를 `dododo.sources.json`에 별도로 설정해야 한다. 계정 자동 로그인이나
-OAuth 연동은 현재 MVP 범위에 포함되지 않는다.
+CLI는 `dododo.sources.json`이 없으면 개발·평가용 Fixture로 동작한다. v0.1.1 Desktop
+배포본은 예시 데이터가 사용자 DB에 들어가지 않도록 Fixture를 포함하지 않고 폴백도
+비활성화한다. 실제 Source를 쓰려면 학교 사이트 URL과 Selector, 이메일 `.eml` 디렉터리,
+LMS HTML 경로를 `dododo.sources.json`에 설정한다. 계정 자동 로그인이나 OAuth 연동은
+현재 MVP 범위에 포함되지 않는다.
 
 ### 운영자: 사용자별 설치 코드 발급
 
@@ -122,10 +126,11 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 | 운영체제 | 파일 | 상태 |
 |---|---|---|
-| Windows | `[installer.exe 또는 .msi]` | [ ] |
-| macOS | `[app 또는 .dmg]` | [ ] |
+| Windows | [DoToRi Setup 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.Setup.0.1.1.exe) | 배포 완료 |
+| Windows Portable | [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe) | 배포 완료 |
+| macOS | DMG·ZIP 빌드 설정 | 공개 릴리스 미배포 |
 
-> 공개 배포용 코드 서명은 확장 범위로 두고, MVP는 테스트 기기에 직접 설치해 검증한다.
+> 현재 Windows 실행 파일에는 상용 코드 서명이 없어 SmartScreen 경고가 표시될 수 있다.
 
 ---
 
@@ -138,7 +143,7 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 | 수집 | cheerio(학교 사이트 HTML), mailparser(`.eml` 학교 이메일) |
 | LLM | Ollama(로컬) 또는 `RemoteJobLLMProvider`(Cloudflare Tunnel + 팀 Inference Gateway) |
 | 테스트 | Node Test Runner(`node --test`), 외부 테스트 프레임워크 의존 없음 |
-| Desktop UI(진행 중) | Electron — 상세는 [프론트엔드 기획](docs/frontend-plan.md) |
+| Desktop UI | Electron 43, Main/Preload/Renderer, electron-builder(NSIS·Portable) |
 
 ---
 
@@ -149,20 +154,27 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 [MVP 범위의 3인 분업 상세](docs/mvp-scope.md#9-3인-분업-상세)에 남아 있다. 아래는
 회고용 기록만 남긴다.
 
-### 박도현 — Runtime & CLI
+### 김도연 — Desktop Renderer와 에셋
 
-- **주요 구현:** [작성]
-- **실험 및 문제 해결:** [작성]
+- **주요 구현:** 캐릭터 오버레이, 위치별 패널·말풍선, 오늘/캘린더/추천/물어보기 UI,
+  독립 설정 Renderer, 같이 공부하기 상태와 캐릭터 포즈·이펙트, Source 수집 결과 화면
+- **실험 및 문제 해결:** 투명 창 클릭 통과, 캐릭터와 패널 분리 배치, 연속 답변 말풍선,
+  전체 화면 산책과 스피드라인 위치, 배포본 브랜딩·Fixture 제외 QA
 
-### 김도연 — Data Ingestion & Local Storage
+### 김도현 — Backend 전체
 
-- **주요 구현:** [작성]
-- **실험 및 문제 해결:** [작성]
+- **주요 구현:** CLI, 학교 사이트·이메일·LMS·화면 Collector, SQLite와 Migration,
+  Context 추출·병합·Evidence·추천, Quiet Hours·리마인더·Watch, Privacy Gateway,
+  평가 도구와 원격 Inference Gateway·Job Queue
+- **실험 및 문제 해결:** Source별 오류 격리, 증분 동기화와 중복 방지, LLM 실패 폴백,
+  화면 Privacy 경계, Dead Letter 처리와 근거 추적 가능한 추천 정책
 
-### 김도현 — Context Intelligence & Recommendation
+### 박도현 — Electron Main·Preload·패키징
 
-- **주요 구현:** [작성]
-- **실험 및 문제 해결:** [작성]
+- **주요 구현:** 안전한 IPC 브리지, 캐릭터·결과 패널·설정 BrowserWindow 관리,
+  드래그·다중 모니터 위치 계산, Desktop Watch·알림 배선, Windows/macOS 패키징 기반
+- **실험 및 문제 해결:** 투명 always-on-top 창의 mouse passthrough, 창 재사용·재열기,
+  캐릭터 주변 빈 공간 패널 배치, 화면 캡처 트리거와 세션 수명주기 연결
 
 매일 최소 두 번 통합하는 순서는 [MVP 범위 11. 통합 순서](docs/mvp-scope.md#11-통합-순서)를 따른다.
 
@@ -180,38 +192,46 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 | 종류 | 개수 | 설명 |
 |---|---:|---|
-| 학교 공지 | [TBD] | 정상 공지·마감 변경·취소 공지 등 |
-| 학교 이메일 | [TBD] | 모집 안내·과제 변경·면담 안내 등 |
-| LMS 공지 | [TBD] | 과제·시험 일정 공지와 수정 공지 |
-| 화면 Fixture | [TBD] | 코딩·문서 작성·브라우징 등 |
+| 학교 공지 | JSON 1개·HTML 1개 | 공모전 공지와 실제 HTML Parser 입력 |
+| 학교 이메일 | JSON 1개·EML 3개 | 공모전·과제·면담 안내와 Message-ID 중복 처리 |
+| LMS 공지 | JSON 3개·HTML 2개 | 과제·시험 일정과 수정 공지 |
+| 화면 Fixture | JSON 1개 | 운영체제 학습 활동과 Task 연결 |
+| Ground Truth | JSON 2개·TSV 1개 | 추출 F1, 다중 출처 병합과 평가 입력 |
 
 ### 핵심 지표
 
 | 지표 | 초기값 | 목표 | 최종 결과 |
 |---|---:|---:|---:|
-| 할 일·마감 추출 F1 | [TBD] | [TBD] | [TBD] |
-| 다중 출처 Context 병합 정확도 | [TBD] | [TBD] | [TBD] |
-| 변경 감지 후 반영 시간 | [TBD] | [TBD] | [TBD] |
-| 잘못된 추천 비율 | [TBD] | [TBD] | [TBD] |
-| 중복 알림 비율 | [TBD] | [TBD] | [TBD] |
-| 화면 조언 생성 시간 | [TBD] | [TBD] | [TBD] |
-| 외부 LLM 전송 데이터 크기 | [TBD] | [TBD] | [TBD] |
+| 할 일·마감 추출 F1 | 평가기 없음 | 대표 Ground Truth 1.0 | 대표 파이프라인 F1 1.0 |
+| 다중 출처 Context 병합 정확도 | 평가기 없음 | 대표 병합 1.0 | 사이트+이메일 병합 1.0 |
+| 변경 감지 후 반영 시간 | 전체 재분석 | 변경분만 처리 | Content Hash 기반 증분 처리 구현 |
+| 잘못된 추천 비율 | 미측정 | 완료·취소·Snooze 제외 | 정책 회귀 테스트 통과, 실사용 비율 미측정 |
+| 중복 알림 비율 | 미측정 | 동일 항목 반복 억제 | Recommendation 이력·리마인더 마감 키로 억제 |
+| 화면 조언 생성 시간 | 고정 폴링 | 이벤트 기반 | Idle→Active 트리거와 최소 3분 간격 구현 |
+| 외부 LLM 전송 데이터 크기 | 원문 전달 위험 | 최소 범위 | Privacy Gateway 마스킹·Chunk 적용, 크기 미측정 |
 
 ### 실패한 시도와 발견
 
-- [실패한 접근 또는 예상과 달랐던 결과]
-- [실패 원인]
-- [변경한 방법]
-- [발견한 내용]
+- 투명 Electron 창 전체가 클릭 영역이 되거나 반대로 클릭이 뒤 창으로 통과해 메뉴를
+  열 수 없는 문제가 있었다. 알파 마스크 hit-test와 Renderer 소유 mouse passthrough로
+  캐릭터·메뉴만 상호작용하도록 수정했다.
+- 캐릭터 내부 CSS transform만으로 산책시키면 실제 화면 이동 범위가 작고 패널과 따로
+  움직였다. Main의 화면 좌표 드래그 IPC와 workArea 계산을 재사용해 모니터 끝까지 이동시켰다.
+- 배포본이 Source 미등록 시 Fixture를 불러 예시 Context를 사용자 DB에 저장했다.
+  Desktop 전용 `useFixtureFallback: false`와 패키징 제외 규칙을 추가하고 v0.1.1에서
+  사용자 DB·제품명을 DoToRi로 분리했다.
+- Electron OS 토스트와 Renderer 알림이 이원화되어 모든 Desktop 알림을 캐릭터
+  말풍선 이벤트 하나로 통합했다.
 
 ---
 
 ## 배포 결과물
 
-- **GitHub:** [REPOSITORY_URL]
-- **Windows 설치 파일:** [URL]
-- **macOS 설치 파일:** [URL]
-- **데모 영상:** [URL]
+- **GitHub:** [madcamp-official/dododo](https://github.com/madcamp-official/dododo)
+- **Windows 설치 파일:** [DoToRi v0.1.1](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)
+- **Windows Portable:** [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe)
+- **macOS 설치 파일:** 빌드 설정 완료, 공개 릴리스 미배포
+- **데모 영상:** 별도 공개 URL 없음
 - **실행 방법:** [Getting Started](#getting-started) 참고
 
 ---
@@ -220,12 +240,21 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 ### Keep
 
-- [계속 유지하고 싶은 점]
+- Source → RawItem → Fact → ContextItem → Evidence → Recommendation 수직 흐름과 모듈 계약
+- 네트워크 없이 재현 가능한 Fixture·Ground Truth와 변경 영역 회귀 테스트
+- 사용자 데이터 로컬 저장, 읽기 전용 수집과 Privacy Gateway 경계
+- 작은 목표 단위 PR, 리뷰 반영 후 테스트·CI를 확인하는 통합 방식
 
 ### Problem
 
-- [문제가 되었던 점]
+- CLI 중심 초기 문서와 빠르게 확장된 Desktop 구현 상태가 자주 어긋났다.
+- 투명 창·다중 모니터·DPI·클릭 통과처럼 일반 웹 UI에 없는 Electron QA 비용이 컸다.
+- 실제 Source 설정이 없는 개발 Fixture와 공개 배포 데이터의 경계가 초기에 분리되지 않았다.
+- 코드 서명 인증서가 없어 Windows SmartScreen 경고를 제거하지 못했다.
 
 ### Try
 
-- [다음에 시도하거나 개선할 점]
+- 릴리스 체크리스트에 빈 사용자 데이터 디렉터리 설치·업그레이드 QA를 추가한다.
+- Windows 코드 서명 인증서 또는 Trusted Signing을 CI 패키징에 연결한다.
+- 학교 이메일·LMS 계정의 읽기 전용 실제 연동과 Source별 설정 UI를 확장한다.
+- Ground Truth 규모를 늘리고 추천 오류율·중복 알림률·응답 시간을 자동 리포트한다.
