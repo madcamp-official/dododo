@@ -5,14 +5,17 @@ import {
 } from "./captureTrigger.ts";
 
 const DEFAULT_IDLE_THRESHOLD_SECONDS = 60;
+const DEFAULT_LONG_IDLE_THRESHOLD_SECONDS = 10 * 60;
 const DEFAULT_MIN_INTERVAL_MS = 3 * 60_000;
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 
 export interface StudyCaptureSchedulerDependencies {
   getIdleSeconds: () => number;
   onTrigger: (reason: "idle-to-active", at: Date) => void;
+  onLongIdle?: (at: Date) => void;
   now?: () => Date;
   idleThresholdSeconds?: number;
+  longIdleThresholdSeconds?: number;
   minIntervalMs?: number;
   pollIntervalMs?: number;
   // 실제 타이머(node:setInterval/clearInterval)를 기본값으로 쓰되, 테스트에서는 시간을
@@ -36,12 +39,14 @@ export function createStudyCaptureScheduler(
 ): StudyCaptureScheduler {
   const now = dependencies.now ?? (() => new Date());
   const idleThresholdSeconds = dependencies.idleThresholdSeconds ?? DEFAULT_IDLE_THRESHOLD_SECONDS;
+  const longIdleThresholdSeconds = dependencies.longIdleThresholdSeconds ?? DEFAULT_LONG_IDLE_THRESHOLD_SECONDS;
   const minIntervalMs = dependencies.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
   const pollIntervalMs = dependencies.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const setIntervalFn = dependencies.setIntervalFn ?? ((handler, ms) => setInterval(handler, ms));
   const clearIntervalFn = dependencies.clearIntervalFn ?? ((handle) => clearInterval(handle as NodeJS.Timeout));
 
   let state: CaptureTriggerState = initialCaptureTriggerState();
+  let longIdleNotified = false;
   let handle: unknown;
 
   function pollOnce(): void {
@@ -49,13 +54,22 @@ export function createStudyCaptureScheduler(
     // 같은 시각을 쓴다 — 두 번 호출하면 전진하는 clock에서 최소 간격 판정 기준과
     // 실제 트리거 시각이 어긋난다.
     const at = now();
+    const idleSeconds = dependencies.getIdleSeconds();
     const decision = decideCaptureTrigger(state, {
       now: at,
-      idleSeconds: dependencies.getIdleSeconds(),
+      idleSeconds,
       idleThresholdSeconds,
       minIntervalMs,
     });
     state = decision.nextState;
+    if (idleSeconds >= longIdleThresholdSeconds) {
+      if (!longIdleNotified) {
+        longIdleNotified = true;
+        dependencies.onLongIdle?.(at);
+      }
+    } else {
+      longIdleNotified = false;
+    }
     if (decision.trigger && decision.reason !== undefined) {
       dependencies.onTrigger(decision.reason, at);
     }
@@ -69,6 +83,7 @@ export function createStudyCaptureScheduler(
   function start(): void {
     stop();
     state = initialCaptureTriggerState();
+    longIdleNotified = false;
     handle = setIntervalFn(pollOnce, pollIntervalMs);
   }
 

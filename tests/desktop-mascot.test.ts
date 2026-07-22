@@ -303,5 +303,14 @@ test("desktop mascot은 모든 미사용 포즈와 이펙트를 생각·왕복 �
   assert.match(expressions, /exclamation\.png/);
   assert.match(expressions, /sweat\.png/);
   assert.match(renderer, /runPatrol/);
-  assert.match(renderer, /PATROL_IDLE_MS = 10 \* 60_000/);
+  assert.match(renderer, /STUDY_IDLE_PATROL_MESSAGE = "지금 오랫동안 같은 화면인데 자고 계시는 거 아니죠\?"/);
+  assert.match(renderer, /characterEffect\.dataset\.effect = asset/);
+  assert.match(renderer, /window\.screen\.availWidth/);
+  assert.match(renderer, /bridge\.startDrag\(startX, pointerY\)/);
+  assert.match(renderer, /bridge\.moveDrag\(startX \+ \(targetX - startX\) \* eased, pointerY\)/);
+  assert.match(renderer, /next\.kind === "distraction" && next\.message === STUDY_IDLE_PATROL_MESSAGE/);
+  const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
+  assert.match(style, /is-walking[^}]*data-effect="speed-lines\.png"[^}]*z-index:\s*2[^}]*top:\s*48px/s);
+  assert.match(style, /data-walk-direction="right"[^}]*data-effect="speed-lines\.png"[^}]*left:\s*-15px/s);
+  assert.match(style, /data-walk-direction="left"[^}]*data-effect="speed-lines\.png"[^}]*right:\s*-15px/s);
 });

@@ -39,7 +39,7 @@ const runExclusiveTaskAction = createExclusiveActionRunner();
 const notificationStore = createNotificationStore();
 const STANDALONE_PANEL_VIEWS = new Set(["today", "calendar", "inbox", "ask"]);
 const NOTIFICATION_DISPLAY_MS = 6_000;
-const PATROL_IDLE_MS = 10 * 60_000;
+const STUDY_IDLE_PATROL_MESSAGE = "지금 오랫동안 같은 화면인데 자고 계시는 거 아니죠?";
 let activeNotification;
 let notificationTimer;
 const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => {
@@ -53,8 +53,6 @@ let notificationSubscriptionRetry;
 let unsubscribeNotifications;
 let dailySummaryRetryTimer;
 let effectTimer;
-let patrolTimer;
-let patrolAnimation;
 let patrolFrameTimer;
 let patrolRunId = 0;
 let isPatrolling = false;
@@ -136,7 +134,6 @@ function endCharacterDrag(event) {
   if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.classList.remove("is-dragging");
   }
-  schedulePatrol();
 }
 
 if (character instanceof HTMLImageElement) {
@@ -178,14 +175,12 @@ notificationDetail?.addEventListener("click", () => {
 subscribeToNotifications();
 void showDailySummaryOnFirstLaunch();
 const studySessionRestorePromise = restoreStudySession();
-schedulePatrol();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
   if (effectTimer !== undefined) window.clearTimeout(effectTimer);
   cancelPatrol();
-  if (patrolTimer !== undefined) window.clearTimeout(patrolTimer);
   stopStudyProgressTimer();
   unsubscribeNotifications?.();
   unsubscribePlacement?.();
@@ -329,12 +324,14 @@ function showCharacterEffect(asset, durationMs = 900) {
   if (!(characterEffect instanceof HTMLImageElement) || asset === undefined) return;
   if (effectTimer !== undefined) window.clearTimeout(effectTimer);
   characterEffect.src = `../../../resources/effects/${asset}`;
+  characterEffect.dataset.effect = asset;
   characterEffect.hidden = false;
   characterEffect.style.animation = "none";
   void characterEffect.offsetWidth;
   characterEffect.style.animation = "";
   effectTimer = window.setTimeout(() => {
     characterEffect.hidden = true;
+    delete characterEffect.dataset.effect;
     effectTimer = undefined;
   }, durationMs);
 }
@@ -349,21 +346,10 @@ function beginThinking() {
 function endThinking(effect) {
   if (effect !== undefined) showCharacterEffect(effect);
   updateStudyCharacter();
-  schedulePatrol();
-}
-
-function schedulePatrol() {
-  if (patrolTimer !== undefined) window.clearTimeout(patrolTimer);
-  patrolTimer = window.setTimeout(() => void runPatrol(), PATROL_IDLE_MS);
 }
 
 function canPatrol() {
-  return panel?.hidden === true
-    && popupMenu?.hidden === true
-    && notificationBubble?.hidden === true
-    && activeNotification === undefined
-    && activeStudySession === undefined
-    && draggingPointerId === undefined;
+  return activeStudySession !== undefined && draggingPointerId === undefined;
 }
 
 function wait(milliseconds) {
@@ -385,43 +371,62 @@ function stopWalkFrames() {
   patrolFrameTimer = undefined;
 }
 
-async function walkLeg(runId, from, to, direction) {
+async function walkLeg(runId, direction) {
   if (!(characterButton instanceof HTMLElement) || runId !== patrolRunId) return false;
+  const bridge = window.desktopMascot;
+  if (typeof bridge?.startDrag !== "function"
+    || typeof bridge?.moveDrag !== "function"
+    || typeof bridge?.endDrag !== "function") return false;
   characterButton.dataset.walkDirection = direction;
   characterButton.classList.add("is-walking");
-  showCharacterEffect("dust.png");
   startWalkFrames(true);
-  showCharacterEffect("speed-lines.png", 4_500);
-  patrolAnimation?.cancel();
-  patrolAnimation = characterButton.animate(
-    [{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }],
-    { duration: 4_500, easing: "ease-in-out", fill: "forwards" },
-  );
-  await patrolAnimation.finished.catch(() => undefined);
+  showCharacterEffect("dust.png");
+  await wait(180);
+  if (runId !== patrolRunId) return false;
+  showCharacterEffect("speed-lines.png");
+
+  const rect = characterButton.getBoundingClientRect();
+  const startX = window.screenX + rect.left + rect.width / 2;
+  const pointerY = window.screenY + rect.top + rect.height / 2;
+  const availableLeft = window.screen.availLeft ?? 0;
+  const targetLeft = direction === "left"
+    ? availableLeft + 4
+    : availableLeft + window.screen.availWidth - rect.width - 4;
+  const targetX = targetLeft + rect.width / 2;
+  const startedAt = performance.now();
+  const durationMs = 4_500;
+
+  bridge.startDrag(startX, pointerY);
+  while (runId === patrolRunId) {
+    const progress = Math.min(1, (performance.now() - startedAt) / durationMs);
+    const eased = progress < 0.5
+      ? 2 * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+    bridge.moveDrag(startX + (targetX - startX) * eased, pointerY);
+    if (progress >= 1) break;
+    await wait(16);
+  }
+  bridge.endDrag();
   stopWalkFrames();
   return runId === patrolRunId;
 }
 
 async function runPatrol() {
-  patrolTimer = undefined;
   if (!canPatrol() || !(characterButton instanceof HTMLElement)) {
-    schedulePatrol();
     return;
   }
   isPatrolling = true;
   const runId = ++patrolRunId;
   const startsRight = (document.body.dataset.characterPlacement ?? "bottom-right").endsWith("right");
-  const distance = Math.max(0, window.innerWidth - characterButton.offsetWidth - 8);
-  const far = startsRight ? -distance : distance;
   const outward = startsRight ? "left" : "right";
   const homeward = startsRight ? "right" : "left";
 
-  if (!await walkLeg(runId, 0, far, outward)) return;
+  if (!await walkLeg(runId, outward)) return;
   showCharacterEffect("sparkle.png");
   startWalkFrames(false);
   await wait(900);
   stopWalkFrames();
-  if (runId !== patrolRunId || !await walkLeg(runId, far, 0, homeward)) return;
+  if (runId !== patrolRunId || !await walkLeg(runId, homeward)) return;
   showCharacterEffect("heart.png", 1_000);
   await wait(700);
   if (runId === patrolRunId) finishPatrol();
@@ -429,8 +434,6 @@ async function runPatrol() {
 
 function finishPatrol() {
   stopWalkFrames();
-  patrolAnimation?.cancel();
-  patrolAnimation = undefined;
   isPatrolling = false;
   if (characterButton instanceof HTMLElement) {
     characterButton.classList.remove("is-walking");
@@ -438,7 +441,6 @@ function finishPatrol() {
     characterButton.style.transform = "";
   }
   updateStudyCharacter();
-  schedulePatrol();
 }
 
 function cancelPatrol() {
@@ -704,12 +706,15 @@ function showNextNotification() {
   notificationBubble.setAttribute("aria-live", notificationMode(next.kind) === "quiet" ? "polite" : "assertive");
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
+  if (next.kind === "distraction" && next.message === STUDY_IDLE_PATROL_MESSAGE) {
+    void runPatrol();
+  }
   notificationDetail.hidden = next.contextItemId === undefined && next.targetView === undefined;
   notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히 보기";
   notificationBubble.hidden = false;
   notificationTimer = window.setTimeout(
     dismissActiveNotification,
-    next.kind === "answer" ? 15_000 : NOTIFICATION_DISPLAY_MS,
+    next.kind === "answer" || next.message === STUDY_IDLE_PATROL_MESSAGE ? 15_000 : NOTIFICATION_DISPLAY_MS,
   );
 }
 
@@ -721,10 +726,7 @@ function dismissActiveNotification() {
   activeNotification = undefined;
   if (notificationBubble instanceof HTMLElement) notificationBubble.hidden = true;
   if (notificationStore.hasImmediate()) showNextNotification();
-  else {
-    updateStudyCharacter();
-    schedulePatrol();
-  }
+  else updateStudyCharacter();
 }
 
 function updateNotificationBadge() {
@@ -988,7 +990,6 @@ function renderError(error) {
 function closePanel() {
   stopStudyProgressTimer();
   panel.hidden = true;
-  schedulePatrol();
 }
 
 function viewTitle(view) {
