@@ -6,9 +6,15 @@ import type { LLMProvider } from "./provider.ts";
 // "Privacy Gateway의 이미지 미대응"). 이 판단이 호출부마다(advise.ts, extractScreenActivity,
 // 데스크톱 captureVisionPipeline 등) 따로 구현되면 한 곳이라도 놓쳤을 때 원본 이미지가
 // 새어 나갈 수 있다 — 하나의 함수로 모아 모든 호출부가 같은 기준을 쓰게 한다.
+//
+// doyeonid 리뷰(PR #99) P1: imageDataBoundary가 없는(undefined) Provider를
+// 예전엔 "remote만 아니면 허용"으로 fail-open 처리했다 — 새 원격 Provider 구현이
+// 이 필드를 깜빡 빠뜨리면 그 순간 하드 방어선이 무력화된다. 하드 방어선이라면
+// "local"이라고 명시한 경우만 허용하는 fail-closed여야 한다 — 필드 누락·오타·
+// 새로운 값 전부 차단 쪽으로 안전하게 떨어진다.
 export function isImageTransmissionAllowed(
   provider: Pick<LLMProvider, "imageDataBoundary"> | undefined,
 ): boolean {
   if (provider === undefined) return false;
-  return provider.imageDataBoundary !== "remote";
+  return provider.imageDataBoundary === "local";
 }

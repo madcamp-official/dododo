@@ -15,6 +15,12 @@ test("imageDataBoundary가 local이면 허용한다", () => {
   assert.equal(isImageTransmissionAllowed({ imageDataBoundary: "local" }), true);
 });
 
-test("imageDataBoundary가 아예 없으면(구식 Provider) 안전하게 허용한다(local과 동일 취급)", () => {
-  assert.equal(isImageTransmissionAllowed({}), true);
+// doyeonid 리뷰(PR #99) P1: 하드 방어선이므로 "local"이라고 명시하지 않은 값은
+// 전부 차단해야 한다 — 필드를 깜빡한 새 Provider 구현이 조용히 허용되면 안 된다.
+test("imageDataBoundary가 없으면(필드 누락) fail-closed로 차단한다", () => {
+  assert.equal(isImageTransmissionAllowed({}), false);
+});
+
+test("imageDataBoundary가 local/remote가 아닌 다른 값이어도 차단한다", () => {
+  assert.equal(isImageTransmissionAllowed({ imageDataBoundary: "unknown" as never }), false);
 });
