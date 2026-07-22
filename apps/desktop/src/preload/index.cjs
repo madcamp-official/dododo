@@ -4,6 +4,7 @@ const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
 const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
+const CHARACTER_PLACEMENT = "desktop:character-placement";
 
 contextBridge.exposeInMainWorld("desktopMascot", {
   setMousePassthrough(shouldIgnore) {
@@ -19,6 +20,11 @@ contextBridge.exposeInMainWorld("desktopMascot", {
   },
   endDrag() {
     ipcRenderer.send(END_CHARACTER_DRAG);
+  },
+  onPlacement(callback) {
+    const listener = (_event, placement) => callback(placement);
+    ipcRenderer.on(CHARACTER_PLACEMENT, listener);
+    return () => ipcRenderer.removeListener(CHARACTER_PLACEMENT, listener);
   },
 });
 

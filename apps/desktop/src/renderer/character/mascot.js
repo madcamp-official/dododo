@@ -37,6 +37,11 @@ const notificationStore = createNotificationStore();
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
+const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => {
+  if (["top-left", "top-right", "bottom-left", "bottom-right"].includes(placement)) {
+    document.body.dataset.characterPlacement = placement;
+  }
+});
 let activeStudySessionId;
 
 function prepareAlphaMask() {
@@ -152,6 +157,7 @@ void restoreStudySession();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   unsubscribeNotifications?.();
+  unsubscribePlacement?.();
 }, { once: true });
 
 document.querySelector("[data-close-panel]")?.addEventListener("click", closePanel);
