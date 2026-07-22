@@ -228,6 +228,9 @@ test("desktop mascot shows a once-per-day summary bubble linked to Today", async
   assert.match(adapter, /setUiState/);
   assert.match(renderer, /showDailySummaryOnFirstLaunch/);
   assert.match(renderer, /lastDailySummaryDate/);
+  assert.match(renderer, /dailySummaryRetryDelayMs/);
+  assert.match(renderer, /dailySummaryRetryTimer = window\.setTimeout/);
+  assert.match(renderer, /window\.clearTimeout\(dailySummaryRetryTimer\)/);
   assert.match(renderer, /targetView === "today"/);
   assert.match(renderer, /openView\("today"\)/);
   assert.match(notificationState, /daily-summary/);

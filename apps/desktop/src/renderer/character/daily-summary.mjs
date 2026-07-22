@@ -40,6 +40,25 @@ export function shouldShowDailySummary(lastShownDate, profile, now = new Date(),
   return { today, show: lastShownDate !== today && !isWithinQuietHours(profile, now, timeZone) };
 }
 
+export function dailySummaryRetryDelayMs(profile, now = new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  if (!isWithinQuietHours(profile, now, timeZone)) return undefined;
+  const end = parseTime(profile?.quietHours?.end);
+  if (end === undefined) return undefined;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const currentMinutes = get("hour") * 60 + get("minute");
+  let remainingMinutes = end - currentMinutes;
+  if (remainingMinutes <= 0) remainingMinutes += 24 * 60;
+  return Math.max(1_000, (remainingMinutes * 60 - get("second")) * 1_000 - now.getMilliseconds());
+}
+
 function parseTime(value) {
   const match = /^(?:([01]\d|2[0-3])):([0-5]\d)$/.exec(value ?? "");
   return match === null ? undefined : Number(match[1]) * 60 + Number(match[2]);

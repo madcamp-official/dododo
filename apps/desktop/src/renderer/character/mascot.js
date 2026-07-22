@@ -14,7 +14,7 @@ import {
 } from "./notification-state.mjs";
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { profileFromFormData, profileToForm } from "./profile-form.mjs";
-import { buildDailySummary, shouldShowDailySummary } from "./daily-summary.mjs";
+import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -39,6 +39,7 @@ let activeNotification;
 let notificationTimer;
 let notificationSubscriptionRetry;
 let unsubscribeNotifications;
+let dailySummaryRetryTimer;
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -152,6 +153,7 @@ void showDailySummaryOnFirstLaunch();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
+  if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
   unsubscribeNotifications?.();
 }, { once: true });
 
@@ -345,14 +347,24 @@ async function showDailySummaryOnFirstLaunch() {
       desktopApi.uiStateGet(stateKey).then(unwrapResult),
       desktopApi.profileGet().then(unwrapResult),
     ]);
-    const decision = shouldShowDailySummary(lastShownDate, profile);
-    if (!decision.show) return;
+    const now = new Date();
+    const decision = shouldShowDailySummary(lastShownDate, profile, now);
+    if (!decision.show) {
+      const retryDelay = dailySummaryRetryDelayMs(profile, now);
+      if (retryDelay !== undefined && dailySummaryRetryTimer === undefined) {
+        dailySummaryRetryTimer = window.setTimeout(() => {
+          dailySummaryRetryTimer = undefined;
+          void showDailySummaryOnFirstLaunch();
+        }, retryDelay);
+      }
+      return;
+    }
     const { items } = unwrapResult(await desktopApi.today());
     handleNotification({
       kind: "daily-summary",
       message: buildDailySummary(items),
       targetView: "today",
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
     });
     unwrapResult(await desktopApi.uiStateSet(stateKey, decision.today));
   } catch (error) {

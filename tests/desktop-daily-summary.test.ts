@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 // @ts-expect-error Renderer 브라우저에서 직접 실행하는 JavaScript 모듈이다.
-import { buildDailySummary, isWithinQuietHours, localDateKey, shouldShowDailySummary } from "../apps/desktop/src/renderer/character/daily-summary.mjs";
+import { buildDailySummary, dailySummaryRetryDelayMs, isWithinQuietHours, localDateKey, shouldShowDailySummary } from "../apps/desktop/src/renderer/character/daily-summary.mjs";
 // @ts-expect-error Renderer 브라우저에서 직접 실행하는 JavaScript 모듈이다.
 import { normalizeNotification, notificationKindLabel, notificationMode } from "../apps/desktop/src/renderer/character/notification-state.mjs";
 
@@ -23,6 +23,18 @@ test("같은 날짜 또는 Quiet Hours에는 일일 요약을 표시하지 않�
   assert.deepEqual(shouldShowDailySummary("2026-07-21", {}, daytime), { today: "2026-07-21", show: false });
   assert.equal(shouldShowDailySummary(undefined, profile, new Date("2026-07-21T14:00:00.000Z")).show, false);
   assert.equal(shouldShowDailySummary(undefined, profile, daytime).show, true);
+});
+
+test("Quiet Hours 종료까지 남은 시간만큼 재시도를 예약한다", () => {
+  assert.equal(
+    dailySummaryRetryDelayMs(profile, new Date("2026-07-21T14:30:15.250Z")),
+    7 * 60 * 60 * 1_000 + 29 * 60 * 1_000 + 44_750,
+  );
+  assert.equal(
+    dailySummaryRetryDelayMs(profile, new Date("2026-07-21T21:30:15.250Z")),
+    29 * 60 * 1_000 + 44_750,
+  );
+  assert.equal(dailySummaryRetryDelayMs(profile, new Date("2026-07-21T03:00:00.000Z")), undefined);
 });
 
 test("빈 오늘 목록은 부담 없는 안내로 요약한다", () => {
