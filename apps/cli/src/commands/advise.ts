@@ -1,4 +1,4 @@
-import { extractScreenActivity } from "../../../../packages/context-engine/src/index.ts";
+import { extractScreenActivity, isImageTransmissionAllowed } from "../../../../packages/context-engine/src/index.ts";
 import type { ScreenAdviceDecision } from "../runtime/adviceLookup.ts";
 import type { CliContainer } from "../runtime/container.ts";
 
@@ -57,7 +57,12 @@ async function runLiveCapture(container: CliContainer, focusMode: boolean, now: 
   if (focusMode) {
     return "조언하지 않습니다.\n이유: 집중 모드에서는 화면을 캡처하지 않습니다.";
   }
-  if (container.llmConfig?.provider === "remote-job") {
+  // llmConfig.provider(설정 문자열) 대신 실제 사용할 provider 인스턴스의
+  // imageDataBoundary를 직접 확인한다 — extractScreenActivity·데스크톱
+  // captureVisionPipeline.ts와 같은 단일 기준(isImageTransmissionAllowed)을 쓴다.
+  // llmProvider가 아예 없으면(undefined) 이 검사를 통과시키고 캡처 이후 아래
+  // "LLM 미설정" 분기로 보낸다 — 기존 동작 유지.
+  if (container.llmProvider !== undefined && !isImageTransmissionAllowed(container.llmProvider)) {
     return "원격 화면 분석은 개인정보 보호 처리가 준비되지 않아 사용할 수 없습니다. 로컬 Ollama를 사용하세요.";
   }
 

@@ -18,6 +18,10 @@ function recordingProvider(
   return {
     requests,
     provider: {
+      // doyeonid 리뷰(PR #99) P1 이후 isImageTransmissionAllowed가 fail-closed라
+      // "local"을 명시하지 않은 Provider는 원격으로 간주돼 차단된다 — 이 fake
+      // Provider는 로컬 Ollama를 흉내내는 것이므로 명시해야 한다.
+      imageDataBoundary: "local",
       async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
         requests.push(request as LLMJSONRequest<unknown>);
         if (!request.validate(response)) throw new Error("invalid");
@@ -28,6 +32,7 @@ function recordingProvider(
 }
 
 const failingProvider: LLMProvider = {
+  imageDataBoundary: "local",
   async completeJSON() {
     throw new Error("Vision 모델 호출 실패");
   },
