@@ -16,6 +16,8 @@ import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
 import { groupScheduledItems } from "./schedule-management.mjs";
+import { studyProgressView, studySummaryView } from "./study-session-ui.mjs";
+import { notificationExpression, restingExpression } from "./character-expression.mjs";
 
 const character = document.querySelector(".character");
 const menuToggle = document.querySelector("[data-menu-toggle]");
@@ -43,7 +45,8 @@ const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => 
     document.body.dataset.characterPlacement = placement;
   }
 });
-let activeStudySessionId;
+let activeStudySession;
+let studyProgressTimer;
 let notificationSubscriptionRetry;
 let unsubscribeNotifications;
 let dailySummaryRetryTimer;
@@ -157,11 +160,12 @@ notificationDetail?.addEventListener("click", () => {
 
 subscribeToNotifications();
 void showDailySummaryOnFirstLaunch();
-void restoreStudySession();
+const studySessionRestorePromise = restoreStudySession();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
+  stopStudyProgressTimer();
   unsubscribeNotifications?.();
   unsubscribePlacement?.();
 }, { once: true });
@@ -178,10 +182,11 @@ popupMenu?.addEventListener("click", async (event) => {
 });
 
 async function openStudySession() {
+  await studySessionRestorePromise;
   popupMenu.hidden = true;
   panel.hidden = false;
   panelTitle.textContent = "같이 공부하기";
-  if (activeStudySessionId === undefined) {
+  if (activeStudySession === undefined) {
     panelContent.innerHTML = `
       <p>세션 중 현재 화면을 분석해 관련 과제와 구체적인 조언을 찾습니다.</p>
       <label class="consent-row"><input type="checkbox" data-study-consent> 화면 캡처와 LLM 분석에 동의합니다.</label>
@@ -190,16 +195,23 @@ async function openStudySession() {
     panelContent.querySelector("[data-study-start]")?.addEventListener("click", startStudySession);
   } else {
     panelContent.innerHTML = `
-      <p>도토리와 같이 공부하는 중입니다.</p>
+      <section class="study-progress">
+        <span class="study-status-dot" aria-hidden="true"></span>
+        <div><strong data-study-elapsed>00:00</strong><p data-study-status aria-live="polite"></p></div>
+      </section>
+      <p class="hint">세션이 진행되는 동안에만 화면 분석 기능을 사용할 수 있습니다.</p>
       <button class="danger-button" type="button" data-study-end>세션 종료</button>`;
     panelContent.querySelector("[data-study-end]")?.addEventListener("click", endStudySession);
+    renderStudyProgress();
+    startStudyProgressTimer();
   }
 }
 
 async function restoreStudySession() {
   try {
     const active = unwrapResult(await desktopApi.studyGet());
-    activeStudySessionId = active?.sessionId;
+    activeStudySession = active === undefined ? undefined : { ...active, restored: true };
+    updateStudyCharacter();
   } catch {
     // 세션 복원 실패는 다른 메뉴와 알림 사용을 막지 않는다.
   }
@@ -210,7 +222,8 @@ async function startStudySession() {
     const consent = panelContent.querySelector("[data-study-consent]")?.checked === true;
     try {
       const result = unwrapResult(await desktopApi.studyStart(consent));
-      activeStudySessionId = result.sessionId;
+      activeStudySession = { ...result, restored: false };
+      updateStudyCharacter();
       await openStudySession();
     } catch (error) { renderError(error); }
   });
@@ -219,18 +232,59 @@ async function startStudySession() {
 async function endStudySession() {
   await runExclusivePanelAction(async () => {
     try {
-      const result = unwrapResult(await desktopApi.studyEnd(activeStudySessionId));
-      activeStudySessionId = undefined;
+      const result = unwrapResult(await desktopApi.studyEnd(activeStudySession.sessionId));
+      activeStudySession = undefined;
+      stopStudyProgressTimer();
+      updateStudyCharacter();
+      const summary = studySummaryView(result);
       panelContent.innerHTML = `
-        <h2>${escapeHtml(result.summaryText)}</h2>
-        <p>${result.durationMinutes}분 · 조언 ${result.adviceCount}회</p>
+        <section class="study-summary">
+          <span aria-hidden="true">✓</span>
+          <div><h2>${escapeHtml(summary.title)}</h2>
+          <p>${escapeHtml(summary.durationLabel)} · ${escapeHtml(summary.adviceLabel)}</p></div>
+        </section>
         <button class="primary-button" type="button" data-study-restart>다시 시작</button>`;
       panelContent.querySelector("[data-study-restart]")?.addEventListener("click", openStudySession);
     } catch (error) { renderError(error); }
   });
 }
 
+function renderStudyProgress(now = new Date()) {
+  if (activeStudySession === undefined) return;
+  const view = studyProgressView(activeStudySession, now);
+  const elapsed = panelContent.querySelector("[data-study-elapsed]");
+  const status = panelContent.querySelector("[data-study-status]");
+  if (elapsed !== null) elapsed.textContent = view.elapsedLabel;
+  if (status !== null && status.textContent !== view.statusText) status.textContent = view.statusText;
+}
+
+function startStudyProgressTimer() {
+  stopStudyProgressTimer();
+  studyProgressTimer = window.setInterval(() => renderStudyProgress(), 1_000);
+}
+
+function stopStudyProgressTimer() {
+  if (studyProgressTimer !== undefined) window.clearInterval(studyProgressTimer);
+  studyProgressTimer = undefined;
+}
+
+function updateStudyCharacter() {
+  document.body.classList.toggle("is-studying", activeStudySession !== undefined);
+  if (activeNotification !== undefined) return;
+  setCharacterExpression(restingExpression(activeStudySession !== undefined));
+}
+
+function setCharacterExpression(expression) {
+  if (!(character instanceof HTMLImageElement)) return;
+  if (!character.src.endsWith(`/${expression.asset}`)) {
+    character.addEventListener("load", prepareAlphaMask, { once: true });
+    character.src = `../../../resources/character/${expression.asset}`;
+  }
+  character.alt = expression.alt;
+}
+
 async function openView(view, { throwOnError = false } = {}) {
+  stopStudyProgressTimer();
   popupMenu.hidden = true;
   panel.hidden = false;
   panelTitle.textContent = viewTitle(view);
@@ -500,6 +554,7 @@ function showNextNotification() {
     || !(notificationDetail instanceof HTMLButtonElement)) return;
 
   activeNotification = next;
+  setCharacterExpression(notificationExpression(next.kind));
   notificationBubble.setAttribute("aria-live", notificationMode(next.kind) === "quiet" ? "polite" : "assertive");
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
@@ -516,7 +571,8 @@ function dismissActiveNotification() {
   }
   activeNotification = undefined;
   if (notificationBubble instanceof HTMLElement) notificationBubble.hidden = true;
-  showNextNotification();
+  if (notificationStore.hasImmediate()) showNextNotification();
+  else updateStudyCharacter();
 }
 
 function updateNotificationBadge() {
@@ -940,6 +996,7 @@ function renderError(error) {
 }
 
 function closePanel() {
+  stopStudyProgressTimer();
   panel.hidden = true;
 }
 

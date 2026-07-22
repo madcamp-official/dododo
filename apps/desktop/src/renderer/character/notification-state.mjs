@@ -71,6 +71,9 @@ export function createNotificationStore() {
     takeImmediate() {
       return immediate.shift();
     },
+    hasImmediate() {
+      return immediate.length > 0;
+    },
     listQuiet() {
       return [...quiet];
     },
