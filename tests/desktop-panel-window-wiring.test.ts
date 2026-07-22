@@ -18,7 +18,7 @@ test("패널 창은 전용 Renderer 경로를 로드하고 배치 계산·coordi
   const panelWindow = await readFile("apps/desktop/src/main/windows/panelWindow.mjs", "utf8");
 
   assert.match(panelWindow, /createPanelWindowCoordinator/);
-  assert.match(panelWindow, /layoutPanelWindow\(layout\.characterPlacement/);
+  assert.match(panelWindow, /layoutPanelWindow\(layout\.characterBounds/);
   assert.match(panelWindow, /window\.loadFile\(rendererPath\)/);
   assert.match(panelWindow, /did-finish-load/);
 });
@@ -41,7 +41,8 @@ test("index.mjs는 발신 창을 검증하고 payload를 parsePanelRoute로 거�
   assert.match(main, /ipcMain\.on\(OPEN_PANEL, \(event, payload\) => \{/);
   assert.match(main, /characterWindows\.has\(senderWindow\)/);
   assert.match(main, /parsePanelRoute\(payload\)/);
-  assert.match(main, /screen\.getDisplayMatching\(senderWindow\.getBounds\(\)\)\.workArea/);
+  assert.match(main, /screen\.getDisplayMatching\(windowBounds\)\.workArea/);
+  assert.match(main, /openPanel\(route, \{ characterBounds, workArea \}\)/);
 });
 
 test("preload는 desktopWindow.openPanel/onPanelNavigate로 패널 창과 통신한다", async () => {

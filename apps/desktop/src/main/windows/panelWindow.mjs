@@ -14,8 +14,8 @@ export function createOpenPanel({ preloadPath, rendererPath }) {
   const coordinator = createPanelWindowCoordinator();
 
   return function openPanel(route, layout) {
-    coordinator.open(route, (initialRoute) => {
-      const position = layoutPanelWindow(layout.characterPlacement, PANEL_SIZE, layout.workArea);
+    const position = layoutPanelWindow(layout.characterBounds, PANEL_SIZE, layout.workArea);
+    coordinator.open(route, position, (initialRoute) => {
       const window = new BrowserWindow({
         ...buildPanelWindowOptions(preloadPath),
         x: position.x,
@@ -40,6 +40,7 @@ export function createOpenPanel({ preloadPath, rendererPath }) {
         isDestroyed: () => window.isDestroyed(),
         show: () => window.show(),
         focus: () => window.focus(),
+        setPosition: (nextPosition) => window.setPosition(nextPosition.x, nextPosition.y),
         navigate: (nextRoute) => {
           const { shouldSendNow } = routeGate.setRoute(nextRoute);
           if (shouldSendNow) window.webContents.send(PANEL_NAVIGATE_CHANNEL, nextRoute);
