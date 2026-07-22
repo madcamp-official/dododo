@@ -4,6 +4,10 @@
 `dododo.sources.json`의 `schoolSite.recipe`로 표현한다. 기존 `selectors` 설정도 계속
 지원하지만, 실제 학교 게시판에는 Recipe 사용을 권장한다.
 
+현재 한양대 컴퓨터소프트웨어학부 취업게시판과 한양대 전체공지는 검증된 내장 Recipe가
+있어 Desktop 설정에서 URL만 등록해도 자동 적용된다. 설정 파일에 `recipe`를 직접
+지정하면 내장 Recipe보다 우선한다.
+
 ```json
 {
   "schoolSite": {

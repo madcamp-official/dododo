@@ -38,19 +38,17 @@ export class SchoolSiteCollector extends BaseCollector {
       throw new Error(`학교 사이트 Recipe가 공지 항목을 찾지 못했습니다: ${this.options.baseUrl}`);
     }
     if (this.options.recipe?.detail !== undefined) {
-      const detailed: ParsedSchoolNotice[] = [];
-      for (const notice of notices) {
+      notices = await mapWithConcurrency(notices, 4, async (notice) => {
         try {
-          detailed.push(await this.loadDetail(notice));
+          return await this.loadDetail(notice);
         } catch (error) {
           this.errors.push({
             sourceUri: notice.uri,
             message: `상세 공지를 읽지 못했습니다: ${error instanceof Error ? error.message : String(error)}`,
           });
-          detailed.push(notice);
+          return notice;
         }
-      }
-      notices = detailed;
+      });
     }
     notices = [...new Map(notices.map((notice) => [notice.externalId, notice])).values()];
 
@@ -98,9 +96,27 @@ export class SchoolSiteCollector extends BaseCollector {
   }
 }
 
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(values[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export * from "./parser.ts";
 export * from "./types.ts";
 export * from "./http-loader.ts";
+export * from "./presets.ts";
 
 function stableRawItemId(sourceId: string, externalId: string): string {
   const digest = createHash("sha256")

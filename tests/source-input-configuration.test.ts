@@ -77,6 +77,29 @@ test("설정으로 학교 사이트, EML 디렉터리와 LMS HTML Collector를 �
   }
 });
 
+test("한양대 취업게시판은 URL만 등록해도 내장 Recipe로 목록과 상세를 수집한다", async () => {
+  const listHtml = `<table class="bbs_con"><tbody><tr>
+    <td></td><td>1</td><td class="left"><a href="/board/job_board.php?ptype=view&amp;idx=30922">Intern notice</a></td>
+    <td>office</td><td>26.07.22</td><td>5</td>
+  </tr></tbody></table>`;
+  const collectors = createSourceCollectors({
+    schoolSite: { url: "https://cs.hanyang.ac.kr/board/job_board.php" },
+  }, {
+    now: () => observedAt,
+    fetchImplementation: async (input) => new Response(
+      input.toString().includes("ptype=view")
+        ? `<table class="bbs_view"><tr><td class="view_content">Apply by Friday.</td></tr></table>`
+        : listHtml,
+      { headers: { "content-type": "text/html" } },
+    ),
+  });
+
+  const [result] = await collectSources(collectors);
+  assert.equal(result?.collected, 1);
+  assert.equal(result?.items[0]?.externalId, "30922");
+  assert.equal(result?.items[0]?.content, "Apply by Friday.");
+});
+
 test("비활성화한 Source는 Collector를 만들거나 설정값을 검증하지 않는다", () => {
   const collectors = createSourceCollectors({
     schoolSite: { enabled: false, url: "not-a-url" },

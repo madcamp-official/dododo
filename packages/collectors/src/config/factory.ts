@@ -1,7 +1,11 @@
 import type { Collector } from "../../../shared/src/index.ts";
 import { LmsCollector } from "../lms/index.ts";
 import { SchoolEmailCollector } from "../school-email/index.ts";
-import { createSchoolSiteHttpLoader, SchoolSiteCollector } from "../school-site/index.ts";
+import {
+  createSchoolSiteHttpLoader,
+  resolveBuiltInSchoolSiteRecipe,
+  SchoolSiteCollector,
+} from "../school-site/index.ts";
 import { loadEmlDirectory, loadLmsHtmlFiles, type InputLoadError } from "./loaders.ts";
 import type { SourceCollectorFactoryDependencies, SourceInputConfig } from "./types.ts";
 import { validateSourceInputConfig } from "./validator.ts";
@@ -15,17 +19,18 @@ export function createSourceCollectors(
 
   if (config.schoolSite !== undefined && config.schoolSite.enabled !== false) {
     const source = config.schoolSite;
+    const recipe = source.recipe ?? resolveBuiltInSchoolSiteRecipe(source.url);
     collectors.push(new SchoolSiteCollector({
       sourceId: source.sourceId,
       baseUrl: source.url,
       selectors: source.selectors,
-      recipe: source.recipe,
+      recipe,
       loadHtml: createSchoolSiteHttpLoader({
         url: source.url,
         timeoutMs: source.timeoutMs,
         maxResponseBytes: source.maxResponseBytes,
         fetchImplementation: dependencies.fetchImplementation,
-        encoding: source.recipe?.encoding,
+        encoding: recipe?.encoding,
       }),
       now: dependencies.now,
     }));

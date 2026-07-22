@@ -4,11 +4,22 @@ import test from "node:test";
 import {
   createSchoolSiteHttpLoader,
   parseSchoolNoticeHtml,
+  resolveBuiltInSchoolSiteRecipe,
   SchoolSiteCollector,
   collectSources,
   validateSourceInputConfig,
   type SchoolSiteRecipe,
 } from "../packages/collectors/src/index.ts";
+
+test("한양대 게시판 URL은 URL만으로 내장 Recipe를 선택한다", () => {
+  const cs = resolveBuiltInSchoolSiteRecipe("https://cs.hanyang.ac.kr/board/job_board.php");
+  assert.equal(cs?.encoding, "euc-kr");
+  assert.equal(cs?.list.externalId?.strategy, "url-query");
+
+  const notice = resolveBuiltInSchoolSiteRecipe("https://www.hanyang.ac.kr/notice_all?category=1");
+  assert.equal(notice?.list.item, ".hyu-list-body-item-col");
+  assert.equal(resolveBuiltInSchoolSiteRecipe("https://school.example/notices"), undefined);
+});
 
 test("Recipe로 테이블 게시판의 링크 쿼리에서 ID를 추출한다", () => {
   const recipe: SchoolSiteRecipe = {
@@ -106,6 +117,38 @@ test("상세 페이지 하나가 실패해도 목록 항목은 보존하고 진�
   assert.equal(result?.items[0]?.title, "공지");
   assert.equal(result?.errors.length, 1);
   assert.equal(result?.errors[0]?.sourceUri, "https://school.example/view?id=1");
+});
+
+test("상세 페이지는 학교 서버를 보호하는 범위에서 병렬로 수집한다", async () => {
+  let active = 0;
+  let maximumActive = 0;
+  const collector = new SchoolSiteCollector({
+    baseUrl: "https://school.example/notices",
+    recipe: {
+      list: {
+        item: ".notice",
+        title: { selector: "a" },
+        link: { selector: "a", attribute: "href" },
+        externalId: { strategy: "url-query", parameter: "id" },
+      },
+      detail: { content: { selector: ".content" } },
+    },
+    loadHtml: async (requestedUrl) => {
+      if (requestedUrl === undefined) {
+        return Array.from({ length: 8 }, (_, index) =>
+          `<div class="notice"><a href="/view?id=${index}">공지 ${index}</a></div>`).join("");
+      }
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return `<div class="content">상세</div>`;
+    },
+  });
+
+  const items = await collector.sync();
+  assert.equal(items.length, 8);
+  assert.equal(maximumActive, 4);
 });
 
 test("HTTP Loader는 EUC-KR 응답 charset과 Recipe 재정의를 적용한다", async () => {
