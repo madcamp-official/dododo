@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type { EnqueueJobInput, JobQueueRepository } from "../../../shared/src/index.ts";
@@ -18,23 +19,28 @@ export class SQLiteJobQueueRepository implements JobQueueRepository {
     this.insertStatement = database.prepare(`
       INSERT INTO jobs (
         id, type, input_ref, status, priority, attempts, max_attempts,
-        next_run_at, lease_until, last_error, created_at, updated_at
-      ) VALUES (?, ?, ?, 'pending', ?, 0, ?, ?, NULL, NULL, ?, ?)
+        next_run_at, lease_until, lease_token, last_error, created_at, updated_at
+      ) VALUES (?, ?, ?, 'pending', ?, 0, ?, ?, NULL, NULL, NULL, ?, ?)
     `);
+    // doyeonid 리뷰(PR #100) P1: leaseToken이 claim 당시 발급한 값과 같을 때만
+    // 반영한다(WHERE에 lease_token = ? 포함) — lease 만료 후 다른 Worker가 재획득한
+    // 뒤 원래 Worker가 뒤늦게 완료·재시도·Dead Letter를 시도해도(stale) 토큰이
+    // 안 맞아 0행만 바뀌고 조용히 무시된다.
     this.completeStatement = database.prepare(`
-      UPDATE jobs SET status = 'done', lease_until = NULL, updated_at = ? WHERE id = ?
+      UPDATE jobs SET status = 'done', lease_until = NULL, lease_token = NULL, updated_at = ?
+      WHERE id = ? AND status = 'leased' AND lease_token = ?
     `);
     this.retryStatement = database.prepare(`
       UPDATE jobs
       SET status = 'pending', attempts = attempts + 1, next_run_at = ?,
-          lease_until = NULL, last_error = ?, updated_at = ?
-      WHERE id = ?
+          lease_until = NULL, lease_token = NULL, last_error = ?, updated_at = ?
+      WHERE id = ? AND status = 'leased' AND lease_token = ?
     `);
     this.deadLetterStatement = database.prepare(`
       UPDATE jobs
       SET status = 'dead_letter', attempts = attempts + 1, lease_until = NULL,
-          last_error = ?, updated_at = ?
-      WHERE id = ?
+          lease_token = NULL, last_error = ?, updated_at = ?
+      WHERE id = ? AND status = 'leased' AND lease_token = ?
     `);
     this.listDeadLettersStatement = database.prepare(`${SELECT_JOB} WHERE status = 'dead_letter'`);
   }
@@ -65,7 +71,8 @@ export class SQLiteJobQueueRepository implements JobQueueRepository {
       this.database.prepare(`
         UPDATE jobs
         SET type = ?, input_ref = ?, status = 'pending', priority = ?, attempts = 0,
-            max_attempts = ?, next_run_at = ?, lease_until = NULL, last_error = NULL, updated_at = ?
+            max_attempts = ?, next_run_at = ?, lease_until = NULL, lease_token = NULL,
+            last_error = NULL, updated_at = ?
         WHERE id = ?
       `).run(
         input.type,
@@ -83,33 +90,42 @@ export class SQLiteJobQueueRepository implements JobQueueRepository {
     if (types.length === 0) return undefined;
 
     const placeholders = types.map(() => "?").join(", ");
-    const candidate = this.database.prepare(`
-      ${SELECT_JOB}
-      WHERE status = 'pending' AND next_run_at <= ? AND type IN (${placeholders})
-      ORDER BY priority DESC, next_run_at ASC
-      LIMIT 1
-    `).get(now.toISOString(), ...types) as JobRow | undefined;
-    if (candidate === undefined) return undefined;
-
     const nowIso = now.toISOString();
     const leaseUntil = new Date(now.getTime() + leaseMs).toISOString();
-    this.database.prepare(`
-      UPDATE jobs SET status = 'leased', lease_until = ?, updated_at = ? WHERE id = ?
-    `).run(leaseUntil, nowIso, candidate.id);
+    const leaseToken = randomUUID();
 
-    return rowToJob({ ...candidate, status: "leased", lease_until: leaseUntil, updated_at: nowIso });
+    // doyeonid 리뷰(PR #100) P1: 후보 선택(subquery)과 leased 전환을 하나의 UPDATE
+    // 문으로 묶어 원자적으로 처리한다. 바깥 WHERE에도 status = 'pending'을 다시
+    // 확인하므로, 다른 연결이 그 사이 먼저 이 행을 leased로 바꿔버렸으면(SQLite의
+    // 쓰기 트랜잭션은 연결 간에 직렬화된다) 이 UPDATE는 0행을 바꾸고 끝난다 — RETURNING이
+    // 아무 것도 안 돌려주므로 undefined가 되어 같은 Job을 두 연결이 동시에 처리하지
+    // 않는다.
+    const row = this.database.prepare(`
+      UPDATE jobs
+      SET status = 'leased', lease_until = ?, lease_token = ?, updated_at = ?
+      WHERE status = 'pending' AND id = (
+        SELECT id FROM jobs
+        WHERE status = 'pending' AND next_run_at <= ? AND type IN (${placeholders})
+        ORDER BY priority DESC, next_run_at ASC
+        LIMIT 1
+      )
+      RETURNING id, type, input_ref, status, priority, attempts, max_attempts,
+                next_run_at, lease_until, lease_token, last_error, created_at, updated_at
+    `).get(leaseUntil, leaseToken, nowIso, nowIso, ...types) as JobRow | undefined;
+
+    return row === undefined ? undefined : rowToJob(row);
   }
 
-  async complete(id: string, now: Date): Promise<void> {
-    this.completeStatement.run(now.toISOString(), id);
+  async complete(id: string, leaseToken: string, now: Date): Promise<void> {
+    this.completeStatement.run(now.toISOString(), id, leaseToken);
   }
 
-  async retry(id: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
-    this.retryStatement.run(nextRunAt.toISOString(), error, now.toISOString(), id);
+  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
+    this.retryStatement.run(nextRunAt.toISOString(), error, now.toISOString(), id, leaseToken);
   }
 
-  async deadLetter(id: string, now: Date, error: string): Promise<void> {
-    this.deadLetterStatement.run(error, now.toISOString(), id);
+  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void> {
+    this.deadLetterStatement.run(error, now.toISOString(), id, leaseToken);
   }
 
   async listDeadLetters(): Promise<Job[]> {
@@ -121,7 +137,7 @@ export class SQLiteJobQueueRepository implements JobQueueRepository {
     const nowIso = now.toISOString();
     const result = this.database.prepare(`
       UPDATE jobs
-      SET status = 'pending', lease_until = NULL, updated_at = ?
+      SET status = 'pending', lease_until = NULL, lease_token = NULL, updated_at = ?
       WHERE status = 'leased' AND lease_until < ?
     `).run(nowIso, nowIso);
     return Number(result.changes);
@@ -137,7 +153,7 @@ const DEFAULT_MAX_ATTEMPTS = 5;
 
 const SELECT_JOB = `
   SELECT id, type, input_ref, status, priority, attempts, max_attempts,
-         next_run_at, lease_until, last_error, created_at, updated_at
+         next_run_at, lease_until, lease_token, last_error, created_at, updated_at
   FROM jobs
 `;
 
@@ -151,6 +167,7 @@ interface JobRow {
   max_attempts: number;
   next_run_at: string;
   lease_until: string | null;
+  lease_token: string | null;
   last_error: string | null;
   created_at: string;
   updated_at: string;
@@ -167,6 +184,7 @@ function rowToJob(row: JobRow): Job {
     maxAttempts: row.max_attempts,
     nextRunAt: row.next_run_at,
     leaseUntil: row.lease_until ?? undefined,
+    leaseToken: row.lease_token ?? undefined,
     lastError: row.last_error ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

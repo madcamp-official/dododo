@@ -50,23 +50,27 @@ export async function runDueJobs(
   for (let index = 0; index < maxJobsPerRun; index += 1) {
     const job = await queue.claimNext(types, now, leaseMs);
     if (job === undefined) break;
+    // claimNext는 leased로 만든 Job에 항상 leaseToken을 채워 돌려준다 — 없으면
+    // 저장소 구현이 계약을 어긴 것이라 이 Job은 건드리지 않고 건너뛴다.
+    const leaseToken = job.leaseToken;
+    if (leaseToken === undefined) continue;
 
     const handler = handlers[job.type];
     if (handler === undefined) continue; // types가 handlers 키에서 왔으므로 이론상 오지 않는다.
 
     try {
       await handler(job.inputRef, now);
-      await queue.complete(job.id, now);
+      await queue.complete(job.id, leaseToken, now);
       outcome.completed.push(job.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const attemptsAfterThis = job.attempts + 1;
       if (isRetryableError(error) && attemptsAfterThis < job.maxAttempts) {
         const delayMs = computeBackoffDelayMs(attemptsAfterThis);
-        await queue.retry(job.id, now, new Date(now.getTime() + delayMs), message);
+        await queue.retry(job.id, leaseToken, now, new Date(now.getTime() + delayMs), message);
         outcome.retried.push(job.id);
       } else {
-        await queue.deadLetter(job.id, now, message);
+        await queue.deadLetter(job.id, leaseToken, now, message);
         outcome.deadLettered.push({ id: job.id, type: job.type, inputRef: job.inputRef, lastError: message });
       }
     }

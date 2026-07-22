@@ -83,12 +83,19 @@ export interface JobQueueRepository {
   // 같은 RawItem이 여러 tick에서 반복 실패해도 큐에 중복으로 쌓이지 않는다.
   enqueue(input: EnqueueJobInput): Promise<void>;
   // status가 pending이고 nextRunAt <= now인 것 중 주어진 type만, priority 내림차순·
-  // nextRunAt 오름차순으로 하나 뽑아 leased로 표시하고 leaseUntil을 설정한 뒤 돌려준다.
+  // nextRunAt 오름차순으로 하나 뽑아 leased로 표시하고 leaseUntil·leaseToken을 설정한
+  // 뒤 돌려준다 — 선택(subquery)과 leased 전환을 하나의 원자적 쓰기로 묶어서, 서로
+  // 다른 연결(다른 프로세스의 watch/CLI/Electron)이 동시에 호출해도 같은 Job을 둘
+  // 이상이 동시에 claim할 수 없다(doyeonid 리뷰 PR #100 P1).
   claimNext(types: JobType[], now: Date, leaseMs: number): Promise<Job | undefined>;
-  complete(id: string, now: Date): Promise<void>;
+  // leaseToken은 claimNext가 이 Job에 발급한 값과 같아야 반영된다 — 다르면(이미 lease가
+  // 만료돼 다른 Worker가 재획득한 뒤 원래 Worker가 뒤늦게 부르는 경우) 조용히 무시한다.
+  complete(id: string, leaseToken: string, now: Date): Promise<void>;
   // attempts를 늘리고 status를 pending으로, nextRunAt을 지정한 시각으로 되돌린다.
-  retry(id: string, now: Date, nextRunAt: Date, error: string): Promise<void>;
-  deadLetter(id: string, now: Date, error: string): Promise<void>;
+  // leaseToken 검증은 complete와 같다.
+  retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void>;
+  // leaseToken 검증은 complete와 같다.
+  deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void>;
   listDeadLetters(): Promise<Job[]>;
   // leaseUntil이 now보다 과거인 leased Job을 pending으로 되돌린다(죽은 Worker 복구).
   // 되돌린 개수를 반환한다.

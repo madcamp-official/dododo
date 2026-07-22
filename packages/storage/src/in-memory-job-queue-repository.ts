@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { EnqueueJobInput, Job, JobQueueRepository, JobType } from "../../shared/src/index.ts";
 
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -22,6 +24,7 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
       maxAttempts: input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
       nextRunAt: nowIso,
       leaseUntil: undefined,
+      leaseToken: undefined,
       lastError: undefined,
       createdAt: existing?.createdAt ?? nowIso,
       updatedAt: nowIso,
@@ -41,40 +44,51 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
       ...candidate,
       status: "leased",
       leaseUntil: new Date(now.getTime() + leaseMs).toISOString(),
+      leaseToken: randomUUID(),
       updatedAt: now.toISOString(),
     };
     this.jobs.set(updated.id, updated);
     return structuredClone(updated);
   }
 
-  async complete(id: string, now: Date): Promise<void> {
+  // doyeonid 리뷰(PR #100) P1: leaseToken이 지금 저장된 값과 같을 때만 반영한다 —
+  // SQLite 구현과 같은 소유권 검증(stale completion 무시)을 InMemory에도 맞춘다.
+  async complete(id: string, leaseToken: string, now: Date): Promise<void> {
     const job = this.jobs.get(id);
-    if (job === undefined) return;
-    this.jobs.set(id, { ...job, status: "done", leaseUntil: undefined, updatedAt: now.toISOString() });
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
+    this.jobs.set(id, {
+      ...job,
+      status: "done",
+      leaseUntil: undefined,
+      leaseToken: undefined,
+      updatedAt: now.toISOString(),
+    });
   }
 
-  async retry(id: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
+  async retry(id: string, leaseToken: string, now: Date, nextRunAt: Date, error: string): Promise<void> {
     const job = this.jobs.get(id);
-    if (job === undefined) return;
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
     this.jobs.set(id, {
       ...job,
       status: "pending",
       attempts: job.attempts + 1,
       nextRunAt: nextRunAt.toISOString(),
       leaseUntil: undefined,
+      leaseToken: undefined,
       lastError: error,
       updatedAt: now.toISOString(),
     });
   }
 
-  async deadLetter(id: string, now: Date, error: string): Promise<void> {
+  async deadLetter(id: string, leaseToken: string, now: Date, error: string): Promise<void> {
     const job = this.jobs.get(id);
-    if (job === undefined) return;
+    if (job === undefined || job.status !== "leased" || job.leaseToken !== leaseToken) return;
     this.jobs.set(id, {
       ...job,
       status: "dead_letter",
       attempts: job.attempts + 1,
       leaseUntil: undefined,
+      leaseToken: undefined,
       lastError: error,
       updatedAt: now.toISOString(),
     });
@@ -88,7 +102,13 @@ export class InMemoryJobQueueRepository implements JobQueueRepository {
     let recovered = 0;
     for (const [id, job] of this.jobs) {
       if (job.status !== "leased" || job.leaseUntil === undefined || job.leaseUntil >= now.toISOString()) continue;
-      this.jobs.set(id, { ...job, status: "pending", leaseUntil: undefined, updatedAt: now.toISOString() });
+      this.jobs.set(id, {
+        ...job,
+        status: "pending",
+        leaseUntil: undefined,
+        leaseToken: undefined,
+        updatedAt: now.toISOString(),
+      });
       recovered += 1;
     }
     return recovered;

@@ -204,6 +204,11 @@ export interface Job {
   maxAttempts: number;
   nextRunAt: string;
   leaseUntil?: string;
+  // doyeonid 리뷰(PR #100) P1: claim마다 새로 발급하는 소유권 토큰. complete/retry/
+  // deadLetter는 이 토큰이 지금 저장된 값과 같을 때만 반영된다 — lease가 만료돼
+  // 다른 Worker가 재획득한 뒤, 원래 Worker가 뒤늦게 끝내며 그 결과를 반영하려 해도
+  // (stale completion) 토큰이 안 맞아 조용히 무시된다. leased 상태일 때만 값이 있다.
+  leaseToken?: string;
   lastError?: string;
   createdAt: string;
   updatedAt: string;

@@ -138,6 +138,7 @@ export function initializeJobSchema(database: DatabaseSync): void {
       max_attempts INTEGER NOT NULL,
       next_run_at TEXT NOT NULL,
       lease_until TEXT,
+      lease_token TEXT,
       last_error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
