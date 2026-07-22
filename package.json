@@ -42,6 +42,7 @@
       "apps/desktop/resources/**/*",
       "apps/cli/src/**/*",
       "packages/*/src/**/*",
+      "fixtures/**/*",
       "!**/*.test.ts",
       "!**/node_modules/**/{test,tests,*.md,*.markdown,*.map}"
     ],
