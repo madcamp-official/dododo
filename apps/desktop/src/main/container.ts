@@ -10,7 +10,7 @@ export function getDesktopContainer(): CliContainer {
   if (container === undefined) {
     container = createCliContainer();
     // createCliContainer는 기본으로 ConsoleNotifier를 쓴다(CLI 전용) — 데스크톱은
-    // Electron Notification/IPC push로 갈아 끼운다. notifier는 CliContainer에서
+    // 캐릭터 말풍선 IPC push로 갈아 끼운다. notifier는 CliContainer에서
     // readonly가 아니라 이렇게 교체 가능하다(apps/cli/src/commands/watch.ts의
     // --os-notify가 쓰는 것과 같은 방식).
     container.notifier = new ElectronDesktopNotifier(container.repository);
