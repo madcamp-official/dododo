@@ -14,6 +14,7 @@ export * from "./syncStatus.ts";
 // 계약 자체는 바뀌지 않는다.
 export class ConsoleNotifier implements Notifier {
   async send(recommendation: Recommendation): Promise<void> {
-    console.log(`[notification] ${recommendation.action} — ${recommendation.reason} (id: ${recommendation.contextItemId})`);
+    const reasonSuffix = recommendation.reason.length > 0 ? ` — ${recommendation.reason}` : "";
+    console.log(`[notification] ${recommendation.action}${reasonSuffix} (id: ${recommendation.contextItemId})`);
   }
 }

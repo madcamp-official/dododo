@@ -61,9 +61,8 @@ export class WindowsOsNotifier implements Notifier {
   }
 
   async send(recommendation: Recommendation): Promise<void> {
-    console.log(
-      `[notification] ${recommendation.action} — ${recommendation.reason} (id: ${recommendation.contextItemId})`,
-    );
+    const reasonSuffix = recommendation.reason.length > 0 ? ` — ${recommendation.reason}` : "";
+    console.log(`[notification] ${recommendation.action}${reasonSuffix} (id: ${recommendation.contextItemId})`);
 
     try {
       await this.showBalloon(recommendation.action, recommendation.reason);

@@ -24,11 +24,14 @@ export function classifyRecommendation(
   }
 
   const opportunity = item?.kind === "opportunity";
+  const message = recommendation.reason.length > 0
+    ? opportunity
+      ? recommendation.reason
+      : `${recommendation.action} — ${recommendation.reason}`
+    : recommendation.action;
   return {
     kind: opportunity ? "opportunity" : "priority",
-    message: opportunity
-      ? recommendation.reason
-      : `${recommendation.action} — ${recommendation.reason}`,
+    message,
     contextItemId: recommendation.contextItemId,
     createdAt: recommendation.createdAt,
   };

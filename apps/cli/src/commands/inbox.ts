@@ -61,7 +61,7 @@ export async function renderInbox(container: CliContainer, now: Date = new Date(
   for (const { item, score, reason } of ranked) {
     lines.push(`[${item.id}] 관련도 ${Math.round(score)}  ${item.title}`);
     if (item.deadline !== undefined) lines.push(`  마감: ${item.deadline}`);
-    lines.push(`  이유: ${reason}`);
+    if (reason.length > 0) lines.push(`  이유: ${reason}`);
     lines.push(`  준비: npm start -- inbox prepare ${item.id}`);
   }
 

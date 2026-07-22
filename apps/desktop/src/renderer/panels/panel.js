@@ -86,7 +86,7 @@ function renderRankedItems(entries) {
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
       <strong>${escapeHtml(item.title)}</strong>
       <span>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</span>
-      <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
+      <small>${escapeHtml([`${score}점`, reason, statusLabel(item.status)].filter(Boolean).join(" · "))}</small>
     </button>`).join("")}</div>`;
   bindDetailButtons();
 }
@@ -118,7 +118,7 @@ function renderRecommendations(entries) {
     <article class="context-card static-card">
       <span class="card-kind opportunity">추천</span>
       <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(reason)}</span>
+      ${reason ? `<span>${escapeHtml(reason)}</span>` : ""}
       <small>${escapeHtml(`${score}점 · ${formatDateTime(item.deadline)}`)}</small>
     </article>`).join("")}</div>`;
 }
