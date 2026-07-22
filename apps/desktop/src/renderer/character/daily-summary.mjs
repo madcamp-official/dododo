@@ -32,7 +32,7 @@ export function buildDailySummary(entries) {
   const titles = entries.slice(0, 2).map(({ item }) => `“${item.title}”`).join(", ");
   const remaining = entries.length - 2;
   const suffix = remaining > 0 ? ` 외 ${remaining}개` : "";
-  return `오늘 확인할 일이 ${entries.length}개 있어요. ${titles}${suffix}부터 살펴볼까요?`;
+  return `오늘 확인할 일이 ${entries.length}개 있어요. ${titles}${suffix}를 살펴볼까요?`;
 }
 
 export function shouldShowDailySummary(lastShownDate, profile, now = new Date(), timeZone = DEFAULT_TIME_ZONE) {

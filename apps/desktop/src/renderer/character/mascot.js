@@ -369,7 +369,7 @@ function showNextNotification() {
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
   notificationDetail.hidden = next.contextItemId === undefined && next.targetView === undefined;
-  notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히";
+  notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히 보기";
   notificationBubble.hidden = false;
   notificationTimer = window.setTimeout(dismissActiveNotification, NOTIFICATION_DISPLAY_MS);
 }

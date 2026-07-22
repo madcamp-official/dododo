@@ -31,7 +31,7 @@ test("빈 오늘 목록은 부담 없는 안내로 요약한다", () => {
 
 test("오늘 목록은 상위 두 제목과 남은 개수를 요약한다", () => {
   const entries = ["과제 제출", "팀 회의", "저녁 약속"].map((title) => ({ item: { title } }));
-  assert.equal(buildDailySummary(entries), "오늘 확인할 일이 3개 있어요. “과제 제출”, “팀 회의” 외 1개부터 살펴볼까요?");
+  assert.equal(buildDailySummary(entries), "오늘 확인할 일이 3개 있어요. “과제 제출”, “팀 회의” 외 1개를 살펴볼까요?");
 });
 
 test("일일 요약 알림은 Today 대상으로 정규화된다", () => {
