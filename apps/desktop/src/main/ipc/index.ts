@@ -29,6 +29,8 @@ import {
 import { StudySessionManager } from "./studySession.ts";
 import { createStudyCaptureScheduler } from "../study/captureScheduler.ts";
 import { createCaptureSchedulerCoordinator } from "../study/captureSchedulerCoordinator.ts";
+import { createCaptureVisionPipeline } from "../study/captureVisionPipeline.ts";
+import { broadcastNotification } from "../notifier/broadcast.ts";
 
 // docs/frontend-plan.md 6.1의 "영역:동작" 채널 이름 규칙. 이 상수만 preload와 공유하면
 // 되므로 여기 한 곳에 모아 둔다 — Renderer는 이 문자열을 직접 안 쓰고 preload가 감싼
@@ -65,15 +67,27 @@ export const IPC_CHANNELS = {
 export function registerIpcHandlers(container: CliContainer): void {
   const userDataPath = app.getPath("userData");
   const studySessions = new StudySessionManager(join(userDataPath, "active-study-session.json"));
-  // docs/frontend-plan.md 2.5: 세션이 진행 중일 때만 Idle→Active 캡처 트리거를 돈다
-  // (captureScheduler.ts). onTrigger는 실제 캡처+Vision 호출이 아직 없어 지금은
-  // 로그만 남긴다 — Vision 추출 PR(#79)이 머지되면 이 자리에서 실제 캡처·분석·
-  // adviceCount 증가로 교체한다. 트리거 판정 자체(Idle→Active, 최소 간격)는 이미
-  // 완성·테스트됐다(captureTrigger.test.ts/captureScheduler.test.ts).
+  // docs/frontend-plan.md 6.8.1: Idle→Active 트리거 → 세션 확인 → 캡처 →
+  // extractScreenActivity → Context 연결 → advice/distraction 알림 → adviceCount
+  // 증가 수직 흐름 전체를 captureVisionPipeline이 담당한다. 캡처·Vision·정책 실패는
+  // 그 안에서 이 trigger 한 번만 격리해 흡수하므로 여기서는 onError로 로그만 남긴다.
+  const captureVisionPipeline = createCaptureVisionPipeline({
+    getActiveSession: () => studySessions.getActive(),
+    recordAdvice: (sessionId) => studySessions.recordAdvice(sessionId),
+    isRemoteProvider: () => container.llmConfig?.provider === "remote-job",
+    llmProvider: container.llmProvider,
+    captureLiveScreen: () => container.captureLiveScreen(),
+    listContextItems: () => container.repository.listContextItems(),
+    screenAdvicePolicy: container.screenAdvicePolicy,
+    broadcast: broadcastNotification,
+    onError: (error) => {
+      console.error(`[study] 캡처/Vision 처리 실패(이번 trigger만 건너뜀): ${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
   const captureScheduler = createStudyCaptureScheduler({
     getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
     onTrigger: (reason, at) => {
-      console.log(`[study] capture trigger(${reason}) at ${at.toISOString()} — Vision 연결 대기 중(PR #79)`);
+      void captureVisionPipeline.run(reason, at);
     },
   });
   // 앱이 재시작됐는데 이전 세션이 아직 진행 중으로 복원되면(studySession.ts의 영속화)
