@@ -1,4 +1,4 @@
-import { gateNotification } from "../../../../packages/scheduler/src/index.ts";
+import { gateNotification, isWithinQuietHours } from "../../../../packages/scheduler/src/index.ts";
 import type { Recommendation, SyncResult } from "../../../../packages/shared/src/index.ts";
 import { findDueReminders, markReminderSent, toReminderRecommendation } from "./reminderCheck.ts";
 import { checkScheduleConflicts, type ScheduleConflict } from "./scheduleConflict.ts";
@@ -16,6 +16,9 @@ export interface WatchTickResult {
   // docs/frontend-plan.md 2.1 — 이번 tick에서 새로 감지된 일정 충돌만 담는다(이미
   // 알린 쌍은 checkScheduleConflicts가 걸러낸다).
   newConflicts: ScheduleConflict[];
+  // Desktop Main이 직접 만드는 sync-complete/conflict IPC 이벤트도 추천·리마인더와
+  // 같은 Quiet Hours 정책을 적용할 수 있도록 tick 판정 결과를 전달한다.
+  withinQuietHours: boolean;
 }
 
 // docs/architecture.md §3 Watch Process 흐름 한 번(수집 스케줄 확인 → 동기화 →
@@ -41,12 +44,14 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
   const items = [...tasks, ...events, ...opportunities];
   const itemsById = new Map(items.map((item) => [item.id, item]));
 
+  const profile = (await container.profileRepository.get()) ?? emptyProfile();
+  const withinQuietHours = isWithinQuietHours(profile, now);
   const conflictCheck = checkScheduleConflicts([...tasks, ...events], now);
-  if (conflictCheck.updatedItems.length > 0) {
+  // Quiet Hours 중에는 충돌 알림 완료 메타데이터를 커밋하지 않는다. 그래야 종료 후
+  // 다음 tick이 같은 충돌을 다시 감지해 실제로 전달할 수 있다.
+  if (!withinQuietHours && conflictCheck.updatedItems.length > 0) {
     await container.repository.saveContextItems(conflictCheck.updatedItems);
   }
-
-  const profile = (await container.profileRepository.get()) ?? emptyProfile();
   const recommendations = await container.recommendationEngine.recommend(items, profile, now);
 
   const notified: Recommendation[] = [];
@@ -89,5 +94,6 @@ export async function runWatchTick(container: CliContainer, now: Date): Promise<
     notified,
     heldForQuietHours,
     newConflicts: conflictCheck.newConflicts,
+    withinQuietHours,
   };
 }

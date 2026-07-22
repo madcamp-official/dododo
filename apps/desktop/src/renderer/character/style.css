@@ -127,6 +127,31 @@ body[data-character-placement$="right"] .character-button { left: auto; right: 4
 body[data-character-placement$="left"] .notification-bubble { right: auto; left: 190px; }
 body[data-character-placement^="top"] .notification-bubble { top: 190px; bottom: auto; }
 
+/* 패널이 열린 동안에는 말풍선을 오른쪽 여백으로 옮겨 내용을 가리지 않는다. */
+.desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  width: 190px;
+}
+
+body[data-character-placement$="left"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: auto;
+  left: 8px;
+}
+
+body[data-character-placement$="right"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: 8px;
+  left: auto;
+}
+
+body[data-character-placement^="top"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: 8px;
+  bottom: auto;
+}
+
+body[data-character-placement^="bottom"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: auto;
+  bottom: 8px;
+}
+
 .notification-bubble::after {
   position: absolute;
   right: -12px;

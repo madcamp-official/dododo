@@ -78,6 +78,7 @@ test("desktop Renderer API는 preload가 없으면 재실행 안내를 표시한
 test("desktop Renderer는 날짜 오류와 알려지지 않은 상태를 안전하게 표시한다", () => {
   assert.equal(formatDateTime(undefined), "시간 정보 없음");
   assert.equal(formatDateTime("not-a-date"), "시간 확인 필요");
+  assert.match(formatDateTime("2026-07-20T15:30:00.000Z"), /7\. 21\..*오전 12:30/);
   assert.equal(statusLabel("unknown"), "확인 필요");
   assert.equal(statusLabel("done"), "완료");
 });
