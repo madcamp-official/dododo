@@ -7,7 +7,19 @@ const API_METHODS = {
   detail: "getTaskDetail",
   complete: "completeTask",
   snooze: "snoozeTask",
+  update: "updateTask",
+  delete: "deleteTask",
+  reminder: "setReminderOffset",
+  sourceList: "listSources",
+  sourceRegister: "registerSource",
+  sourceRemove: "removeSource",
+  profileGet: "getProfile",
+  profileSave: "saveProfile",
+  uiStateGet: "getUiState",
+  uiStateSet: "setUiState",
   sync: "sync",
+  studyStart: "startStudy",
+  studyEnd: "endStudy",
 };
 
 // Renderer는 preload가 노출한 API만 사용한다. 팩토리를 따로 export해 테스트에서는
@@ -34,7 +46,19 @@ export function createDesktopApi(bridgeOrProvider) {
     detail: (id) => invoke("detail", id),
     complete: (id) => invoke("complete", id),
     snooze: (id, until) => invoke("snooze", id, until),
+    update: (id, input) => invoke("update", id, input),
+    delete: (id) => invoke("delete", id),
+    reminder: (id, offsetMinutes) => invoke("reminder", id, offsetMinutes),
+    sourceList: () => invoke("sourceList"),
+    sourceRegister: (type, value) => invoke("sourceRegister", type, value),
+    sourceRemove: (id) => invoke("sourceRemove", id),
+    profileGet: () => invoke("profileGet"),
+    profileSave: (profile) => invoke("profileSave", profile),
+    uiStateGet: (key) => invoke("uiStateGet", key),
+    uiStateSet: (key, value) => invoke("uiStateSet", key, value),
     sync: () => invoke("sync"),
+    studyStart: (screenCaptureConsent) => invoke("studyStart", screenCaptureConsent),
+    studyEnd: (sessionId) => invoke("studyEnd", sessionId),
   };
 }
 
@@ -68,11 +92,12 @@ export function formatSyncSummary({ collected, created }) {
   return `${collected}개 항목을 확인했고, 새 항목 ${created}개를 저장했어요.`;
 }
 
-export function formatDateTime(value) {
+export function formatDateTime(value, timeZone = "Asia/Seoul") {
   if (value === undefined) return "시간 정보 없음";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "시간 확인 필요";
   return new Intl.DateTimeFormat("ko-KR", {
+    timeZone,
     month: "numeric",
     day: "numeric",
     hour: "numeric",

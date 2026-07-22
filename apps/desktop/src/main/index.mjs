@@ -6,6 +6,7 @@ import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
 import { registerIpcHandlers } from "./ipc/index.ts";
 import { startDesktopWatch } from "./watch/desktopWatch.ts";
 import { clampPositionToWorkArea } from "./dragGeometry.ts";
+import { NOTIFICATION_CHANNEL } from "./notifier/notificationEvent.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
@@ -114,6 +115,13 @@ function createCharacterWindow() {
     characterWindows.delete(characterWindow);
   });
   void characterWindow.loadFile(rendererPath).then(() => {
+    if (process.env.DODODO_NOTIFICATION_PREVIEW === "1") {
+      characterWindow.webContents.send(NOTIFICATION_CHANNEL, {
+        kind: "sync-complete",
+        message: "알림 말풍선이 이렇게 표시됩니다.",
+        createdAt: new Date().toISOString(),
+      });
+    }
     if (process.platform === "linux") {
       // Linux에서는 setIgnoreMouseEvents({ forward: true })가 mousemove를 Renderer로
       // 전달하지 않아 다시 drag 상태로 돌아올 수 없다. 현재 idle 에셋의 불투명 경계를

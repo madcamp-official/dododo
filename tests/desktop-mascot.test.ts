@@ -7,6 +7,11 @@ const desktopFiles = [
   "apps/desktop/src/main/index.mjs",
   "apps/desktop/src/preload/index.cjs",
   "apps/desktop/src/renderer/character/mascot.js",
+  "apps/desktop/src/renderer/character/notification-state.mjs",
+  "apps/desktop/src/renderer/character/schedule-form.mjs",
+  "apps/desktop/src/renderer/character/profile-form.mjs",
+  "apps/desktop/src/renderer/character/daily-summary.mjs",
+  "apps/desktop/src/renderer/character/schedule-management.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -117,9 +122,150 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.complete/);
   assert.match(renderer, /desktopApi\.snooze/);
   assert.match(renderer, /desktopApi\.add/);
-  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /runExclusivePanelAction/);
+  assert.match(renderer, /panelContent\.querySelectorAll\("button, input, textarea"\)/);
   assert.match(renderer, /createExclusiveActionRunner/);
   assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
   assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
   assert.doesNotMatch(adapter, /mock-task|mock-opportunity/);
+});
+
+test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보기로 연결한다", async () => {
+  const [main, html, renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(html, /data-notification-bubble/);
+  assert.match(html, /data-notification-badge/);
+  assert.match(renderer, /subscribeToNotifications\(\)/);
+  assert.match(renderer, /notificationSubscriptionRetry = window\.setTimeout/);
+  assert.match(renderer, /console\.warn\("DoDoDo 알림 이벤트 브리지를 찾지 못해/);
+  assert.match(renderer, /unsubscribeNotifications\?\.\(\)/);
+  assert.match(renderer, /notificationMode\(next\.kind\) === "quiet" \? "polite" : "assertive"/);
+  assert.match(renderer, /notificationStore\.takeImmediate/);
+  assert.match(renderer, /notificationStore\.markQuietRead/);
+  assert.match(renderer, /openDetail\(event\.contextItemId\)/);
+  assert.match(main, /DODODO_NOTIFICATION_PREVIEW/);
+  assert.match(main, /webContents\.send\(NOTIFICATION_CHANNEL/);
+  assert.match(style, /\.notification-bubble\s*\{/);
+  assert.match(style, /\.desktop-shell:has\(\.panel:not\(\[hidden\]\)\) \.notification-bubble/);
+  assert.match(style, /\.notification-badge\s*\{/);
+});
+
+test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를 연결한다", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /updateTask/);
+  assert.match(adapter, /deleteTask/);
+  assert.match(adapter, /setReminderOffset/);
+  assert.match(renderer, /data-schedule-edit-form/);
+  assert.match(renderer, /desktopApi\.update/);
+  assert.match(renderer, /window\.confirm/);
+  assert.match(renderer, /desktopApi\.delete/);
+  assert.match(renderer, /desktopApi\.reminder/);
+  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 6);
+  assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
+  assert.match(style, /\.danger-button\s*\{/);
+  assert.match(style, /\.reminder-form\s*\{/);
+});
+
+test("desktop mascot settings connects Source management and restart guidance", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /listSources/);
+  assert.match(adapter, /registerSource/);
+  assert.match(adapter, /removeSource/);
+  assert.match(renderer, /data-settings-source/);
+  assert.match(renderer, /desktopApi\.sourceList/);
+  assert.match(renderer, /desktopApi\.sourceRegister\("school-site", value\)/);
+  assert.match(renderer, /desktopApi\.sourceRemove/);
+  assert.match(renderer, /data-existing-value/);
+  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
+  assert.match(renderer, /showSourceError\(error\)/);
+  assert.doesNotMatch(renderer, /result\.restartRequired \?/);
+  assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
+  assert.match(style, /\.source-card\s*\{/);
+  assert.match(style, /\.restart-notice\s*\{/);
+});
+
+test("desktop mascot settings connects profile fields and Quiet Hours", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /getProfile/);
+  assert.match(adapter, /saveProfile/);
+  assert.match(renderer, /data-settings-profile/);
+  assert.match(renderer, /desktopApi\.profileGet/);
+  assert.match(renderer, /desktopApi\.profileSave/);
+  assert.match(renderer, /data-quiet-hours-toggle/);
+  assert.match(renderer, /data-profile-error/);
+  assert.match(renderer, /프로필을 저장하지 못했습니다/);
+  assert.match(style, /\.profile-form\s*\{/);
+  assert.match(style, /\.quiet-hours-field\s*\{/);
+});
+
+test("desktop mascot shows a once-per-day summary bubble linked to Today", async () => {
+  const [renderer, adapter, notificationState] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/notification-state.mjs", "utf8"),
+  ]);
+
+  assert.match(adapter, /getUiState/);
+  assert.match(adapter, /setUiState/);
+  assert.match(renderer, /showDailySummaryOnFirstLaunch/);
+  assert.match(renderer, /lastDailySummaryDate/);
+  assert.match(renderer, /dailySummaryRetryDelayMs/);
+  assert.match(renderer, /dailySummaryRetryTimer = window\.setTimeout/);
+  assert.match(renderer, /window\.clearTimeout\(dailySummaryRetryTimer\)/);
+  assert.match(renderer, /targetView === "today"/);
+  assert.match(renderer, /openView\("today"\)/);
+  assert.match(notificationState, /daily-summary/);
+  assert.match(renderer, /next\.targetView === "today" \? "오늘 보기" : "자세히 보기"/);
+});
+
+test("desktop settings provides weekly schedule management with existing detail actions", async () => {
+  const [renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(renderer, /data-settings-schedule/);
+  assert.match(renderer, /openView\("schedule-settings"\)/);
+  assert.match(renderer, /groupScheduledItems/);
+  assert.match(renderer, /data-managed-item-id/);
+  assert.match(renderer, /item\.kind === "event" && item\.endAt !== undefined/);
+  assert.match(renderer, /formatDateTime\(at\).*formatDateTime\(item\.endAt\)/s);
+  assert.match(renderer, /data-management-add/);
+  assert.match(renderer, /data-management-refresh/);
+  assert.match(style, /\.management-toolbar\s*\{/);
+  assert.match(style, /\.schedule-groups\s*\{/);
+});
+
+test("desktop mascot provides study consent, start, end, and summary flow", async () => {
+  const [html, renderer] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+  ]);
+  assert.match(html, /data-action="study"/);
+  assert.match(renderer, /data-study-consent/);
+  assert.match(renderer, /desktopApi\.studyStart/);
+  assert.match(renderer, /desktopApi\.studyEnd/);
+  assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
+  assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
+  assert.match(renderer, /durationMinutes/);
 });
