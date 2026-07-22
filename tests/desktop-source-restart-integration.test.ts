@@ -64,19 +64,26 @@ test("school-site 제거도 다음 container(재시작)에서만 반영된다", 
     assert.equal(registerResult.ok, true);
 
     const withSource = createCliContainer({ databasePath: ":memory:" });
-    withSource.close();
-    assert.deepEqual(withSource.collectors.map((collector) => collector.sourceType), ["school-site"]);
-
-    const removeResult = await removeSource("school-site");
-    assert.equal(removeResult.ok, true);
-    if (!removeResult.ok) return;
-    assert.equal(removeResult.data.restartRequired, true);
-
-    const afterRemove = createCliContainer({ databasePath: ":memory:" });
     try {
-      assert.deepEqual(afterRemove.collectors.map((collector) => collector.sourceType), []);
+      assert.deepEqual(withSource.collectors.map((collector) => collector.sourceType), ["school-site"]);
+
+      const removeResult = await removeSource("school-site");
+      assert.equal(removeResult.ok, true);
+      if (!removeResult.ok) return;
+      assert.equal(removeResult.data.restartRequired, true);
+
+      // 제거 직후에도 이미 만들어진 container는 그대로다 — collectors는
+      // createCliContainer 호출 시점에만 구성되기 때문이다(등록 테스트와 대칭).
+      assert.deepEqual(withSource.collectors.map((collector) => collector.sourceType), ["school-site"]);
+
+      const afterRemove = createCliContainer({ databasePath: ":memory:" });
+      try {
+        assert.deepEqual(afterRemove.collectors.map((collector) => collector.sourceType), []);
+      } finally {
+        afterRemove.close();
+      }
     } finally {
-      afterRemove.close();
+      withSource.close();
     }
   });
 });
