@@ -57,6 +57,17 @@ test("즉시 알림은 도착 순서대로 꺼내고 동일 알림은 중복 저
   assert.equal(store.takeImmediate(), undefined);
 });
 
+test("연속 답변은 대기 중인 이전 답변을 버리고 최신 답변을 먼저 표시한다", () => {
+  const store = createNotificationStore();
+  store.push({ kind: "priority", message: "일반 알림", createdAt });
+  store.push({ kind: "answer", message: "첫 답변", createdAt: "2026-07-21T15:01:00.000Z" });
+  store.push({ kind: "answer", message: "두 번째 답변", createdAt: "2026-07-21T15:02:00.000Z" });
+
+  assert.equal(store.takeImmediate()?.message, "두 번째 답변");
+  assert.equal(store.takeImmediate()?.message, "일반 알림");
+  assert.equal(store.takeImmediate(), undefined);
+});
+
 test("조용한 알림은 unread 배지를 올리고 확인 후 목록은 보존한다", () => {
   const store = createNotificationStore();
   store.push({ kind: "opportunity", message: "새 공모전", createdAt });

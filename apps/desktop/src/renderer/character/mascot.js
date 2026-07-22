@@ -488,6 +488,12 @@ function handleNotification(payload) {
   if (result.mode === "quiet") {
     updateNotificationBadge();
   }
+  // 답변 말풍선이 떠 있는 동안 다음 질문의 답변이 오면 사용자가 직접 닫거나
+  // 15초 타이머를 기다리지 않고 최신 답변으로 즉시 교체한다.
+  if (result.event.kind === "answer" && activeNotification?.kind === "answer") {
+    dismissActiveNotification();
+    return;
+  }
   showNextNotification();
 }
 

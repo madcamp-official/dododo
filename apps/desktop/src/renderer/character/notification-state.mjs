@@ -62,7 +62,16 @@ export function createNotificationStore() {
       const mode = notificationMode(event.kind);
       // 모든 알림은 캐릭터 말풍선으로 즉시 보여준다. quiet 종류는 사용자가 나중에
       // 다시 확인할 수 있도록 배지 목록에도 함께 보존한다.
-      immediate.push(event);
+      if (event.kind === "answer") {
+        // 연속 질문의 이전 답변이 아직 대기 중이면 최신 답변만 남기고, 일반 알림보다
+        // 먼저 꺼내 현재 답변 말풍선을 즉시 교체할 수 있게 한다.
+        for (let index = immediate.length - 1; index >= 0; index -= 1) {
+          if (immediate[index].kind === "answer") immediate.splice(index, 1);
+        }
+        immediate.unshift(event);
+      } else {
+        immediate.push(event);
+      }
       if (mode === "quiet") {
         quiet.push(event);
         if (quiet.length > MAX_QUIET_NOTIFICATIONS) quiet.shift();
