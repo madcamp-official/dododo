@@ -395,16 +395,20 @@ function renderAsk() {
     <div class="answer" data-answer hidden></div>`;
   panelContent.querySelector("[data-ask-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submit = event.currentTarget.querySelector("button[type='submit']");
     const answer = panelContent.querySelector("[data-answer]");
     const question = new FormData(event.currentTarget).get("question")?.toString().trim() ?? "";
     if (!(answer instanceof HTMLElement) || question === "") return;
     answer.hidden = false;
     answer.textContent = "답변을 찾는 중...";
+    if (submit instanceof HTMLButtonElement) submit.disabled = true;
     try {
       const result = unwrapResult(await desktopApi.ask(question));
       answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
     } catch (error) {
       answer.textContent = error instanceof Error ? error.message : "질문 처리에 실패했습니다.";
+    } finally {
+      if (submit instanceof HTMLButtonElement) submit.disabled = false;
     }
   });
 }

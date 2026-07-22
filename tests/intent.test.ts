@@ -361,9 +361,11 @@ test("answerContextQuestion은 provider 없거나 실패하면 결정론적 템�
 
 test("answerContextQuestion은 Privacy Gateway를 거친 질문과 Context만 Provider에 전달한다", async () => {
   let prompt = "";
+  let timeoutMs: number | undefined;
   const provider: LLMProvider = {
     async completeJSON<T>(request: LLMJSONRequest<T>): Promise<T> {
       prompt = request.userPrompt;
+      timeoutMs = request.timeoutMs;
       const value = { answer: "보고서를 먼저 작성하세요." };
       if (!request.validate(value)) throw new Error("invalid");
       return value;
@@ -393,6 +395,7 @@ test("answerContextQuestion은 Privacy Gateway를 거친 질문과 Context만 Pr
   assert.match(prompt, /\[이메일\]/);
   assert.match(prompt, /\[학번\]/);
   assert.doesNotMatch(prompt, /010-1234-5678|hong@example\.com|20231234/);
+  assert.equal(timeoutMs, 15_000);
   assert.equal(originalQuestion, "내 번호 010-1234-5678인데 오늘 뭘 할까?");
   assert.deepEqual(originalItem, before);
 });

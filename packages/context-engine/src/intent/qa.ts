@@ -14,6 +14,7 @@ export interface ContextAnswer {
 const EXCLUDED_STATUSES = new Set(["done", "cancelled", "dismissed", "expired"]);
 const TOP_N = 2;
 const MIN_SPECIFIC_RELEVANCE = 0.2;
+const INTERACTIVE_ASK_TIMEOUT_MS = 15_000;
 
 const answerSchema: JSONSchemaNode = {
   type: "object",
@@ -60,6 +61,10 @@ export async function answerContextQuestion(
     );
     const response = await provider.completeJSON({
       modelKind: "text",
+      // 물어보기는 사용자가 화면에서 응답을 기다리는 대화형 요청이다. 원격 Job의
+      // 긴 기본 제한시간(현재 최대 20분)을 그대로 쓰면 장애 시 UI가 멈춘 것처럼
+      // 보이므로 짧게 실패시키고 아래 결정론적 Context 답변으로 폴백한다.
+      timeoutMs: INTERACTIVE_ASK_TIMEOUT_MS,
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: buildUserPrompt(safePromptItem.content, now),
       schema: answerSchema,
