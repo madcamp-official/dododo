@@ -13,9 +13,8 @@ import {
   notificationMode,
 } from "./notification-state.mjs";
 import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
-import { profileFromFormData, profileToForm } from "./profile-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
-import { buildWeeklyCalendar, groupScheduledItems } from "./schedule-management.mjs";
+import { buildWeeklyCalendar } from "./schedule-management.mjs";
 import { studyProgressView, studySummaryView } from "./study-session-ui.mjs";
 import { notificationExpression, restingExpression } from "./character-expression.mjs";
 
@@ -176,10 +175,23 @@ popupMenu?.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if (!(button instanceof HTMLButtonElement)) return;
   const view = button.dataset.view;
-  if (view !== undefined) await openView(view);
+  if (view === "settings") openSettingsWindow();
+  else if (view !== undefined) await openView(view);
   if (button.dataset.action === "sync") await runSync(button);
   if (button.dataset.action === "study") await openStudySession();
 });
+
+function openSettingsWindow() {
+  popupMenu.hidden = true;
+  const openSettings = window.desktopWindow?.openSettings;
+  if (typeof openSettings === "function") {
+    openSettings();
+    return;
+  }
+  panel.hidden = false;
+  panelTitle.textContent = "설정";
+  renderError(new Error("설정 창을 열 수 없습니다. 앱을 다시 실행해주세요."));
+}
 
 async function openStudySession() {
   await studySessionRestorePromise;
@@ -300,13 +312,9 @@ async function openView(view, { throwOnError = false } = {}) {
       currentListView = view;
       renderRecommendations(unwrapResult(await desktopApi.inbox()).items);
     }
-    else if (view === "schedule-settings") {
-      currentListView = view;
-      renderScheduleManagement(unwrapResult(await desktopApi.calendar()).items);
-    }
     else if (view === "ask") renderAsk();
     else if (view === "add") renderAdd();
-    else renderSettings();
+    else throw new Error("지원하지 않는 화면입니다.");
   } catch (error) {
     if (throwOnError) throw error;
     renderError(error);
@@ -453,39 +461,6 @@ async function openDetail(id) {
   } catch (error) {
     renderError(error);
   }
-}
-
-function renderScheduleManagement(entries) {
-  const groups = groupScheduledItems(entries);
-  const content = groups.length === 0
-    ? '<div class="state-message">이번 주에 관리할 일정이 없습니다.</div>'
-    : `<div class="schedule-groups">${groups.map((group) => `
-        <section class="schedule-group">
-          <h2>${escapeHtml(group.label)}</h2>
-          <div class="card-list">${group.entries.map(({ item, at }) => `
-            <button class="context-card" type="button" data-managed-item-id="${escapeHtml(item.id)}">
-              <span class="card-kind">${item.kind === "event" ? "일정" : "마감"}</span>
-              <strong>${escapeHtml(item.title)}</strong>
-              <span>${escapeHtml(item.kind === "event" && item.endAt !== undefined
-                ? `${formatDateTime(at)} ~ ${formatDateTime(item.endAt)}`
-                : formatDateTime(at))}</span>
-              <small>${escapeHtml(statusLabel(item.status))}</small>
-            </button>`).join("")}</div>
-        </section>`).join("")}</div>`;
-  panelContent.innerHTML = `
-    <div class="management-toolbar">
-      <p>이번 주 Task와 Event를 수정하거나 처리할 수 있습니다.</p>
-      <div>
-        <button class="primary-button" type="button" data-management-add>일정 추가</button>
-        <button class="secondary-button" type="button" data-management-refresh>새로고침</button>
-      </div>
-    </div>
-    ${content}`;
-  panelContent.querySelector("[data-management-add]")?.addEventListener("click", () => openView("add"));
-  panelContent.querySelector("[data-management-refresh]")?.addEventListener("click", () => openView("schedule-settings"));
-  panelContent.querySelectorAll("[data-managed-item-id]").forEach((button) => {
-    button.addEventListener("click", () => openDetail(button.dataset.managedItemId));
-  });
 }
 
 function handleNotification(payload) {
@@ -809,172 +784,6 @@ async function runExclusivePanelAction(action) {
   });
 }
 
-function renderSettings() {
-  panelContent.innerHTML = `
-    <div class="settings-list">
-      <button type="button" data-settings-profile>프로필 <span>›</span></button>
-      <button type="button" data-settings-schedule>이번 주 일정 관리 <span>›</span></button>
-      <button type="button" data-settings-source>Source 관리 <span>›</span></button>
-    </div>
-    <p class="hint">현재 calendar:get 범위에 맞춰 이번 주 일정만 관리합니다.</p>`;
-  panelContent.querySelector("[data-settings-profile]")?.addEventListener("click", () => renderProfileSettings());
-  panelContent.querySelector("[data-settings-schedule]")?.addEventListener("click", () => openView("schedule-settings"));
-  panelContent.querySelector("[data-settings-source]")?.addEventListener("click", () => renderSourceSettings());
-}
-
-async function renderProfileSettings(notice) {
-  panelTitle.textContent = "프로필 설정";
-  panelContent.innerHTML = '<div class="state-message">프로필을 불러오는 중...</div>';
-  try {
-    const profile = profileToForm(unwrapResult(await desktopApi.profileGet()));
-    panelContent.innerHTML = `
-      ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
-      <form class="profile-form" data-profile-form>
-        <p class="state-message error compact" data-profile-error hidden></p>
-        <div class="form-row">
-          <div class="form-field"><label for="profile-school">학교</label><input id="profile-school" name="school" value="${escapeHtml(profile.school)}" required /></div>
-          <div class="form-field"><label for="profile-major">전공</label><input id="profile-major" name="major" value="${escapeHtml(profile.major)}" required /></div>
-        </div>
-        <div class="form-field"><label for="profile-year">학년</label><input id="profile-year" name="year" value="${escapeHtml(profile.year)}" placeholder="예: 3학년" required /></div>
-        ${profileListField("profile-interests", "interests", "관심 분야", profile.interests, "AI, 창업")}
-        ${profileListField("profile-activities", "activityTypes", "선호 활동", profile.activityTypes, "해커톤, 공모전")}
-        ${profileListField("profile-locations", "preferredLocations", "선호 장소", profile.preferredLocations, "서울, 교내")}
-        ${profileListField("profile-constraints", "explicitConstraints", "제외 조건", profile.explicitConstraints, "대학원생 전용")}
-        <fieldset class="quiet-hours-field">
-          <label class="checkbox-label"><input name="quietHoursEnabled" type="checkbox" ${profile.quietHoursEnabled ? "checked" : ""} data-quiet-hours-toggle /> 방해 금지 시간 사용</label>
-          <div class="form-row" data-quiet-hours-fields>
-            <div class="form-field"><label for="quiet-start">시작</label><input id="quiet-start" name="quietHoursStart" type="time" value="${escapeHtml(profile.quietHoursStart)}" /></div>
-            <div class="form-field"><label for="quiet-end">종료</label><input id="quiet-end" name="quietHoursEnd" type="time" value="${escapeHtml(profile.quietHoursEnd)}" /></div>
-          </div>
-        </fieldset>
-        <button class="primary-button" type="submit">프로필 저장</button>
-      </form>
-      <p class="hint">여러 값은 쉼표로 구분해주세요. 프로필은 추천 관련도와 Quiet Hours 정책에 사용됩니다.</p>`;
-    const form = panelContent.querySelector("[data-profile-form]");
-    form?.addEventListener("submit", runProfileSave);
-    form?.querySelector("[data-quiet-hours-toggle]")?.addEventListener("change", updateQuietHoursFields);
-    updateQuietHoursFields.call(form?.querySelector("[data-quiet-hours-toggle]"));
-  } catch (error) {
-    renderError(error);
-  }
-}
-
-function profileListField(id, name, label, value, placeholder) {
-  return `<div class="form-field"><label for="${id}">${label}</label><input id="${id}" name="${name}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" /></div>`;
-}
-
-function updateQuietHoursFields() {
-  const enabled = this instanceof HTMLInputElement && this.checked;
-  panelContent.querySelectorAll("[data-quiet-hours-fields] input").forEach((input) => {
-    input.disabled = !enabled;
-    input.required = enabled;
-  });
-}
-
-async function runProfileSave(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  if (!(form instanceof HTMLFormElement)) return;
-  const submit = form.querySelector("button[type='submit']");
-  if (submit instanceof HTMLButtonElement) submit.disabled = true;
-  try {
-    const profile = profileFromFormData(new FormData(form));
-    unwrapResult(await desktopApi.profileSave(profile));
-    await renderProfileSettings("프로필을 저장했습니다.");
-  } catch (error) {
-    const target = form.querySelector("[data-profile-error]");
-    if (target instanceof HTMLElement) {
-      target.textContent = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
-      target.hidden = false;
-    }
-  } finally {
-    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
-  }
-}
-
-async function renderSourceSettings(notice) {
-  panelTitle.textContent = "Source 관리";
-  panelContent.innerHTML = '<div class="state-message">등록된 Source를 불러오는 중...</div>';
-  try {
-    const { sources } = unwrapResult(await desktopApi.sourceList());
-    const schoolSite = sources.find((source) => source.id === "school-site");
-    const list = sources.length === 0
-      ? '<p class="state-message compact">등록된 Source가 없습니다.</p>'
-      : `<div class="source-list">${sources.map((source) => `
-          <article class="source-card">
-            <div>
-              <strong>${escapeHtml(sourceTypeLabel(source.id))}</strong>
-              <small>${escapeHtml(source.value)}</small>
-            </div>
-            <button class="danger-button" type="button" data-source-remove="${escapeHtml(source.id)}">삭제</button>
-          </article>`).join("")}</div>`;
-    panelContent.innerHTML = `
-      ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
-      <p class="state-message error compact" data-source-error hidden></p>
-      ${list}
-      <form class="source-form" data-source-form${schoolSite === undefined ? "" : ` data-existing-value="${escapeHtml(schoolSite.value)}"`}>
-        <label for="school-site-url">학교 사이트 URL</label>
-        <input id="school-site-url" name="value" type="url" placeholder="https://school.example/notices" value="${escapeHtml(schoolSite?.value ?? "")}" required />
-        ${schoolSite === undefined ? "" : '<p class="hint">저장하면 기존 학교 사이트 URL을 대체하며, 재시작 후 적용됩니다.</p>'}
-        <button class="primary-button" type="submit">학교 사이트 ${schoolSite === undefined ? "등록" : "변경"}</button>
-      </form>
-      <p class="hint">학교 이메일과 LMS 등록은 필수 설정값이 확정되지 않아 아직 지원하지 않습니다.</p>`;
-
-    panelContent.querySelector("[data-source-form]")?.addEventListener("submit", runSourceRegister);
-    panelContent.querySelectorAll("[data-source-remove]").forEach((button) => {
-      button.addEventListener("click", () => runSourceRemove(button));
-    });
-  } catch (error) {
-    renderError(error);
-  }
-}
-
-async function runSourceRegister(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  if (!(form instanceof HTMLFormElement)) return;
-  const value = new FormData(form).get("value")?.toString().trim() ?? "";
-  const existingValue = form.dataset.existingValue;
-  if (existingValue !== undefined && existingValue !== value
-    && !window.confirm("기존 학교 사이트 URL을 새 주소로 대체할까요? 앱을 재시작한 뒤 적용됩니다.")) return;
-  const submit = form.querySelector("button[type='submit']");
-  if (submit instanceof HTMLButtonElement) submit.disabled = true;
-  try {
-    unwrapResult(await desktopApi.sourceRegister("school-site", value));
-    await renderSourceSettings("등록했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");
-  } catch (error) {
-    showSourceError(error);
-  } finally {
-    if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
-  }
-}
-
-async function runSourceRemove(button) {
-  if (!(button instanceof HTMLButtonElement)) return;
-  const id = button.dataset.sourceRemove;
-  if (id === undefined || !window.confirm(`${sourceTypeLabel(id)} Source를 삭제할까요?`)) return;
-  button.disabled = true;
-  try {
-    unwrapResult(await desktopApi.sourceRemove(id));
-    await renderSourceSettings("삭제했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");
-  } catch (error) {
-    showSourceError(error);
-  } finally {
-    if (button.isConnected) button.disabled = false;
-  }
-}
-
-function showSourceError(error) {
-  const target = panelContent.querySelector("[data-source-error]");
-  if (!(target instanceof HTMLElement)) return;
-  target.textContent = error instanceof Error ? error.message : "Source 설정을 변경하지 못했습니다.";
-  target.hidden = false;
-}
-
-function sourceTypeLabel(id) {
-  return ({ "school-site": "학교 사이트", "school-email": "학교 이메일", lms: "LMS" })[id] ?? "Source";
-}
-
 async function runSync(button) {
   button.disabled = true;
   const original = button.innerHTML;
@@ -1004,7 +813,7 @@ function closePanel() {
 }
 
 function viewTitle(view) {
-  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가", settings: "설정", "schedule-settings": "이번 주 일정 관리" })[view] ?? "DoDoDo";
+  return ({ today: "오늘 할 일", calendar: "이번 주", inbox: "추천", ask: "물어보기", add: "일정 추가" })[view] ?? "DoDoDo";
 }
 
 function escapeHtml(value) {
