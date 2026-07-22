@@ -75,6 +75,6 @@ export async function generateActionAndReason(
 export function deterministicPhrasing(item: ContextItem): ActionPhrasing {
   return {
     action: `${item.title}을(를) 확인하세요.`,
-    reason: item.deadline !== undefined ? `마감: ${item.deadline}` : "미처리 Context",
+    reason: item.deadline !== undefined ? `마감: ${item.deadline}` : "",
   };
 }

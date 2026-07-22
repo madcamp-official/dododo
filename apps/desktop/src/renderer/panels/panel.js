@@ -86,7 +86,7 @@ function renderRankedItems(entries) {
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
       <strong>${escapeHtml(item.title)}</strong>
       <span>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</span>
-      <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
+      <small>${escapeHtml([`${score}점`, reason, statusLabel(item.status)].filter(Boolean).join(" · "))}</small>
     </button>`).join("")}</div>`;
   bindDetailButtons();
 }
@@ -118,7 +118,7 @@ function renderRecommendations(entries) {
     <article class="context-card static-card">
       <span class="card-kind opportunity">추천</span>
       <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(reason)}</span>
+      ${reason ? `<span>${escapeHtml(reason)}</span>` : ""}
       <small>${escapeHtml(`${score}점 · ${formatDateTime(item.deadline)}`)}</small>
     </article>`).join("")}</div>`;
 }
@@ -129,20 +129,26 @@ function renderAsk() {
       <label for="question">무엇이 궁금한가요?</label>
       <textarea id="question" name="question" rows="4" placeholder="예: 이번 주 마감은 뭐야?" required></textarea>
       <button class="primary-button" type="submit">물어보기</button>
-    </form>
-    <div class="answer" data-answer hidden></div>`;
+    </form>`;
   panelContent.querySelector("[data-ask-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const answer = panelContent.querySelector("[data-answer]");
+    const submit = event.currentTarget.querySelector("button[type='submit']");
     const question = new FormData(event.currentTarget).get("question")?.toString().trim() ?? "";
-    if (!(answer instanceof HTMLElement) || question === "") return;
-    answer.hidden = false;
-    answer.textContent = "답을 찾는 중...";
+    if (question === "") return;
+    const originalLabel = submit?.textContent ?? "물어보기";
+    if (submit instanceof HTMLButtonElement) {
+      submit.disabled = true;
+      submit.textContent = "답변을 기다리는 중...";
+    }
     try {
-      const result = unwrapResult(await desktopApi.ask(question));
-      answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
+      unwrapResult(await desktopApi.ask(question));
     } catch (error) {
-      answer.textContent = errorMessage(error, "질문 처리에 실패했습니다.");
+      renderError(new Error(errorMessage(error, "질문 처리에 실패했습니다.")));
+    } finally {
+      if (submit instanceof HTMLButtonElement && submit.isConnected) {
+        submit.disabled = false;
+        submit.textContent = originalLabel;
+      }
     }
   });
 }

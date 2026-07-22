@@ -7,7 +7,7 @@ import { createNotificationStore, normalizeNotification, notificationKindLabel, 
 const createdAt = "2026-07-21T15:00:00.000Z";
 
 test("알림 종류를 즉시 알림과 조용한 알림으로 분류한다", () => {
-  for (const kind of ["priority", "conflict", "reminder", "advice", "distraction"]) {
+  for (const kind of ["priority", "conflict", "reminder", "advice", "distraction", "answer"]) {
     assert.equal(notificationMode(kind), "immediate");
   }
   for (const kind of ["opportunity", "sync-complete"]) {
@@ -57,6 +57,17 @@ test("즉시 알림은 도착 순서대로 꺼내고 동일 알림은 중복 저
   assert.equal(store.takeImmediate(), undefined);
 });
 
+test("연속 답변은 대기 중인 이전 답변을 버리고 최신 답변을 먼저 표시한다", () => {
+  const store = createNotificationStore();
+  store.push({ kind: "priority", message: "일반 알림", createdAt });
+  store.push({ kind: "answer", message: "첫 답변", createdAt: "2026-07-21T15:01:00.000Z" });
+  store.push({ kind: "answer", message: "두 번째 답변", createdAt: "2026-07-21T15:02:00.000Z" });
+
+  assert.equal(store.takeImmediate()?.message, "두 번째 답변");
+  assert.equal(store.takeImmediate()?.message, "일반 알림");
+  assert.equal(store.takeImmediate(), undefined);
+});
+
 test("조용한 알림은 unread 배지를 올리고 확인 후 목록은 보존한다", () => {
   const store = createNotificationStore();
   store.push({ kind: "opportunity", message: "새 공모전", createdAt });
@@ -74,5 +85,6 @@ test("조용한 알림은 unread 배지를 올리고 확인 후 목록은 보존
 test("알림 종류를 사용자용 짧은 문구로 표시한다", () => {
   assert.equal(notificationKindLabel("conflict"), "일정 충돌");
   assert.equal(notificationKindLabel("sync-complete"), "동기화 완료");
+  assert.equal(notificationKindLabel("answer"), "답변");
   assert.equal(notificationKindLabel("unknown"), "알림");
 });

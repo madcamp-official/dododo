@@ -9,6 +9,7 @@ export type NotificationKind =
   | "sync-complete"
   | "advice"
   | "distraction"
+  | "answer"
   // docs/llm-architecture.md §5 Job Queue: extract_facts 같은 백그라운드 재분석
   // 작업이 재시도 한도를 다 써 dead_letter로 넘어가면 발생한다(watchTick.ts의
   // WatchTickResult.deadLetteredJobs → jobFailureSummary.ts).

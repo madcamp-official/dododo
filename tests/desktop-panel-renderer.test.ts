@@ -29,6 +29,18 @@ test("독립 결과 패널은 다섯 route와 기존 desktopApi를 연결한다"
   assert.match(script, /version === navigationVersion/);
 });
 
+test("물어보기 성공 답변은 패널에 중복 표시하지 않고 질문 창을 유지한다", async () => {
+  const [panelScript, mascotScript] = await Promise.all([
+    readFile(scriptPath, "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+  ]);
+
+  assert.doesNotMatch(panelScript, /data-answer/);
+  assert.doesNotMatch(mascotScript, /data-answer/);
+  assert.doesNotMatch(panelScript, /unwrapResult\(await desktopApi\.ask\(question\)\);\s*window\.close\(\)/);
+  assert.doesNotMatch(mascotScript, /unwrapResult\(await desktopApi\.ask\(question\)\);\s*panel\.hidden = true/);
+});
+
 test("독립 상세 패널은 완료·미룸·수정·삭제·리마인더 액션을 제공한다", async () => {
   const script = await readFile(scriptPath, "utf8");
   assert.match(script, /desktopApi\.complete/);

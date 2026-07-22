@@ -483,7 +483,7 @@ function renderRankedItems(entries, emptyMessage) {
       <span class="card-kind">${item.kind === "event" ? "일정" : "할 일"}</span>
       <strong>${escapeHtml(item.title)}</strong>
       <span>${escapeHtml(formatDateTime(item.startAt ?? item.deadline))}</span>
-      <small>${escapeHtml(`${score}점 · ${reason} · ${statusLabel(item.status)}`)}</small>
+      <small>${escapeHtml([`${score}점`, reason, statusLabel(item.status)].filter(Boolean).join(" · "))}</small>
     </button>`).join("")}</div>`;
   panelContent.querySelectorAll("[data-item-id]").forEach((button) => {
     button.addEventListener("click", () => openDetail(button.dataset.itemId));
@@ -519,7 +519,7 @@ function renderRecommendations(entries) {
     <article class="context-card static-card">
       <span class="card-kind opportunity">추천</span>
       <strong>${escapeHtml(item.title)}</strong>
-      <span>${escapeHtml(reason)}</span>
+      ${reason ? `<span>${escapeHtml(reason)}</span>` : ""}
       <small>${escapeHtml(`${score}점 · ${formatDateTime(item.deadline)}`)}</small>
     </article>`).join("")}</div>`;
 }
@@ -530,23 +530,28 @@ function renderAsk() {
       <label for="question">무엇이 궁금한가요?</label>
       <textarea id="question" name="question" rows="3" placeholder="예: 이번 주 마감이 뭐야?" required></textarea>
       <button class="primary-button" type="submit">물어보기</button>
-    </form>
-    <div class="answer" data-answer hidden></div>`;
+    </form>`;
   panelContent.querySelector("[data-ask-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const answer = panelContent.querySelector("[data-answer]");
+    const submit = event.currentTarget.querySelector("button[type='submit']");
     const question = new FormData(event.currentTarget).get("question")?.toString().trim() ?? "";
-    if (!(answer instanceof HTMLElement) || question === "") return;
-    answer.hidden = false;
-    answer.textContent = "답변을 찾는 중...";
+    if (question === "") return;
+    const originalLabel = submit?.textContent ?? "물어보기";
+    if (submit instanceof HTMLButtonElement) {
+      submit.disabled = true;
+      submit.textContent = "답변을 기다리는 중...";
+    }
     beginThinking();
     try {
-      const result = unwrapResult(await desktopApi.ask(question));
-      answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
+      unwrapResult(await desktopApi.ask(question));
     } catch (error) {
-      answer.textContent = error instanceof Error ? error.message : "질문 처리에 실패했습니다.";
+      renderError(error instanceof Error ? error : new Error("질문 처리에 실패했습니다."));
     } finally {
       endThinking("sparkle.png");
+      if (submit instanceof HTMLButtonElement && submit.isConnected) {
+        submit.disabled = false;
+        submit.textContent = originalLabel;
+      }
     }
   });
 }
@@ -625,6 +630,12 @@ function handleNotification(payload) {
   if (result.mode === "quiet") {
     updateNotificationBadge();
   }
+  // 답변 말풍선이 떠 있는 동안 다음 질문의 답변이 오면 사용자가 직접 닫거나
+  // 15초 타이머를 기다리지 않고 최신 답변으로 즉시 교체한다.
+  if (result.event.kind === "answer" && activeNotification?.kind === "answer") {
+    dismissActiveNotification();
+    return;
+  }
   showNextNotification();
 }
 
@@ -696,7 +707,10 @@ function showNextNotification() {
   notificationDetail.hidden = next.contextItemId === undefined && next.targetView === undefined;
   notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히 보기";
   notificationBubble.hidden = false;
-  notificationTimer = window.setTimeout(dismissActiveNotification, NOTIFICATION_DISPLAY_MS);
+  notificationTimer = window.setTimeout(
+    dismissActiveNotification,
+    next.kind === "answer" ? 15_000 : NOTIFICATION_DISPLAY_MS,
+  );
 }
 
 function dismissActiveNotification() {

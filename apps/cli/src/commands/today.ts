@@ -19,7 +19,7 @@ export async function renderToday(container: CliContainer, now: Date = new Date(
   const lines = ["Today", ""];
   ranked.forEach(({ item, score, reason }, index) => {
     lines.push(`${index + 1}. [${Math.round(score)}] ${item.title}`);
-    lines.push(`   ${reason}`);
+    if (reason.length > 0) lines.push(`   ${reason}`);
     // ID가 없으면 이 목록에서 본 항목을 task/evidence 명령으로 다시 조회할 방법이
     // 없다 — inbox/calendar는 이미 ID를 보여주는데 today만 번호(1. 2. 3.)뿐이라
     // 빠져 있었다(실제 사용 중 발견된 버그).

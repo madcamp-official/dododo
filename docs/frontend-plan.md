@@ -401,7 +401,8 @@ interface NotificationEvent {
 //   배경 오류를 캐릭터가 "?" 표시로 알리는 용도(4번 turn에서 논의된 오류 상태 UX)
 ```
 
-모든 NotificationEvent는 도착 시 캐릭터 말풍선으로 순서대로 표시한다.
+모든 NotificationEvent는 도착 시 캐릭터 말풍선으로 순서대로 표시한다. `ask:ask`의
+성공 답변은 `answer` 즉시 이벤트로도 전달해 캐릭터가 답변을 말풍선으로 발화한다.
 `opportunity`/`sync-complete`는 말풍선 표시 후에도 사용자가 다시 확인할 수 있도록
 캐릭터 배지와 알림 목록에 함께 보존하고 스크린리더에는 `polite`로 알린다. 나머지
 종류는 즉시 말풍선만 표시하며 `assertive`로 알린다. Desktop watch가 만드는

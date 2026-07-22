@@ -56,6 +56,16 @@ test("classifyRecommendation은 task/event 추천을 priority 말풍선으로 �
   assert.equal(event.contextItemId, "ctx-task-1");
 });
 
+test("classifyRecommendation은 추천 이유가 없으면 불필요한 구분자 없이 action만 표시한다", () => {
+  const event = classifyRecommendation(
+    opportunity(),
+    { ...recommendation("ctx-opportunity-1"), reason: "" },
+  );
+
+  assert.equal(event.kind, "opportunity");
+  assert.equal(event.message, "확인하세요");
+});
+
 test("classifyRecommendation은 item을 못 찾아도 priority 말풍선으로 보존한다", () => {
   const event = classifyRecommendation(undefined, recommendation("ctx-missing"));
   assert.equal(event.kind, "priority");
