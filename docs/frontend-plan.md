@@ -119,6 +119,13 @@ delete 메서드가 없음)다. `packages/shared`의 계약 확장이 필요할 
 흐름으로 최소한의 대응이 가능하다. 원격 LLM(`DODODO_LLM_PROVIDER=remote-job`) 사용
 중이면 스크린샷이 로컬이 아니라 팀 서버로 나간다는 점을 세션 시작 전에 고지한다.
 
+트리거 판정(3분 고정 폴링 대신 이벤트 기반) 중 Idle→Active 부분은
+`apps/desktop/src/main/study/captureTrigger.ts`/`captureScheduler.ts`로 구현·테스트
+완료됐고 `study:start`/`study:end`에 배선도 끝났다 — 지금은 `onTrigger`가 로그만
+남긴다. 앱 전환 감지는 새 의존성(예: active-win)이 필요해 이번엔 범위에서 뺐다.
+실제 캡처·Vision 호출·`adviceCount` 증가는 위 문단의 백엔드 Vision 파이프라인이
+머지된 뒤 `onTrigger` 본문을 채우는 것으로 이어진다.
+
 ## 3. 역할 분담
 
 기준: Electron Main 프로세스 = 박도현. Renderer(캐릭터·패널·설정 UI) = 김도연.
