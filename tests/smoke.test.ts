@@ -725,6 +725,106 @@ test("RuleBasedRecommendationEngine은 history Provider로 30분 내 재추천�
   assert.deepEqual(recommendations, []);
 });
 
+test("RuleBasedRecommendationEngine은 우선순위 상위 llmPhrasingLimit개까지만 LLM으로 문구를 생성한다", async () => {
+  const now = new Date("2026-07-18T09:00:00+09:00");
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON(request) {
+      const value = { action: "LLM 문구", reason: "LLM 근거" };
+      if (!request.validate(value)) throw new Error("unexpected");
+      callCount += 1;
+      return value;
+    },
+  };
+
+  const items = [
+    baseItem({ id: "ctx-soonest", title: "가장 급한 항목", deadline: "2026-07-18T18:00:00+09:00" }),
+    baseItem({ id: "ctx-middle", title: "중간 항목", deadline: "2026-07-20T18:00:00+09:00" }),
+    baseItem({ id: "ctx-latest", title: "가장 여유 있는 항목", deadline: "2026-07-25T18:00:00+09:00" }),
+  ];
+
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider, llmPhrasingLimit: 2 });
+  const recommendations = await engine.recommend(items, emptyProfile(), now);
+
+  assert.equal(callCount, 2, "우선순위 상위 2개만 LLM을 호출해야 함");
+  assert.equal(recommendations[0]?.contextItemId, "ctx-soonest");
+  assert.equal(recommendations[1]?.contextItemId, "ctx-middle");
+  assert.equal(recommendations[0]?.action, "LLM 문구");
+  assert.equal(recommendations[1]?.action, "LLM 문구");
+
+  // 순위가 가장 낮은 세 번째 항목은 LLM을 거치지 않고 템플릿을 그대로 써야 함.
+  assert.equal(recommendations[2]?.contextItemId, "ctx-latest");
+  assert.equal(recommendations[2]?.action, "가장 여유 있는 항목을(를) 확인하세요.");
+  assert.equal(recommendations[2]?.reason, "마감: 2026-07-25T18:00:00+09:00");
+});
+
+test("RuleBasedRecommendationEngine의 llmPhrasingLimit 기본값은 5다", async () => {
+  const now = new Date("2026-07-18T09:00:00+09:00");
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON(request) {
+      const value = { action: "LLM 문구", reason: "LLM 근거" };
+      if (!request.validate(value)) throw new Error("unexpected");
+      callCount += 1;
+      return value;
+    },
+  };
+  const items = Array.from({ length: 7 }, (_, index) => baseItem({
+    id: `ctx-${index}`,
+    deadline: `2026-07-${19 + index}T18:00:00+09:00`,
+  }));
+
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider });
+  await engine.recommend(items, emptyProfile(), now);
+
+  assert.equal(callCount, 5);
+});
+
+test("RuleBasedRecommendationEngine은 일부 LLM 호출이 실패해도 다른 항목의 문구 생성을 유지한다", async () => {
+  const now = new Date("2026-07-18T09:00:00+09:00");
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON(request) {
+      callCount += 1;
+      if (callCount === 1) throw new Error("첫 번째 호출 실패");
+      const value = { action: "LLM 문구", reason: "LLM 근거" };
+      if (!request.validate(value)) throw new Error("unexpected");
+      return value;
+    },
+  };
+  const items = [
+    baseItem({ id: "ctx-failed", title: "실패 항목", deadline: "2026-07-18T18:00:00+09:00" }),
+    baseItem({ id: "ctx-succeeded", title: "성공 항목", deadline: "2026-07-20T18:00:00+09:00" }),
+  ];
+
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider, llmPhrasingLimit: 2 });
+  const recommendations = await engine.recommend(items, emptyProfile(), now);
+
+  assert.equal(callCount, 2);
+  assert.equal(recommendations[0]?.action, "실패 항목을(를) 확인하세요.");
+  assert.equal(recommendations[1]?.action, "LLM 문구");
+});
+
+test("RuleBasedRecommendationEngine은 음수 llmPhrasingLimit을 0으로 처리한다", async () => {
+  let callCount = 0;
+  const provider: LLMProvider = {
+    async completeJSON() {
+      callCount += 1;
+      throw new Error("호출되면 안 됨");
+    },
+  };
+  const engine = new RuleBasedRecommendationEngine({ llmProvider: provider, llmPhrasingLimit: -1 });
+
+  const recommendations = await engine.recommend(
+    [baseItem({ title: "템플릿 항목" })],
+    emptyProfile(),
+    new Date("2026-07-18T09:00:00+09:00"),
+  );
+
+  assert.equal(callCount, 0);
+  assert.equal(recommendations[0]?.action, "템플릿 항목을(를) 확인하세요.");
+});
+
 test("generateActionAndReason은 LLM이 유효한 응답을 주면 그대로 쓴다", async () => {
   const provider: LLMProvider = {
     async completeJSON(request) {

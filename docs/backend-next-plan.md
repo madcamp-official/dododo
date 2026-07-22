@@ -54,9 +54,11 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 ## P1 — LLM 활용 확대 (llm-architecture §8)
 
-1. `RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
-   호출하는 문제(§4-2) 해소 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화.
-   `today`/`inbox`/`watch` 체감 지연의 직접 원인이라 가장 먼저.
+1. ~~`RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
+   호출하는 문제(§4-2) 해소~~ — **완료.** 우선순위 상위 `llmPhrasingLimit`(기본 5)개만
+   `Promise.all`로 병렬 LLM 호출, 나머지는 `deterministicPhrasing` 템플릿을 즉시
+   사용하도록 바꿨다. `generateActionAndReason`이 실패 시 이미 내부에서 템플릿으로
+   폴백하므로 병렬 호출 중 하나가 실패해도 나머지를 막지 않는다.
 2. 애매한 병합 LLM 검토 — 40~69점 Candidate에 `same`/`different`/`uncertain` 제안
    추가. Hard Guard(과제 번호 등)는 계속 코드가 최종 결정.
 3. `ask` Local RAG — SQLite 조건 검색으로 상위 Context 5~10개를 고른 뒤 LLM에
@@ -118,6 +120,6 @@ P0 스택에 없는 것만 남는다.
 
 1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
    필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
-2. P1 — Job Queue Worker 경계 정리, `today`/`inbox`/`watch` 문장 생성 지연 해소.
-3. P1 — 우선순위 역전(스택에 없다면)·Vision 파이프라인.
+2. ~~P1 — `today`/`inbox`/`watch` 문장 생성 지연 해소~~ — 완료.
+3. P1 — Job Queue Worker 경계 정리, 우선순위 역전 감지, Vision 파이프라인.
 4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
