@@ -33,7 +33,7 @@
 | 관련도·병합·충돌·우선순위 (코드) | O | O | Intelligence |
 | Privacy Gateway 마스킹·Chunk | O | O(`ChunkingPrivacyGateway`) | Intelligence / CLI |
 | `ask`·`add`·`watch`·`advise`·`evidence` | O | O | Intelligence / CLI |
-| 실제 이미지 Vision 분석 | Provider만 | X (`advise --live`가 캡처만 하고 Vision 미호출) | Intelligence / CLI |
+| 실제 이미지 Vision 분석 (`extractScreenActivity`) | O | O(`advise --live`, `.env` 미설정 시 캡처만 보고) | Intelligence / CLI |
 | Embedding / RAG | X | X | Intelligence |
 | 클라이언트 측 백그라운드 재분석 Job Queue(§5) | X | X | 공동 |
 
@@ -110,7 +110,7 @@ Collectors → RawItem Store → Job Queue
 - **2단계 문서 분석**: 짧은 문서는 1단계(성격 파악)로 끝내고, 복잡·낮은 확신도 문서만 12B로 정밀 재분석.
 - **Embedding 후보 검색**: trigram이 놓치는 의미 유사("AI 해커톤" ↔ "AI 융합 경진대회")를 Ollama `/api/embed`로 보완. 단 **자동 병합을 확정하지 않고** 후보 검색까지만 — Hard Guard(과제 번호·과목·날짜·주최자)는 코드가 확인.
 - **애매한 병합 LLM 검토**: 40~69점 Candidate에 `same`/`different`/`uncertain` 판정을 제안으로 추가. `different`는 병합 금지 근거로, `uncertain`은 사용자 확인으로. LLM 결과만으로 과제 번호가 다른 항목을 병합하지 않음.
-- **실제 화면 Vision**: `gemma3:4b`로 스크린샷 → 구조화 Activity(application/activityType/course/section/taskCandidate/sensitiveContentDetected/confidence) 추출 후 **원본 즉시 삭제**. 3분 고정 주기 대신 Trigger(명령 실행·앱 전환·같은 문서 장기 체류·마감 임박 관련 앱·Idle→Active) 기반.
+- **실제 화면 Vision** — `extractScreenActivity`(`packages/context-engine/src/activity/visionExtraction.ts`)로 완료: 스크린샷 → 구조화 Activity(application/activityType/course/section/taskCandidate/sensitiveContentDetected/confidence) 추출, `sensitiveContentDetected`면 RawItem을 만들지 않는다. 단 이 판정은 모델 전송 이후이므로 전송 전 Privacy 방어선이 아니다. 이미지 Privacy Gateway가 준비될 때까지 `advise --screen --live`는 로컬 Ollama에서만 동작하며 remote-job 설정과 집중 모드에서는 캡처 전에 거절한다. 원본 base64는 함수 호출 한 번에만 쓰고 반환값에 담지 않아 호출부가 바로 버릴 수 있다(**원본 즉시 삭제**). 기존 `linkActivityToContext`/`generateScreenAdvice`/`screenAdvicePolicy`에 합류한다. 아직 남은 것: 3분 고정 폴링이 아니라 Trigger(명령 실행·앱 전환·같은 문서 장기 체류·마감 임박 관련 앱·Idle→Active) 기반 자동 캡처와, 데스크톱 "같이 공부하기" 세션 UI/동의 흐름 연결(프론트엔드).
 - **`ask` Local RAG**: 전체 DB를 LLM에 주지 않고, 코드가 SQLite 조건 검색 + Embedding으로 상위 Context 5~10개를 골라 LLM에 전달, 답변에 Evidence ID 연결. `searchContext`/`listToday`/`getEvidence` 같은 읽기 전용 Tool만 제공 가능.
 - **자연어 `add`**: LLM이 일정 제안 → 코드가 날짜·충돌·필수 필드 검증 → CLI 확인 → 코드 저장. LLM이 캘린더/DB에 직접 쓰지 않음.
 - **일일 계획**: 코드가 오늘 일정·마감·미완료·가용 시간을 계산 → LLM이 실행 가능한 계획으로 구성. 입력된 Task/Event만 사용(마감·일정 지어내기 금지).

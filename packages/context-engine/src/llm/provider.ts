@@ -23,5 +23,8 @@ export interface LLMJSONRequest<T> {
 }
 
 export interface LLMProvider {
+  // 이미지 원본이 프로세스 밖으로 나가는지 표시한다. Vision 호출부는 이미지
+  // Privacy Gateway가 준비될 때까지 "remote" Provider를 직접 거절한다.
+  imageDataBoundary?: "local" | "remote";
   completeJSON<T>(request: LLMJSONRequest<T>): Promise<T>;
 }

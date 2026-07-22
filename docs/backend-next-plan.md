@@ -69,22 +69,29 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 P0 스택에 없는 것만 남는다.
 
-1. ~~**우선순위 역전 감지**(frontend-plan 2.1)~~ — **완료.** P0 스택에 없어
-   `apps/cli/src/runtime/priorityInversion.ts`에 새로 만들었다.
-   `findPriorityInversion(ranked, currentItemId)`가 순수 비교(현재 항목보다
-   순위가 높은 항목이 있으면 최상위 항목 반환, 동점은 역전 아님), `checkPriorityInversion
-   (container, currentItemId, now)`가 `getToday`와 같은 풀(task+event)로 실제
-   순위를 계산해 감싼다. "현재 다루는 Task"를 무엇으로 볼지(세션 상태 vs Vision
-   Activity 연결)와 IPC 채널 설계는 프론트엔드 몫으로 남겨뒀다 —
-   `checkPriorityInversion(container, currentItemId, now)`를 그대로 IPC 핸들러에서
-   호출하면 된다.
-2. **Vision 파이프라인 실제 호출**(frontend-plan 2.5): `LLMProvider.completeJSON({
-   modelKind: "vision", images: [...] })` 호출 코드가 아직 없다(인터페이스만
-   존재). 구조화 Activity 추출 후 `linkActivityToContext`/`generateScreenAdvice`로
-   연결, 원본은 호출 직후 즉시 삭제.
-3. **Privacy Gateway의 이미지 미대응**: 현재 텍스트 전용이라 이미지가 Privacy
-   Gateway를 거치지 않는다. 세션 시작 시 1회 동의로 최소 대응(frontend-plan
-   방향)하되, 원격 Provider 고지 문구는 프론트엔드와 조율.
+1. ~~**우선순위 역전 감지**(frontend-plan 2.1)~~ — **완료.**
+   `apps/cli/src/runtime/priorityInversion.ts`의 `findPriorityInversion`이 순수 비교를,
+   `checkPriorityInversion`이 실제 task+event 순위 계산을 담당한다. 현재 Task를
+   결정하는 세션/Activity 연결과 IPC 채널은 프론트엔드 연결 범위로 남아 있다.
+2. ~~**Vision 파이프라인 실제 호출**(frontend-plan 2.5)~~ — **완료.**
+   `packages/context-engine/src/activity/visionExtraction.ts`의
+   `extractScreenActivity(imageBase64, observedAt, provider)`가 `LLMProvider.completeJSON({
+   modelKind: "vision", images: [...] })`을 호출해 구조화 Activity를 추출하고,
+   기존 `linkActivityToContext`/`generateScreenAdvice`/`screenAdvicePolicy`가
+   그대로 소비할 수 있는 `RawItem`으로 변환한다(fixture 경로와 같은 metadata
+   키). `sensitiveContentDetected`면 RawItem 자체를 만들지 않는다. 원본
+   `imageBase64`는 이 함수 호출에만 쓰이고 반환값에 담기지 않아 호출부
+   (`apps/cli/src/commands/advise.ts`의 `advise --screen --live`)가 곧바로
+   버린다. 남은 건 3분 폴링이 아닌 Trigger 기반 자동 캡처와 데스크톱 "같이
+   공부하기" 세션 UI(프론트엔드 몫).
+3. **Privacy Gateway의 이미지 미대응** — `sensitiveContentDetected`는 모델이
+   이미지를 받은 뒤의 자기 보고라 전송 전 방어선이 아니며, 민감한 결과의
+   RawItem 생성만 막는다. 따라서 이미지 Privacy Gateway가 준비될 때까지
+   `advise --screen --live`는 로컬 Ollama에서만 동작하고 remote-job 설정에서는
+   캡처·전송 전에 거절한다. 세션 시작 시 1회 동의(frontend-plan 방향)는 여전히
+   프론트엔드와 조율이 필요하다. 방어를 호출부에만 맡기지 않도록 `LLMProvider`의
+   `imageDataBoundary`를 원격 Provider가 명시하고 `extractScreenActivity`도 직접
+   원격 이미지 요청을 거절한다.
 
 ## P2 — Data Ingestion 영역 문서·코드 정리
 
@@ -119,15 +126,15 @@ P0 스택에 없는 것만 남는다.
   이미 cancelled를 오늘/추천에서 제외하므로 계약 확장이 필요 없었다.
 - P0 스택 병합 후 IPC 계약과 실제 구현이 어긋나는 부분은 프론트엔드(박도현·
   김도연)와 조율.
-- 우선순위 역전은 `checkPriorityInversion(container, currentItemId, now)`가
-  준비됐다 — "현재 다루는 Task"를 무엇으로 볼지와 새 IPC 채널(예: `priority:check`)
-  설계는 프론트엔드와 조율 필요. Vision 파이프라인의 입출력 타입도 구현 전
-  프론트엔드와 먼저 고정한다(IPC 응답 모양과 맞물림).
+- 우선순위 역전은 함수가 준비됐고(위 참고), Vision도 `extractScreenActivity`가
+  준비됐다 — 둘 다 데스크톱에서 실제로 언제/어떻게 호출할지(트리거, IPC 채널,
+  "같이 공부하기" 세션 UI)는 프론트엔드와 조율 필요.
 
 ## 권장 순서
 
 1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
    필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
 2. ~~P1 — `today`/`inbox`/`watch` 문장 생성 지연 해소~~ — 완료.
-3. P1 — Job Queue Worker 경계 정리, Vision 파이프라인. 우선순위 역전 감지는 완료.
-4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
+3. ~~P1 — 우선순위 역전·Vision 파이프라인~~ — 완료. 남은 건 프론트엔드 연결.
+4. P1 — Job Queue Worker 경계 정리.
+5. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.

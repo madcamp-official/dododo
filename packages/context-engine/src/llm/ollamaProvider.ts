@@ -38,6 +38,7 @@ interface OllamaGenerateResponse {
 // 서버가 Schema 제약을 거부하면(일부 HTTP 4xx) /api/generate + format:"json"으로 폴백한다.
 // 어느 경로든 모델이 "검증됨"이라고 주장해도 반환 전 항상 Schema를 재검증한다.
 export class OllamaProvider implements LLMProvider {
+  readonly imageDataBoundary = "local" as const;
   private readonly config: OllamaProviderConfig;
 
   constructor(config: OllamaProviderConfig) {

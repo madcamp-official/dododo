@@ -1,3 +1,5 @@
+import { extractScreenActivity } from "../../../../packages/context-engine/src/index.ts";
+import type { ScreenAdviceDecision } from "../runtime/adviceLookup.ts";
 import type { CliContainer } from "../runtime/container.ts";
 
 const USAGE = "사용법: dododo advise --screen [--live] [--focus]";
@@ -15,8 +17,10 @@ export async function runAdvise(
     return `advise는 현재 --screen만 지원합니다.\n${USAGE}`;
   }
 
+  const focusMode = args.includes("--focus");
+
   if (args.includes("--live")) {
-    return runLiveCapture(container);
+    return runLiveCapture(container, focusMode, now);
   }
 
   const [activity] = await container.screenCollector.sync();
@@ -24,13 +28,12 @@ export async function runAdvise(
     return "캡처할 화면 활동이 없습니다.";
   }
 
-  // TODO(screen-capture-v2): 실제 화면 캡처로 바뀌면 여기서 캡처 원본 파일을
-  // 삭제한다. 지금은 정적 fixture를 읽을 뿐 실제 캡처 파일이 없어 no-op이다.
-
   const contextItems = await container.repository.listContextItems();
-  const focusMode = args.includes("--focus");
   const decision = await container.screenAdvicePolicy.evaluate({ activity, contextItems, now, focusMode });
+  return renderDecision(decision);
+}
 
+function renderDecision(decision: ScreenAdviceDecision): string {
   if (!decision.advise) {
     return ["조언하지 않습니다.", `이유: ${decision.declineReason ?? "알 수 없음"}`].join("\n");
   }
@@ -42,22 +45,60 @@ export async function runAdvise(
   return lines.join("\n");
 }
 
-// 실제 픽셀 캡처는 Windows에서 동작하지만 Vision 분석이 아직 어디에도 연결되지
-// 않아(docs/llm-architecture.md §3) 이미지를 활동 요약으로 바꿀 방법이 없다.
-// 그래서 지금은 캡처 성공/실패만 정직하게 보고하고 이미지 바이트는 여기서 스코프를
-// 벗어나며 버려진다 — 로그에도, 어디에도 남기지 않는다.
-// TODO(screen-capture-v2): Vision 분석이 붙으면 capture.imageBase64를 그쪽에 넘기고
-// 이 함수를 지우거나 위 fixture 경로와 합친다.
-async function runLiveCapture(container: CliContainer): Promise<string> {
+// 실제 픽셀 캡처(Windows) → Vision LLM으로 구조화 Activity 추출 → 위 fixture
+// 경로와 같은 screenAdvicePolicy.evaluate로 합류한다(TODO(screen-capture-v2)였던
+// 항목 해소). capture.imageBase64는 extractScreenActivity 호출 한 번에만 쓰이고
+// 그 뒤로는 어떤 변수에도 저장하지 않는다 — 이 함수가 반환하는 순간 스코프를
+// 벗어나 GC 대상이 된다(AGENTS.md: 화면 캡처 원본은 영구 저장하지 않는다).
+async function runLiveCapture(container: CliContainer, focusMode: boolean, now: Date): Promise<string> {
+  // 집중 모드는 조언뿐 아니라 그 조언을 위한 화면 수집 자체를 중단한다.
+  // 원격 Provider에는 이미지 Privacy Gateway가 준비될 때까지 원본 화면을 보내지
+  // 않는다. sensitiveContentDetected는 모델 응답이라 전송 전 보호 수단이 아니다.
+  if (focusMode) {
+    return "조언하지 않습니다.\n이유: 집중 모드에서는 화면을 캡처하지 않습니다.";
+  }
+  if (container.llmConfig?.provider === "remote-job") {
+    return "원격 화면 분석은 개인정보 보호 처리가 준비되지 않아 사용할 수 없습니다. 로컬 Ollama를 사용하세요.";
+  }
+
+  let capture: Awaited<ReturnType<CliContainer["captureLiveScreen"]>>;
   try {
-    const capture = await container.captureLiveScreen();
-    return [
-      "실시간 화면 캡처 완료.",
-      `크기: ${capture.byteLength} bytes, 시각: ${capture.capturedAt.toISOString()}`,
-      "Vision 분석이 아직 연결되지 않아 활동 요약과 조언은 생성할 수 없습니다.",
-    ].join("\n");
+    capture = await container.captureLiveScreen();
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     return `실시간 화면 캡처에 실패했습니다: ${reason}`;
   }
+
+  if (container.llmProvider === undefined) {
+    return [
+      "실시간 화면 캡처 완료.",
+      `크기: ${capture.byteLength} bytes, 시각: ${capture.capturedAt.toISOString()}`,
+      "화면 분석용 LLM이 설정되지 않아 활동 요약과 조언을 생성할 수 없습니다.",
+    ].join("\n");
+  }
+
+  const extraction = await extractScreenActivity({
+    imageBase64: capture.imageBase64,
+    observedAt: capture.capturedAt,
+    provider: container.llmProvider,
+  });
+
+  if (extraction.outcome === "sensitive_content") {
+    return "화면에 민감한 내용이 감지되어 조언하지 않습니다.";
+  }
+  if (extraction.outcome === "remote_provider_blocked") {
+    return "원격 화면 분석은 개인정보 보호 처리가 준비되지 않아 사용할 수 없습니다. 로컬 Ollama를 사용하세요.";
+  }
+  if (extraction.outcome === "failed") {
+    return "화면 활동을 인식하지 못했습니다(Vision 분석 실패 또는 낮은 확신도).";
+  }
+
+  const contextItems = await container.repository.listContextItems();
+  const decision = await container.screenAdvicePolicy.evaluate({
+    activity: extraction.activity,
+    contextItems,
+    now,
+    focusMode,
+  });
+  return renderDecision(decision);
 }
