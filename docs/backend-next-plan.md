@@ -69,9 +69,15 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 P0 스택에 없는 것만 남는다.
 
-1. **우선순위 역전 감지**(frontend-plan 2.1): `priority.ts`가 이미 계산하는 전체
-   순위와 현재 세션/화면이 다루는 Task를 비교하는 순수 함수. P0 스택 포함 여부
-   확인 후 없으면 착수.
+1. ~~**우선순위 역전 감지**(frontend-plan 2.1)~~ — **완료.** P0 스택에 없어
+   `apps/cli/src/runtime/priorityInversion.ts`에 새로 만들었다.
+   `findPriorityInversion(ranked, currentItemId)`가 순수 비교(현재 항목보다
+   순위가 높은 항목이 있으면 최상위 항목 반환, 동점은 역전 아님), `checkPriorityInversion
+   (container, currentItemId, now)`가 `getToday`와 같은 풀(task+event)로 실제
+   순위를 계산해 감싼다. "현재 다루는 Task"를 무엇으로 볼지(세션 상태 vs Vision
+   Activity 연결)와 IPC 채널 설계는 프론트엔드 몫으로 남겨뒀다 —
+   `checkPriorityInversion(container, currentItemId, now)`를 그대로 IPC 핸들러에서
+   호출하면 된다.
 2. **Vision 파이프라인 실제 호출**(frontend-plan 2.5): `LLMProvider.completeJSON({
    modelKind: "vision", images: [...] })` 호출 코드가 아직 없다(인터페이스만
    존재). 구조화 Activity 추출 후 `linkActivityToContext`/`generateScreenAdvice`로
@@ -113,13 +119,15 @@ P0 스택에 없는 것만 남는다.
   이미 cancelled를 오늘/추천에서 제외하므로 계약 확장이 필요 없었다.
 - P0 스택 병합 후 IPC 계약과 실제 구현이 어긋나는 부분은 프론트엔드(박도현·
   김도연)와 조율.
-- 우선순위 역전·Vision 파이프라인의 입출력 타입은 구현 전 프론트엔드와 먼저
-  고정한다(IPC 응답 모양과 맞물림).
+- 우선순위 역전은 `checkPriorityInversion(container, currentItemId, now)`가
+  준비됐다 — "현재 다루는 Task"를 무엇으로 볼지와 새 IPC 채널(예: `priority:check`)
+  설계는 프론트엔드와 조율 필요. Vision 파이프라인의 입출력 타입도 구현 전
+  프론트엔드와 먼저 고정한다(IPC 응답 모양과 맞물림).
 
 ## 권장 순서
 
 1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
    필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
 2. ~~P1 — `today`/`inbox`/`watch` 문장 생성 지연 해소~~ — 완료.
-3. P1 — Job Queue Worker 경계 정리, 우선순위 역전 감지, Vision 파이프라인.
+3. P1 — Job Queue Worker 경계 정리, Vision 파이프라인. 우선순위 역전 감지는 완료.
 4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
