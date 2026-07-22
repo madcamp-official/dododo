@@ -258,6 +258,22 @@ test("desktop settings provides weekly schedule management with existing detail 
   assert.match(style, /\.schedule-groups\s*\{/);
 });
 
+test("desktop calendar renders schedules as day and time groups", async () => {
+  const [renderer, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(renderer, /buildWeeklyCalendar\(entries\)/);
+  assert.match(renderer, /class="weekly-calendar"/);
+  assert.match(renderer, /class="calendar-day"/);
+  assert.match(renderer, /class="calendar-entry \$\{item\.kind === "event" \? "event" : "deadline"\}"/);
+  assert.match(renderer, /<time datetime="\$\{escapeHtml\(at\)\}">\$\{escapeHtml\(timeLabel\)\}<\/time>/);
+  assert.match(renderer, /data-item-id/);
+  assert.match(style, /\.calendar-day\s*\{/);
+  assert.match(style, /\.calendar-entry\.deadline\s*\{/);
+});
+
 test("desktop mascot provides study consent, start, end, and summary flow", async () => {
   const [html, renderer, expressions] = await Promise.all([
     readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
