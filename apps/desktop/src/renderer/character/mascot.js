@@ -148,6 +148,7 @@ notificationDetail?.addEventListener("click", () => {
 
 const unsubscribeNotifications = window.desktopEvents?.onNotification?.(handleNotification);
 void showDailySummaryOnFirstLaunch();
+void restoreStudySession();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   unsubscribeNotifications?.();
@@ -180,6 +181,15 @@ async function openStudySession() {
       <p>도토리와 같이 공부하는 중입니다.</p>
       <button class="danger-button" type="button" data-study-end>세션 종료</button>`;
     panelContent.querySelector("[data-study-end]")?.addEventListener("click", endStudySession);
+  }
+}
+
+async function restoreStudySession() {
+  try {
+    const active = unwrapResult(await desktopApi.studyGet());
+    activeStudySessionId = active?.sessionId;
+  } catch {
+    // 세션 복원 실패는 다른 메뉴와 알림 사용을 막지 않는다.
   }
 }
 

@@ -321,6 +321,7 @@ type Result<T> =
 // 같이 공부하기 세션(2.5) — 아직 미구현(초안)
 "study:start" → (input: { screenCaptureConsent: boolean }) => Promise<Result<{ sessionId: string; startedAt: string }>>
 "study:end"   → (input: { sessionId: string }) => Promise<Result<{ summaryText: string; durationMinutes: number; adviceCount: number }>>
+"study:get"   → () => Promise<Result<{ sessionId: string; startedAt: string } | undefined>>
   // #81 후속 스택에서 세션 수명주기와 Renderer 동의 UI 구현. Vision 주기 분석은
   // backend Vision PR 병합 뒤 같은 세션 계약 내부에 연결한다.
 

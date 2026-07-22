@@ -48,6 +48,7 @@ const CHANNELS = {
   uiStateSet: "ui-state:set",
   studyStart: "study:start",
   studyEnd: "study:end",
+  studyGet: "study:get",
 };
 
 // Result<T>({ ok, data } | { ok, error })를 그대로 돌려준다 — Renderer가 .ok로 분기한다
@@ -75,6 +76,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
   setUiState: (key, value) => ipcRenderer.invoke(CHANNELS.uiStateSet, { key, value }),
   startStudy: (screenCaptureConsent) => ipcRenderer.invoke(CHANNELS.studyStart, { screenCaptureConsent }),
   endStudy: (sessionId) => ipcRenderer.invoke(CHANNELS.studyEnd, { sessionId }),
+  getStudySession: () => ipcRenderer.invoke(CHANNELS.studyGet),
 });
 
 // apps/desktop/src/main/notifier/notificationEvent.ts의 NOTIFICATION_CHANNEL과 같은

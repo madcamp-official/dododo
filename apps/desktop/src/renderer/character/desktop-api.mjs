@@ -20,6 +20,7 @@ const API_METHODS = {
   sync: "sync",
   studyStart: "startStudy",
   studyEnd: "endStudy",
+  studyGet: "getStudySession",
 };
 
 // Renderer는 preload가 노출한 API만 사용한다. 팩토리를 따로 export해 테스트에서는
@@ -59,6 +60,7 @@ export function createDesktopApi(bridgeOrProvider) {
     sync: () => invoke("sync"),
     studyStart: (screenCaptureConsent) => invoke("studyStart", screenCaptureConsent),
     studyEnd: (sessionId) => invoke("studyEnd", sessionId),
+    studyGet: () => invoke("studyGet"),
   };
 }
 
