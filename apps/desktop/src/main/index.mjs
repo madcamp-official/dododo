@@ -5,7 +5,8 @@ import path from "node:path";
 import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
 import { registerIpcHandlers } from "./ipc/index.ts";
 import { startDesktopWatch } from "./watch/desktopWatch.ts";
-import { clampPositionToWorkArea } from "./dragGeometry.ts";
+import { layoutWindowForCharacter } from "./dragGeometry.ts";
+import { NOTIFICATION_CHANNEL } from "./notifier/notificationEvent.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
@@ -16,8 +17,11 @@ const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
 const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
+const CHARACTER_PLACEMENT = "desktop:character-placement";
 const characterDragOrigins = new WeakMap();
+const characterPlacements = new WeakMap();
 const EXPANDED_SIZE = { width: 680, height: 420 };
+const CHARACTER_SIZE = { width: 174, height: 174 };
 
 // Renderer가 mouse-ignore 초기 상태의 단독 소유자다(위 mousemove 주석 참고). Renderer
 // 스크립트가 실패하거나 아직 SET_MOUSE_PASSTHROUGH를 한 번도 못 보낸 상태로 남으면
@@ -54,7 +58,15 @@ ipcMain.on(START_CHARACTER_DRAG, (event, pointer) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
   if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
   const [windowX, windowY] = characterWindow.getPosition();
-  characterDragOrigins.set(characterWindow, { pointerX: pointer.x, pointerY: pointer.y, windowX, windowY });
+  const placement = characterPlacements.get(characterWindow) ?? "bottom-right";
+  const offsetX = placement.endsWith("left") ? 4 : EXPANDED_SIZE.width - CHARACTER_SIZE.width - 4;
+  const offsetY = placement.startsWith("top") ? 4 : EXPANDED_SIZE.height - CHARACTER_SIZE.height - 4;
+  characterDragOrigins.set(characterWindow, {
+    pointerX: pointer.x,
+    pointerY: pointer.y,
+    characterX: windowX + offsetX,
+    characterY: windowY + offsetY,
+  });
   characterWindow.setIgnoreMouseEvents(false);
 });
 
@@ -63,21 +75,41 @@ ipcMain.on(MOVE_CHARACTER_DRAG, (event, pointer) => {
   if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
   const origin = characterDragOrigins.get(characterWindow);
   if (origin === undefined) return;
-  const desiredX = Math.round(origin.windowX + pointer.x - origin.pointerX);
-  const desiredY = Math.round(origin.windowY + pointer.y - origin.pointerY);
+  const desiredX = Math.round(origin.characterX + pointer.x - origin.pointerX);
+  const desiredY = Math.round(origin.characterY + pointer.y - origin.pointerY);
   const workArea = screen.getDisplayNearestPoint(pointer).workArea;
-  const [windowWidth, windowHeight] = characterWindow.getSize();
-  const clamped = clampPositionToWorkArea(
+  const layout = layoutWindowForCharacter(
     { x: desiredX, y: desiredY },
-    { width: windowWidth, height: windowHeight },
+    EXPANDED_SIZE,
+    CHARACTER_SIZE,
     workArea,
+    4,
+    characterPlacements.get(characterWindow),
+    Number.POSITIVE_INFINITY,
   );
-  characterWindow.setPosition(clamped.x, clamped.y);
+  characterWindow.setPosition(layout.windowPosition.x, layout.windowPosition.y);
+  origin.lastCharacterPosition = layout.characterPosition;
+  origin.lastWorkArea = workArea;
 });
 
 ipcMain.on(END_CHARACTER_DRAG, (event) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
-  if (characterWindow !== null) characterDragOrigins.delete(characterWindow);
+  if (characterWindow === null) return;
+  const origin = characterDragOrigins.get(characterWindow);
+  characterDragOrigins.delete(characterWindow);
+  if (origin?.lastCharacterPosition === undefined || origin.lastWorkArea === undefined) return;
+
+  // 드래그 중에는 placement를 고정해 기준점 변경으로 캐릭터가 튀지 않게 한다.
+  // 포인터를 놓은 뒤 최종 사분면을 한 번만 계산해 주변 UI 방향을 갱신한다.
+  const finalLayout = layoutWindowForCharacter(
+    origin.lastCharacterPosition,
+    EXPANDED_SIZE,
+    CHARACTER_SIZE,
+    origin.lastWorkArea,
+  );
+  characterPlacements.set(characterWindow, finalLayout.placement);
+  characterWindow.setPosition(finalLayout.windowPosition.x, finalLayout.windowPosition.y);
+  characterWindow.webContents.send(CHARACTER_PLACEMENT, finalLayout.placement);
 });
 
 function isScreenPoint(value) {
@@ -107,13 +139,23 @@ function createCharacterWindow() {
 
   characterWindow.setMenuBarVisibility(false);
   characterWindows.add(characterWindow);
+  characterPlacements.set(characterWindow, "bottom-right");
   schedulePassthroughFallback(characterWindow);
   characterWindow.on("closed", () => {
     cancelPassthroughFallback(characterWindow);
     characterDragOrigins.delete(characterWindow);
     characterWindows.delete(characterWindow);
+    characterPlacements.delete(characterWindow);
   });
   void characterWindow.loadFile(rendererPath).then(() => {
+    characterWindow.webContents.send(CHARACTER_PLACEMENT, characterPlacements.get(characterWindow));
+    if (process.env.DODODO_NOTIFICATION_PREVIEW === "1") {
+      characterWindow.webContents.send(NOTIFICATION_CHANNEL, {
+        kind: "sync-complete",
+        message: "알림 말풍선이 이렇게 표시됩니다.",
+        createdAt: new Date().toISOString(),
+      });
+    }
     if (process.platform === "linux") {
       // Linux에서는 setIgnoreMouseEvents({ forward: true })가 mousemove를 Renderer로
       // 전달하지 않아 다시 drag 상태로 돌아올 수 없다. 현재 idle 에셋의 불투명 경계를
@@ -128,6 +170,17 @@ function createCharacterWindow() {
 let desktopWatchHandle;
 
 app.whenReady().then(() => {
+  // Source 등록 설정(dododo.sources.json)은 DODODO_SOURCE_CONFIG 미설정 시
+  // process.cwd() 기준 상대 경로로 찾는다(apps/cli/src/runtime/sourceInputConfig.ts) —
+  // 패키지 앱은 더블클릭으로 실행돼 cwd가 설치 폴더거나 실행 방식마다 달라질 수 있어,
+  // source:register로 쓴 설정을 다음 실행에서 못 찾는 문제가 생긴다(doyeonid, PR #84 리뷰).
+  // DODODO_SOURCE_CONFIG를 강제로 채우면 "명시적으로 지정했는데 파일이 없다"는
+  // 별개의 오류 경로를 타 버려(container.ts) 소스 미등록 상태의 Fixture 데모 폴백이
+  // 깨진다 — 대신 cwd 자체를 userData로 옮겨서 기존 "미설정 시 기본 상대 경로" 분기를
+  // 그대로 타게 한다. DB 경로 기본값(dbConfig.ts)도 같은 방식으로 cwd 상대라 이 chdir로
+  // 함께 안정되지만, DB는 아래 databasePath로 명시 지정도 유지한다(이중 안전장치).
+  process.chdir(app.getPath("userData"));
+
   // apps/cli의 createCliContainer를 그대로 재사용한다(container.ts) — CLI 명령마다
   // 새로 만들고 버리는 것과 달리, 앱 실행 내내 하나만 만들어 모든 IPC 호출이 공유한다.
   const container = getDesktopContainer();

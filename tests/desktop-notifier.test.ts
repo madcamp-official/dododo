@@ -48,12 +48,25 @@ test("classifyRecommendation은 opportunity item만 조용한 알림으로 분�
   assert.equal(event.message, "마감이 가깝습니다");
 });
 
-test("classifyRecommendation은 task/event item은 분류하지 않는다(undefined)", () => {
-  assert.equal(classifyRecommendation(task(), recommendation("ctx-task-1")), undefined);
+test("classifyRecommendation은 task/event 추천을 priority 말풍선으로 분류한다", () => {
+  const event = classifyRecommendation(task(), recommendation("ctx-task-1"));
+  assert.equal(event.kind, "priority");
+  assert.equal(event.message, "확인하세요 — 마감이 가깝습니다");
+  assert.equal(event.contextItemId, "ctx-task-1");
 });
 
-test("classifyRecommendation은 item을 못 찾으면 분류하지 않는다(undefined)", () => {
-  assert.equal(classifyRecommendation(undefined, recommendation("ctx-missing")), undefined);
+test("classifyRecommendation은 item을 못 찾아도 priority 말풍선으로 보존한다", () => {
+  const event = classifyRecommendation(undefined, recommendation("ctx-missing"));
+  assert.equal(event.kind, "priority");
+  assert.equal(event.contextItemId, "ctx-missing");
+});
+
+test("Desktop notifier는 Electron OS Notification 폴백을 사용하지 않는다", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile("apps/desktop/src/main/notifier/electronNotifier.ts", "utf8"));
+  assert.doesNotMatch(source, /from ["']electron["']/);
+  assert.doesNotMatch(source, /new Notification/);
+  assert.match(source, /broadcastNotification\(event\)/);
 });
 
 // doyeonid 리뷰(PR #66): 리마인더는 reminderCheck.ts의 toReminderRecommendation이

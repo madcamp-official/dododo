@@ -18,6 +18,7 @@ import {
 } from "./scheduleItem.ts";
 import { completeTask, getTaskDetail, snoozeTask } from "./task.ts";
 import { getUiState, setUiState } from "./uiState.ts";
+import { StudySessionManager } from "./studySession.ts";
 import { isNonEmptyString, isRecord, isUserProfileShape, isValidOffsetMinutes } from "./validate.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import { isRegisteredSourceType } from "../../../../cli/src/runtime/sourceRegistration.ts";
@@ -175,4 +176,27 @@ export function handleUiStateSet(uiStatePath: string, input: unknown) {
     return Promise.resolve(fail("validation", "key/value가 필요합니다."));
   }
   return setUiState(uiStatePath, input.key, input.value);
+}
+
+export function handleStudyStart(manager: StudySessionManager, input: unknown) {
+  if (!isRecord(input) || typeof input.screenCaptureConsent !== "boolean") {
+    return Promise.resolve(fail("validation", "screenCaptureConsent는 boolean이어야 합니다."));
+  }
+  return manager.start(input.screenCaptureConsent).catch(toStudyStorageFailure);
+}
+
+export function handleStudyEnd(manager: StudySessionManager, input: unknown) {
+  if (!isRecord(input) || !isNonEmptyString(input.sessionId)) {
+    return Promise.resolve(fail("validation", "sessionId는 문자열이어야 합니다."));
+  }
+  return manager.end(input.sessionId).catch(toStudyStorageFailure);
+}
+
+export function handleStudyGet(manager: StudySessionManager) {
+  return manager.getActive().catch(toStudyStorageFailure);
+}
+
+function toStudyStorageFailure(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return fail("unknown", `같이 공부하기 세션 상태를 저장하거나 불러오지 못했습니다: ${detail}`);
 }

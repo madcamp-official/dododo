@@ -1,5 +1,3 @@
-import { Notification } from "electron";
-
 import type { ContextRepository, Notifier, Recommendation } from "../../../../../packages/shared/src/index.ts";
 import { broadcastNotification } from "./broadcast.ts";
 import { classifyRecommendation } from "./classifyNotification.ts";
@@ -20,24 +18,8 @@ export class ElectronDesktopNotifier implements Notifier {
 
     const item = await this.repository.findContextItem(recommendation.contextItemId);
     const event = classifyRecommendation(item, recommendation);
-    if (event !== undefined) {
-      // opportunity(조용한 알림)든 reminder(즉시 알림)든 kind가 분류됐으면 OS 토스트
-      // 없이 IPC push만 한다 — 배지/말풍선 구분은 Renderer가 event.kind로 한다.
-      broadcastNotification(event);
-      return;
-    }
-
-    // 아직 kind를 정확히 분류할 수 없는 추천(task/event)은 최소한 OS Notification으로
-    // 놓치지 않게 한다(CLI --os-notify와 동등한 최소 동작).
-    this.showOsNotification(recommendation.action, recommendation.reason);
-  }
-
-  private showOsNotification(title: string, body: string): void {
-    if (!Notification.isSupported()) return;
-    try {
-      new Notification({ title, body }).show();
-    } catch (error) {
-      console.error(`[notification] OS 알림 표시 실패, 콘솔 로그로만 대체됩니다: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    // Desktop 알림은 종류와 관계없이 Renderer의 캐릭터 말풍선으로만 전달한다.
+    // CLI의 --os-notify 구현(packages/scheduler)은 별도라 영향을 받지 않는다.
+    broadcastNotification(event);
   }
 }

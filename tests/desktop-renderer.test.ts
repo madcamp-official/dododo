@@ -9,7 +9,10 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   const result = { ok: true, data: {} };
   const bridge = Object.fromEntries([
     "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
-    "getTaskDetail", "completeTask", "snoozeTask", "sync",
+    "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
+    "deleteTask", "setReminderOffset", "listSources", "registerSource",
+    "removeSource", "getProfile", "saveProfile", "getUiState", "setUiState", "sync",
+    "startStudy", "endStudy", "getStudySession",
   ].map((method) => [method, (...args: unknown[]) => {
     calls.push({ method, args });
     return Promise.resolve(result);
@@ -25,7 +28,21 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.detail("task-1");
   await api.complete("task-1");
   await api.snooze("task-1", "2026-07-22T09:00:00.000Z");
+  await api.update("task-1", addInput);
+  await api.delete("task-1");
+  await api.reminder("task-1", 60);
+  await api.sourceList();
+  await api.sourceRegister("school-site", "https://school.example/notices");
+  await api.sourceRemove("school-site");
+  const profile = { school: "KAIST", major: "CS", year: "3", interests: [], activityTypes: [], preferredLocations: [], explicitConstraints: [] };
+  await api.profileGet();
+  await api.profileSave(profile);
+  await api.uiStateGet("lastDailySummaryDate");
+  await api.uiStateSet("lastDailySummaryDate", "2026-07-21");
   await api.sync();
+  await api.studyStart(true);
+  await api.studyEnd("session-1");
+  await api.studyGet();
 
   assert.deepEqual(calls, [
     { method: "getToday", args: [] },
@@ -36,7 +53,20 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "getTaskDetail", args: ["task-1"] },
     { method: "completeTask", args: ["task-1"] },
     { method: "snoozeTask", args: ["task-1", "2026-07-22T09:00:00.000Z"] },
+    { method: "updateTask", args: ["task-1", addInput] },
+    { method: "deleteTask", args: ["task-1"] },
+    { method: "setReminderOffset", args: ["task-1", 60] },
+    { method: "listSources", args: [] },
+    { method: "registerSource", args: ["school-site", "https://school.example/notices"] },
+    { method: "removeSource", args: ["school-site"] },
+    { method: "getProfile", args: [] },
+    { method: "saveProfile", args: [profile] },
+    { method: "getUiState", args: ["lastDailySummaryDate"] },
+    { method: "setUiState", args: ["lastDailySummaryDate", "2026-07-21"] },
     { method: "sync", args: [] },
+    { method: "startStudy", args: [true] },
+    { method: "endStudy", args: ["session-1"] },
+    { method: "getStudySession", args: [] },
   ]);
 });
 
@@ -48,6 +78,7 @@ test("desktop Renderer API는 preload가 없으면 재실행 안내를 표시한
 test("desktop Renderer는 날짜 오류와 알려지지 않은 상태를 안전하게 표시한다", () => {
   assert.equal(formatDateTime(undefined), "시간 정보 없음");
   assert.equal(formatDateTime("not-a-date"), "시간 확인 필요");
+  assert.match(formatDateTime("2026-07-20T15:30:00.000Z"), /7\. 21\..*오전 12:30/);
   assert.equal(statusLabel("unknown"), "확인 필요");
   assert.equal(statusLabel("done"), "완료");
 });
