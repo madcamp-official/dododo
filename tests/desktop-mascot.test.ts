@@ -181,6 +181,10 @@ test("desktop mascot settings connects Source management and restart guidance", 
   assert.match(renderer, /desktopApi\.sourceList/);
   assert.match(renderer, /desktopApi\.sourceRegister\("school-site", value\)/);
   assert.match(renderer, /desktopApi\.sourceRemove/);
+  assert.match(renderer, /data-existing-value/);
+  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
+  assert.match(renderer, /showSourceError\(error\)/);
+  assert.doesNotMatch(renderer, /result\.restartRequired \?/);
   assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
   assert.match(style, /\.source-card\s*\{/);
   assert.match(style, /\.restart-notice\s*\{/);

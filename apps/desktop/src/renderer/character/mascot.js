@@ -601,6 +601,7 @@ async function renderSourceSettings(notice) {
   panelContent.innerHTML = '<div class="state-message">등록된 Source를 불러오는 중...</div>';
   try {
     const { sources } = unwrapResult(await desktopApi.sourceList());
+    const schoolSite = sources.find((source) => source.id === "school-site");
     const list = sources.length === 0
       ? '<p class="state-message compact">등록된 Source가 없습니다.</p>'
       : `<div class="source-list">${sources.map((source) => `
@@ -613,11 +614,13 @@ async function renderSourceSettings(notice) {
           </article>`).join("")}</div>`;
     panelContent.innerHTML = `
       ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
+      <p class="state-message error compact" data-source-error hidden></p>
       ${list}
-      <form class="source-form" data-source-form>
+      <form class="source-form" data-source-form${schoolSite === undefined ? "" : ` data-existing-value="${escapeHtml(schoolSite.value)}"`}>
         <label for="school-site-url">학교 사이트 URL</label>
-        <input id="school-site-url" name="value" type="url" placeholder="https://school.example/notices" required />
-        <button class="primary-button" type="submit">학교 사이트 등록</button>
+        <input id="school-site-url" name="value" type="url" placeholder="https://school.example/notices" value="${escapeHtml(schoolSite?.value ?? "")}" required />
+        ${schoolSite === undefined ? "" : '<p class="hint">저장하면 기존 학교 사이트 URL을 대체하며, 재시작 후 적용됩니다.</p>'}
+        <button class="primary-button" type="submit">학교 사이트 ${schoolSite === undefined ? "등록" : "변경"}</button>
       </form>
       <p class="hint">학교 이메일과 LMS 등록은 필수 설정값이 확정되지 않아 아직 지원하지 않습니다.</p>`;
 
@@ -635,13 +638,16 @@ async function runSourceRegister(event) {
   const form = event.currentTarget;
   if (!(form instanceof HTMLFormElement)) return;
   const value = new FormData(form).get("value")?.toString().trim() ?? "";
+  const existingValue = form.dataset.existingValue;
+  if (existingValue !== undefined && existingValue !== value
+    && !window.confirm("기존 학교 사이트 URL을 새 주소로 대체할까요? 앱을 재시작한 뒤 적용됩니다.")) return;
   const submit = form.querySelector("button[type='submit']");
   if (submit instanceof HTMLButtonElement) submit.disabled = true;
   try {
-    const result = unwrapResult(await desktopApi.sourceRegister("school-site", value));
-    await renderSourceSettings(result.restartRequired ? "등록했습니다. 앱을 재시작하면 Source 설정이 적용됩니다." : undefined);
+    unwrapResult(await desktopApi.sourceRegister("school-site", value));
+    await renderSourceSettings("등록했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");
   } catch (error) {
-    renderError(error);
+    showSourceError(error);
   } finally {
     if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
   }
@@ -653,13 +659,20 @@ async function runSourceRemove(button) {
   if (id === undefined || !window.confirm(`${sourceTypeLabel(id)} Source를 삭제할까요?`)) return;
   button.disabled = true;
   try {
-    const result = unwrapResult(await desktopApi.sourceRemove(id));
-    await renderSourceSettings(result.restartRequired ? "삭제했습니다. 앱을 재시작하면 Source 설정이 적용됩니다." : undefined);
+    unwrapResult(await desktopApi.sourceRemove(id));
+    await renderSourceSettings("삭제했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");
   } catch (error) {
-    renderError(error);
+    showSourceError(error);
   } finally {
     if (button.isConnected) button.disabled = false;
   }
+}
+
+function showSourceError(error) {
+  const target = panelContent.querySelector("[data-source-error]");
+  if (!(target instanceof HTMLElement)) return;
+  target.textContent = error instanceof Error ? error.message : "Source 설정을 변경하지 못했습니다.";
+  target.hidden = false;
 }
 
 function sourceTypeLabel(id) {
