@@ -9,9 +9,24 @@ const EXPRESSIONS = {
   "daily-summary": ["greeting.png", "오늘 할 일을 인사하는 DoDoDo 도토리 캐릭터"],
 };
 
+const EFFECTS = {
+  priority: "exclamation.png",
+  reminder: "exclamation.png",
+  conflict: "sweat.png",
+  distraction: "sweat.png",
+  opportunity: "sparkle.png",
+  "sync-complete": "sparkle.png",
+  advice: "question.png",
+  "daily-summary": "heart.png",
+};
+
 export function notificationExpression(kind) {
   const [asset, alt] = EXPRESSIONS[kind] ?? ["alert.png", "알림을 전하는 DoDoDo 도토리 캐릭터"];
   return { asset, alt };
+}
+
+export function notificationEffect(kind) {
+  return EFFECTS[kind];
 }
 
 export function restingExpression(isStudying) {

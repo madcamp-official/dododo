@@ -16,9 +16,10 @@ import { parseReminderOffset, scheduleItemToForm } from "./schedule-form.mjs";
 import { buildDailySummary, dailySummaryRetryDelayMs, shouldShowDailySummary } from "./daily-summary.mjs";
 import { buildWeeklyCalendar } from "./schedule-management.mjs";
 import { studyProgressView, studySummaryView } from "./study-session-ui.mjs";
-import { notificationExpression, restingExpression } from "./character-expression.mjs";
+import { notificationEffect, notificationExpression, restingExpression } from "./character-expression.mjs";
 
 const character = document.querySelector(".character");
+const characterEffect = document.querySelector("[data-character-effect]");
 const menuToggle = document.querySelector("[data-menu-toggle]");
 const popupMenu = document.querySelector("[data-popup-menu]");
 const panel = document.querySelector("[data-panel]");
@@ -38,6 +39,7 @@ const runExclusiveTaskAction = createExclusiveActionRunner();
 const notificationStore = createNotificationStore();
 const STANDALONE_PANEL_VIEWS = new Set(["today", "calendar", "inbox", "ask"]);
 const NOTIFICATION_DISPLAY_MS = 6_000;
+const PATROL_IDLE_MS = 10 * 60_000;
 let activeNotification;
 let notificationTimer;
 const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => {
@@ -50,6 +52,12 @@ let studyProgressTimer;
 let notificationSubscriptionRetry;
 let unsubscribeNotifications;
 let dailySummaryRetryTimer;
+let effectTimer;
+let patrolTimer;
+let patrolAnimation;
+let patrolFrameTimer;
+let patrolRunId = 0;
+let isPatrolling = false;
 
 function prepareAlphaMask() {
   if (!(character instanceof HTMLImageElement) || alphaContext === null) return;
@@ -105,6 +113,8 @@ function startCharacterDrag(event) {
   const dragTarget = event.currentTarget;
   if (!(dragTarget instanceof HTMLElement)) return;
 
+  cancelPatrol();
+
   draggingPointerId = event.pointerId;
   isIgnoringMouse = false;
   window.desktopMascot?.setMousePassthrough(false);
@@ -126,6 +136,7 @@ function endCharacterDrag(event) {
   if (event.currentTarget instanceof HTMLElement) {
     event.currentTarget.classList.remove("is-dragging");
   }
+  schedulePatrol();
 }
 
 if (character instanceof HTMLImageElement) {
@@ -148,6 +159,7 @@ characterButton?.addEventListener("pointerup", endCharacterDrag);
 characterButton?.addEventListener("pointercancel", endCharacterDrag);
 
 menuToggle?.addEventListener("click", () => {
+  cancelPatrol();
   const willOpen = popupMenu.hidden;
   popupMenu.hidden = !willOpen;
   panel.hidden = true;
@@ -166,10 +178,14 @@ notificationDetail?.addEventListener("click", () => {
 subscribeToNotifications();
 void showDailySummaryOnFirstLaunch();
 const studySessionRestorePromise = restoreStudySession();
+schedulePatrol();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
+  if (effectTimer !== undefined) window.clearTimeout(effectTimer);
+  cancelPatrol();
+  if (patrolTimer !== undefined) window.clearTimeout(patrolTimer);
   stopStudyProgressTimer();
   unsubscribeNotifications?.();
   unsubscribePlacement?.();
@@ -180,6 +196,7 @@ document.querySelector("[data-close-panel]")?.addEventListener("click", closePan
 popupMenu?.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   if (!(button instanceof HTMLButtonElement)) return;
+  cancelPatrol();
   const view = button.dataset.view;
   if (view === "settings") openSettingsWindow();
   else if (view !== undefined && STANDALONE_PANEL_VIEWS.has(view)) {
@@ -308,6 +325,128 @@ function setCharacterExpression(expression) {
   character.alt = expression.alt;
 }
 
+function showCharacterEffect(asset, durationMs = 900) {
+  if (!(characterEffect instanceof HTMLImageElement) || asset === undefined) return;
+  if (effectTimer !== undefined) window.clearTimeout(effectTimer);
+  characterEffect.src = `../../../resources/effects/${asset}`;
+  characterEffect.hidden = false;
+  characterEffect.style.animation = "none";
+  void characterEffect.offsetWidth;
+  characterEffect.style.animation = "";
+  effectTimer = window.setTimeout(() => {
+    characterEffect.hidden = true;
+    effectTimer = undefined;
+  }, durationMs);
+}
+
+function beginThinking() {
+  cancelPatrol();
+  if (activeNotification !== undefined) return;
+  setCharacterExpression({ asset: "thinking.png", alt: "생각 중인 DoDoDo 도토리 캐릭터" });
+  showCharacterEffect("question.png", 1_200);
+}
+
+function endThinking(effect) {
+  if (effect !== undefined) showCharacterEffect(effect);
+  updateStudyCharacter();
+  schedulePatrol();
+}
+
+function schedulePatrol() {
+  if (patrolTimer !== undefined) window.clearTimeout(patrolTimer);
+  patrolTimer = window.setTimeout(() => void runPatrol(), PATROL_IDLE_MS);
+}
+
+function canPatrol() {
+  return panel?.hidden === true
+    && popupMenu?.hidden === true
+    && notificationBubble?.hidden === true
+    && activeNotification === undefined
+    && activeStudySession === undefined
+    && draggingPointerId === undefined;
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function startWalkFrames(sideways) {
+  let frame = 0;
+  const assets = sideways ? ["walk-side-01.png", "walk-side-02.png"] : ["walk-01.png", "walk-02.png"];
+  setCharacterExpression({ asset: assets[0], alt: "화면을 산책하는 DoDoDo 도토리 캐릭터" });
+  patrolFrameTimer = window.setInterval(() => {
+    frame = (frame + 1) % assets.length;
+    setCharacterExpression({ asset: assets[frame], alt: "화면을 산책하는 DoDoDo 도토리 캐릭터" });
+  }, 180);
+}
+
+function stopWalkFrames() {
+  if (patrolFrameTimer !== undefined) window.clearInterval(patrolFrameTimer);
+  patrolFrameTimer = undefined;
+}
+
+async function walkLeg(runId, from, to, direction) {
+  if (!(characterButton instanceof HTMLElement) || runId !== patrolRunId) return false;
+  characterButton.dataset.walkDirection = direction;
+  characterButton.classList.add("is-walking");
+  showCharacterEffect("dust.png");
+  startWalkFrames(true);
+  showCharacterEffect("speed-lines.png", 4_500);
+  patrolAnimation?.cancel();
+  patrolAnimation = characterButton.animate(
+    [{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }],
+    { duration: 4_500, easing: "ease-in-out", fill: "forwards" },
+  );
+  await patrolAnimation.finished.catch(() => undefined);
+  stopWalkFrames();
+  return runId === patrolRunId;
+}
+
+async function runPatrol() {
+  patrolTimer = undefined;
+  if (!canPatrol() || !(characterButton instanceof HTMLElement)) {
+    schedulePatrol();
+    return;
+  }
+  isPatrolling = true;
+  const runId = ++patrolRunId;
+  const startsRight = (document.body.dataset.characterPlacement ?? "bottom-right").endsWith("right");
+  const distance = Math.max(0, window.innerWidth - characterButton.offsetWidth - 8);
+  const far = startsRight ? -distance : distance;
+  const outward = startsRight ? "left" : "right";
+  const homeward = startsRight ? "right" : "left";
+
+  if (!await walkLeg(runId, 0, far, outward)) return;
+  showCharacterEffect("sparkle.png");
+  startWalkFrames(false);
+  await wait(900);
+  stopWalkFrames();
+  if (runId !== patrolRunId || !await walkLeg(runId, far, 0, homeward)) return;
+  showCharacterEffect("heart.png", 1_000);
+  await wait(700);
+  if (runId === patrolRunId) finishPatrol();
+}
+
+function finishPatrol() {
+  stopWalkFrames();
+  patrolAnimation?.cancel();
+  patrolAnimation = undefined;
+  isPatrolling = false;
+  if (characterButton instanceof HTMLElement) {
+    characterButton.classList.remove("is-walking");
+    delete characterButton.dataset.walkDirection;
+    characterButton.style.transform = "";
+  }
+  updateStudyCharacter();
+  schedulePatrol();
+}
+
+function cancelPatrol() {
+  if (!isPatrolling) return;
+  patrolRunId += 1;
+  finishPatrol();
+}
+
 async function openView(view, { throwOnError = false } = {}) {
   stopStudyProgressTimer();
   popupMenu.hidden = true;
@@ -400,11 +539,14 @@ function renderAsk() {
     if (!(answer instanceof HTMLElement) || question === "") return;
     answer.hidden = false;
     answer.textContent = "답변을 찾는 중...";
+    beginThinking();
     try {
       const result = unwrapResult(await desktopApi.ask(question));
       answer.textContent = `${result.answer}\n근거 ${result.evidence.length}개`;
     } catch (error) {
       answer.textContent = error instanceof Error ? error.message : "질문 처리에 실패했습니다.";
+    } finally {
+      endThinking("sparkle.png");
     }
   });
 }
@@ -477,6 +619,7 @@ async function openDetail(id) {
 }
 
 function handleNotification(payload) {
+  cancelPatrol();
   const result = notificationStore.push(payload);
   if (!result.accepted) return;
   if (result.mode === "quiet") {
@@ -546,6 +689,7 @@ function showNextNotification() {
 
   activeNotification = next;
   setCharacterExpression(notificationExpression(next.kind));
+  showCharacterEffect(notificationEffect(next.kind));
   notificationBubble.setAttribute("aria-live", notificationMode(next.kind) === "quiet" ? "polite" : "assertive");
   notificationKind.textContent = notificationKindLabel(next.kind);
   notificationMessage.textContent = next.message;
@@ -563,7 +707,10 @@ function dismissActiveNotification() {
   activeNotification = undefined;
   if (notificationBubble instanceof HTMLElement) notificationBubble.hidden = true;
   if (notificationStore.hasImmediate()) showNextNotification();
-  else updateStudyCharacter();
+  else {
+    updateStudyCharacter();
+    schedulePatrol();
+  }
 }
 
 function updateNotificationBadge() {
@@ -784,6 +931,7 @@ async function runTaskAction(button, action) {
 
 async function runExclusivePanelAction(action) {
   return runExclusiveTaskAction(async () => {
+    beginThinking();
     const controls = [...panelContent.querySelectorAll("button, input, textarea")];
     const disabledStates = controls.map((control) => control.disabled);
     for (const control of controls) control.disabled = true;
@@ -793,11 +941,13 @@ async function runExclusivePanelAction(action) {
       controls.forEach((control, index) => {
         if (control.isConnected) control.disabled = disabledStates[index];
       });
+      endThinking("heart.png");
     }
   });
 }
 
 async function runSync(button) {
+  beginThinking();
   button.disabled = true;
   const original = button.innerHTML;
   button.textContent = "동기화 중...";
@@ -812,6 +962,7 @@ async function runSync(button) {
   } finally {
     button.disabled = false;
     button.innerHTML = original;
+    endThinking("sparkle.png");
   }
 }
 
@@ -823,6 +974,7 @@ function renderError(error) {
 function closePanel() {
   stopStudyProgressTimer();
   panel.hidden = true;
+  schedulePatrol();
 }
 
 function viewTitle(view) {

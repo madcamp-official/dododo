@@ -99,8 +99,18 @@ test("desktop mascot은 확장된 메뉴와 패널 영역에 겹치지 않는다
   assert.doesNotMatch(preload, /desktop:set-surface-expanded/);
   assert.doesNotMatch(renderer, /setSurfaceExpanded/);
   assert.match(style, /\.popup-menu\s*\{[^}]*right:\s*200px;/s);
-  assert.match(style, /\.panel\s*\{[^}]*inset:\s*8px 200px 8px 8px;/s);
+  assert.match(style, /\.panel\s*\{[^}]*width:\s*460px;/s);
+  assert.match(style, /body\[data-character-placement\$="left"\] \.panel \{ right: 26px; left: auto; \}/);
+  assert.match(style, /body\[data-character-placement\$="right"\] \.panel \{ right: auto; left: 26px; \}/);
   assert.doesNotMatch(main, /characterWindow\.setBounds/);
+});
+
+test("desktop mascot의 추가·같이 공부하기 패널은 캐릭터 위치와 무관하게 전체 창 높이를 사용한다", async () => {
+  const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
+
+  assert.match(style, /\.panel\s*\{[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*460px;/s);
+  assert.doesNotMatch(style, /body\[data-character-placement\^="top"\]\s+\.panel\s*\{/);
+  assert.doesNotMatch(style, /body\[data-character-placement\^="bottom"\]\s+\.panel\s*\{/);
 });
 
 test("desktop mascot 상세 버튼 오류 처리는 정의되지 않은 상태를 참조하지 않는다", async () => {
@@ -259,12 +269,38 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.doesNotMatch(renderer, /study-progress" aria-live/);
 });
 
+test("추가와 같이 공부하기 내부 패널도 독립 패널과 같은 크기를 사용한다", async () => {
+  const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
+  assert.match(style, /\.panel\s*\{[\s\S]*?width:\s*460px/);
+  assert.match(style, /\.panel\s*\{[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*0/);
+});
+
 test("desktop mascot changes expression for notifications and restores its activity state", async () => {
   const renderer = await readFile("apps/desktop/src/renderer/character/mascot.js", "utf8");
 
   assert.match(renderer, /setCharacterExpression\(notificationExpression\(next\.kind\)\)/);
   assert.match(renderer, /notificationStore\.hasImmediate\(\).*showNextNotification\(\)/s);
-  assert.match(renderer, /else updateStudyCharacter\(\)/);
+  assert.match(renderer, /else\s*\{\s*updateStudyCharacter\(\)/);
   assert.match(renderer, /updateStudyCharacter\(\).*activeNotification !== undefined.*return.*restingExpression/s);
   assert.match(renderer, /character\.addEventListener\("load", prepareAlphaMask/);
+});
+
+test("desktop mascot은 모든 미사용 포즈와 이펙트를 생각·왕복 산책·알림에 연결한다", async () => {
+  const [html, renderer, expressions] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/index.html", "utf8"),
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/character-expression.mjs", "utf8"),
+  ]);
+
+  assert.match(html, /data-character-effect/);
+  for (const asset of ["thinking.png", "walk-01.png", "walk-02.png", "walk-side-01.png", "walk-side-02.png"]) {
+    assert.match(renderer, new RegExp(asset.replace(".", "\\.")));
+  }
+  for (const effect of ["dust.png", "speed-lines.png", "sparkle.png", "heart.png", "question.png"]) {
+    assert.match(renderer, new RegExp(effect.replace(".", "\\.")));
+  }
+  assert.match(expressions, /exclamation\.png/);
+  assert.match(expressions, /sweat\.png/);
+  assert.match(renderer, /runPatrol/);
+  assert.match(renderer, /PATROL_IDLE_MS = 10 \* 60_000/);
 });
