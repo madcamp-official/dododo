@@ -26,6 +26,36 @@ function validateSchoolSite(config: SchoolSiteSourceConfig | undefined): void {
   validateSourceId(config.sourceId, "schoolSite.sourceId");
   validatePositiveInteger(config.timeoutMs, "schoolSite.timeoutMs");
   validatePositiveInteger(config.maxResponseBytes, "schoolSite.maxResponseBytes");
+  if (config.recipe !== undefined) {
+    validateNonEmpty(config.recipe.list.item, "schoolSite.recipe.list.item");
+    validateField(config.recipe.list.title, "schoolSite.recipe.list.title");
+    validateField(config.recipe.list.link, "schoolSite.recipe.list.link");
+    if (config.recipe.list.externalId?.strategy === "url-query") {
+      validateNonEmpty(config.recipe.list.externalId.parameter, "schoolSite.recipe.list.externalId.parameter");
+    }
+    if (config.recipe.list.externalId?.strategy === "url-path") {
+      validateNonEmpty(config.recipe.list.externalId.pattern, "schoolSite.recipe.list.externalId.pattern");
+      try { new RegExp(config.recipe.list.externalId.pattern); } catch {
+        throw new Error("schoolSite.recipe.list.externalId.pattern이 유효한 정규식이 아닙니다");
+      }
+    }
+    if (config.recipe.encoding !== undefined) {
+      try { new TextDecoder(config.recipe.encoding); } catch {
+        throw new Error(`지원하지 않는 schoolSite.recipe.encoding입니다: ${config.recipe.encoding}`);
+      }
+    }
+  }
+}
+
+function validateField(value: { selector: string; attribute?: string }, field: string): void {
+  if (value.selector.trim() === "" && value.attribute === undefined) {
+    throw new Error(`${field}는 selector 또는 attribute 추출을 지정해야 합니다`);
+  }
+  if (value.attribute !== undefined) validateNonEmpty(value.attribute, `${field}.attribute`);
+}
+
+function validateNonEmpty(value: string, field: string): void {
+  if (value.trim() === "") throw new Error(`${field}는 비어 있을 수 없습니다`);
 }
 
 function validateSchoolEmail(config: SchoolEmailSourceConfig | undefined): void {

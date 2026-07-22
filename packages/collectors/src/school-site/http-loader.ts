@@ -9,6 +9,7 @@ export interface SchoolSiteHttpLoaderOptions {
   maxResponseBytes?: number;
   userAgent?: string;
   fetchImplementation?: SchoolSiteFetch;
+  encoding?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -17,7 +18,7 @@ const DEFAULT_USER_AGENT = "dododo/0.1 school-site-collector";
 
 export function createSchoolSiteHttpLoader(
   options: SchoolSiteHttpLoaderOptions,
-): () => Promise<string> {
+): (requestedUrl?: string) => Promise<string> {
   const url = parseHttpUrl(options.url);
   const timeoutMs = positiveInteger(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, "timeoutMs");
   const maxResponseBytes = positiveInteger(
@@ -27,10 +28,11 @@ export function createSchoolSiteHttpLoader(
   const userAgent = options.userAgent?.trim() || DEFAULT_USER_AGENT;
   const fetchImplementation = options.fetchImplementation ?? fetch;
 
-  return async () => {
+  return async (requestedUrl) => {
+    const targetUrl = requestedUrl === undefined ? url : parseHttpUrl(requestedUrl);
     let response: Response;
     try {
-      response = await fetchImplementation(url, {
+      response = await fetchImplementation(targetUrl, {
         method: "GET",
         headers: {
           Accept: "text/html, application/xhtml+xml",
@@ -41,11 +43,11 @@ export function createSchoolSiteHttpLoader(
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`학교 사이트 요청에 실패했습니다 (${url.toString()}): ${reason}`);
+      throw new Error(`학교 사이트 요청에 실패했습니다 (${targetUrl.toString()}): ${reason}`);
     }
 
     if (!response.ok) {
-      throw new Error(`학교 사이트가 HTTP ${response.status}로 응답했습니다: ${url.toString()}`);
+      throw new Error(`학교 사이트가 HTTP ${response.status}로 응답했습니다: ${targetUrl.toString()}`);
     }
 
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
@@ -58,18 +60,25 @@ export function createSchoolSiteHttpLoader(
       throw responseTooLarge(maxResponseBytes);
     }
 
-    return readResponseBody(response, maxResponseBytes);
+    const encoding = options.encoding ?? charsetFromContentType(contentType) ?? "utf-8";
+    return readResponseBody(response, maxResponseBytes, encoding);
   };
 }
 
 async function readResponseBody(
   response: Response,
   maxResponseBytes: number,
+  encoding: string,
 ): Promise<string> {
   if (response.body === null) return "";
 
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  let decoder: TextDecoder;
+  try {
+    decoder = new TextDecoder(encoding);
+  } catch {
+    throw new Error(`지원하지 않는 학교 사이트 문자 인코딩입니다: ${encoding}`);
+  }
   let receivedBytes = 0;
   let html = "";
 
@@ -90,6 +99,10 @@ async function readResponseBody(
   } finally {
     reader.releaseLock();
   }
+}
+
+function charsetFromContentType(contentType: string): string | undefined {
+  return /charset\s*=\s*["']?([^;\s"']+)/i.exec(contentType)?.[1];
 }
 
 function parseHttpUrl(value: string): URL {

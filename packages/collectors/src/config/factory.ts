@@ -19,11 +19,13 @@ export function createSourceCollectors(
       sourceId: source.sourceId,
       baseUrl: source.url,
       selectors: source.selectors,
+      recipe: source.recipe,
       loadHtml: createSchoolSiteHttpLoader({
         url: source.url,
         timeoutMs: source.timeoutMs,
         maxResponseBytes: source.maxResponseBytes,
         fetchImplementation: dependencies.fetchImplementation,
+        encoding: source.recipe?.encoding,
       }),
       now: dependencies.now,
     }));
