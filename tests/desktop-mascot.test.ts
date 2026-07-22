@@ -122,7 +122,8 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.complete/);
   assert.match(renderer, /desktopApi\.snooze/);
   assert.match(renderer, /desktopApi\.add/);
-  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /runExclusivePanelAction/);
+  assert.match(renderer, /panelContent\.querySelectorAll\("button, input, textarea"\)/);
   assert.match(renderer, /createExclusiveActionRunner/);
   assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
   assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
@@ -139,14 +140,18 @@ test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보�
 
   assert.match(html, /data-notification-bubble/);
   assert.match(html, /data-notification-badge/);
-  assert.match(renderer, /desktopEvents\?\.onNotification/);
+  assert.match(renderer, /subscribeToNotifications\(\)/);
+  assert.match(renderer, /notificationSubscriptionRetry = window\.setTimeout/);
+  assert.match(renderer, /console\.warn\("DoDoDo 알림 이벤트 브리지를 찾지 못해/);
   assert.match(renderer, /unsubscribeNotifications\?\.\(\)/);
+  assert.match(renderer, /notificationMode\(next\.kind\) === "quiet" \? "polite" : "assertive"/);
   assert.match(renderer, /notificationStore\.takeImmediate/);
   assert.match(renderer, /notificationStore\.markQuietRead/);
   assert.match(renderer, /openDetail\(event\.contextItemId\)/);
   assert.match(main, /DODODO_NOTIFICATION_PREVIEW/);
   assert.match(main, /webContents\.send\(NOTIFICATION_CHANNEL/);
   assert.match(style, /\.notification-bubble\s*\{/);
+  assert.match(style, /\.desktop-shell:has\(\.panel:not\(\[hidden\]\)\) \.notification-bubble/);
   assert.match(style, /\.notification-badge\s*\{/);
 });
 
@@ -165,6 +170,7 @@ test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를
   assert.match(renderer, /window\.confirm/);
   assert.match(renderer, /desktopApi\.delete/);
   assert.match(renderer, /desktopApi\.reminder/);
+  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 6);
   assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
   assert.match(style, /\.danger-button\s*\{/);
   assert.match(style, /\.reminder-form\s*\{/);
@@ -184,6 +190,10 @@ test("desktop mascot settings connects Source management and restart guidance", 
   assert.match(renderer, /desktopApi\.sourceList/);
   assert.match(renderer, /desktopApi\.sourceRegister\("school-site", value\)/);
   assert.match(renderer, /desktopApi\.sourceRemove/);
+  assert.match(renderer, /data-existing-value/);
+  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
+  assert.match(renderer, /showSourceError\(error\)/);
+  assert.doesNotMatch(renderer, /result\.restartRequired \?/);
   assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
   assert.match(style, /\.source-card\s*\{/);
   assert.match(style, /\.restart-notice\s*\{/);
@@ -202,6 +212,8 @@ test("desktop mascot settings connects profile fields and Quiet Hours", async ()
   assert.match(renderer, /desktopApi\.profileGet/);
   assert.match(renderer, /desktopApi\.profileSave/);
   assert.match(renderer, /data-quiet-hours-toggle/);
+  assert.match(renderer, /data-profile-error/);
+  assert.match(renderer, /프로필을 저장하지 못했습니다/);
   assert.match(style, /\.profile-form\s*\{/);
   assert.match(style, /\.quiet-hours-field\s*\{/);
 });
@@ -217,9 +229,13 @@ test("desktop mascot shows a once-per-day summary bubble linked to Today", async
   assert.match(adapter, /setUiState/);
   assert.match(renderer, /showDailySummaryOnFirstLaunch/);
   assert.match(renderer, /lastDailySummaryDate/);
+  assert.match(renderer, /dailySummaryRetryDelayMs/);
+  assert.match(renderer, /dailySummaryRetryTimer = window\.setTimeout/);
+  assert.match(renderer, /window\.clearTimeout\(dailySummaryRetryTimer\)/);
   assert.match(renderer, /targetView === "today"/);
   assert.match(renderer, /openView\("today"\)/);
   assert.match(notificationState, /daily-summary/);
+  assert.match(renderer, /next\.targetView === "today" \? "오늘 보기" : "자세히 보기"/);
 });
 
 test("desktop settings provides weekly schedule management with existing detail actions", async () => {
@@ -232,6 +248,8 @@ test("desktop settings provides weekly schedule management with existing detail 
   assert.match(renderer, /openView\("schedule-settings"\)/);
   assert.match(renderer, /groupScheduledItems/);
   assert.match(renderer, /data-managed-item-id/);
+  assert.match(renderer, /item\.kind === "event" && item\.endAt !== undefined/);
+  assert.match(renderer, /formatDateTime\(at\).*formatDateTime\(item\.endAt\)/s);
   assert.match(renderer, /data-management-add/);
   assert.match(renderer, /data-management-refresh/);
   assert.match(style, /\.management-toolbar\s*\{/);
@@ -247,5 +265,7 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.match(renderer, /data-study-consent/);
   assert.match(renderer, /desktopApi\.studyStart/);
   assert.match(renderer, /desktopApi\.studyEnd/);
+  assert.match(renderer, /startStudySession\(\).*runExclusivePanelAction/s);
+  assert.match(renderer, /endStudySession\(\).*runExclusivePanelAction/s);
   assert.match(renderer, /durationMinutes/);
 });

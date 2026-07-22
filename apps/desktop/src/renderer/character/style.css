@@ -115,6 +115,13 @@ button {
   -webkit-app-region: no-drag;
 }
 
+/* 패널이 열린 동안에는 말풍선을 오른쪽 여백으로 옮겨 내용을 가리지 않는다. */
+.desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: 8px;
+  bottom: 190px;
+  width: 190px;
+}
+
 .notification-bubble::after {
   position: absolute;
   right: -12px;
