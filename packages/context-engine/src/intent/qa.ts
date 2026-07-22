@@ -12,7 +12,7 @@ export interface ContextAnswer {
 // 고른 근거를 자연어 문장으로만 표현한다. LLM이 무엇이 중요한지 스스로 고르지 않게 한다
 // (README 핵심 가설). 관련 항목이 없으면 지어내지 않고 "모른다"를 명시한다.
 const EXCLUDED_STATUSES = new Set(["done", "cancelled", "dismissed", "expired"]);
-const TOP_N = 2;
+const TOP_N = 5;
 const MIN_SPECIFIC_RELEVANCE = 0.2;
 const INTERACTIVE_ASK_TIMEOUT_MS = 15_000;
 
@@ -43,7 +43,7 @@ export async function answerContextQuestion(
   const ranked = rankCandidates(question, items, now);
 
   if (ranked.length === 0) {
-    return { answer: "관련 정보를 찾지 못했습니다.", evidenceIds: [] };
+    return { answer: emptyAnswer(question), evidenceIds: [] };
   }
 
   const chosen = ranked.slice(0, TOP_N);
@@ -52,7 +52,7 @@ export async function answerContextQuestion(
   // Provider 호출은 반드시 Privacy Gateway를 통과한다. 아직 Gateway가 연결되지 않은
   // 호출부는 안전한 결정론적 답변으로 폴백하고 원문을 Provider에 보내지 않는다.
   if (provider === undefined || privacyGateway === undefined) {
-    return { answer: templateAnswer(chosen[0]!), evidenceIds };
+    return { answer: templateAnswer(chosen), evidenceIds };
   }
 
   try {
@@ -72,7 +72,7 @@ export async function answerContextQuestion(
     });
     return { answer: response.answer, evidenceIds };
   } catch {
-    return { answer: templateAnswer(chosen[0]!), evidenceIds };
+    return { answer: templateAnswer(chosen), evidenceIds };
   }
 }
 
@@ -80,13 +80,65 @@ export async function answerContextQuestion(
 // 순위를 매긴다. 마감이 임박한 미완료 Task를 우선한다(시나리오 7).
 function rankCandidates(question: string, items: ContextItem[], now: Date): ContextItem[] {
   const generalPlanning = isGeneralPlanningQuestion(question);
+  // "약속 전까지 뭘 할까?"처럼 종류 단어가 섞여도 핵심이 우선순위 질문이면
+  // 특정 일정 조회로 좁히지 않고 모든 활성 Context를 비교한다.
+  const intent = generalPlanning ? "specific" : questionIntent(question);
   return items
     .filter((item) => !EXCLUDED_STATUSES.has(item.status) && !isSnoozed(item, now))
-    .map((item) => ({ item, ...questionScore(question, item, now, generalPlanning) }))
-    .filter((entry) => generalPlanning || entry.relevance >= MIN_SPECIFIC_RELEVANCE)
+    .filter((item) => matchesIntent(item, intent, question, now))
+    .map((item) => {
+      const scored = questionScore(question, item, now, generalPlanning);
+      return { item, ...scored, score: intent === "specific" ? scored.score : Math.max(scored.score, 0.01) };
+    })
+    .filter((entry) => generalPlanning || intent !== "specific" || entry.relevance >= MIN_SPECIFIC_RELEVANCE)
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item);
+}
+
+function emptyAnswer(question: string): string {
+  const period = /이번\s*주|금주/.test(question) ? "이번 주 "
+    : /내일/.test(question) ? "내일 "
+      : /오늘/.test(question) ? "오늘 " : "";
+  const intent = questionIntent(question);
+  if (intent === "deadline") return `${period}마감 항목이 없습니다.`;
+  if (intent === "schedule") return `${period}등록된 일정이 없습니다.`;
+  if (intent === "opportunity") return "조건에 맞는 추천 항목이 없습니다.";
+  return "관련 정보를 찾지 못했습니다.";
+}
+
+type QuestionIntent = "deadline" | "schedule" | "opportunity" | "specific";
+
+function questionIntent(question: string): QuestionIntent {
+  if (/(마감|제출|기한)/.test(question)) return "deadline";
+  if (/(일정|약속|회의|수업|스케줄)/.test(question)) return "schedule";
+  if (/(추천|공모|채용|인턴|대회|해커톤)/.test(question)) return "opportunity";
+  return "specific";
+}
+
+function matchesIntent(item: ContextItem, intent: QuestionIntent, question: string, now: Date): boolean {
+  if (intent === "deadline") return item.deadline !== undefined && matchesRequestedPeriod(item.deadline, question, now);
+  if (intent === "schedule") return item.startAt !== undefined && matchesRequestedPeriod(item.startAt, question, now);
+  if (intent === "opportunity") return item.kind === "opportunity";
+  return true;
+}
+
+function matchesRequestedPeriod(value: string, question: string, now: Date): boolean {
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return false;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const todayStart = Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate())
+    - 9 * 60 * 60 * 1000;
+
+  if (/오늘/.test(question)) return at >= todayStart && at < todayStart + dayMs;
+  if (/내일/.test(question)) return at >= todayStart + dayMs && at < todayStart + 2 * dayMs;
+  if (/이번\s*주|금주/.test(question)) {
+    const mondayOffset = (kstNow.getUTCDay() + 6) % 7;
+    const weekStart = todayStart - mondayOffset * dayMs;
+    return at >= weekStart && at < weekStart + 7 * dayMs;
+  }
+  return true;
 }
 
 function questionScore(
@@ -165,7 +217,15 @@ function isGeneralPlanningQuestion(question: string): boolean {
   return /(뭘|뭐를|무엇을).*(할까|해야|하지|하는 게|먼저)|무엇부터|뭐부터|우선순위|계획.*(세워|짜줘)/.test(question);
 }
 
-function templateAnswer(item: ContextItem): string {
+function templateAnswer(items: ContextItem[]): string {
+  if (items.length > 1) {
+    const summaries = items.map((item) => {
+      const at = item.deadline ?? item.startAt;
+      return at === undefined ? item.title : `${item.title} (${at})`;
+    });
+    return `확인할 항목은 ${summaries.join(", ")}입니다.`;
+  }
+  const item = items[0]!;
   const reason = item.deadline !== undefined
     ? ` 마감이 ${item.deadline}입니다.`
     : item.startAt !== undefined

@@ -1,5 +1,5 @@
 const IMMEDIATE_KINDS = new Set([
-  "priority", "conflict", "reminder", "advice", "distraction", "daily-summary", "job-failed",
+  "priority", "conflict", "reminder", "advice", "distraction", "answer", "daily-summary", "job-failed",
 ]);
 const QUIET_KINDS = new Set(["opportunity", "sync-complete"]);
 const ALL_KINDS = new Set([...IMMEDIATE_KINDS, ...QUIET_KINDS]);
@@ -97,6 +97,7 @@ export function notificationKindLabel(kind) {
     "sync-complete": "동기화 완료",
     advice: "조언",
     distraction: "집중 확인",
+    answer: "답변",
     "daily-summary": "오늘 요약",
   })[kind] ?? "알림";
 }

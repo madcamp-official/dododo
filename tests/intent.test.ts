@@ -377,8 +377,50 @@ test("answerContextQuestion은 일반 계획 질문에 deadline 없는 Event와 
   const noDateAnswer = await answerContextQuestion("뭐부터 할까?", [noDateTask], NOW);
 
   assert.match(eventAnswer.answer, /저녁 약속/);
-  assert.match(eventAnswer.answer, /예정 시각/);
+  assert.match(eventAnswer.answer, /2026-07-18T18:00:00\+09:00/);
   assert.match(noDateAnswer.answer, /자료 읽기/);
+});
+
+test("answerContextQuestion은 이번 주 마감 질문에 제목과 무관한 마감 항목들을 답한다", async () => {
+  const thisWeek = taskItem({ id: "ctx-week", title: "운영체제 보고서", deadline: "2026-07-19T18:00:00+09:00" });
+  const far = taskItem({ id: "ctx-far", title: "알고리즘 프로젝트", deadline: "2026-08-30T18:00:00+09:00" });
+
+  const answer = await answerContextQuestion("이번 주 마감이 뭐야?", [thisWeek, far], NOW);
+
+  assert.match(answer.answer, /운영체제 보고서/);
+  assert.doesNotMatch(answer.answer, /알고리즘 프로젝트/);
+  assert.deepEqual(answer.evidenceIds, ["ev-os"]);
+});
+
+test("answerContextQuestion은 기간 내 항목이 없을 때 질문 범주에 맞게 답한다", async () => {
+  const noDeadline = await answerContextQuestion("이번 주 마감이 뭐야?", [], NOW);
+  const noSchedule = await answerContextQuestion("오늘 일정 알려줘", [], NOW);
+  const noOpportunity = await answerContextQuestion("추천할 공모전 있어?", [], NOW);
+
+  assert.equal(noDeadline.answer, "이번 주 마감 항목이 없습니다.");
+  assert.equal(noSchedule.answer, "오늘 등록된 일정이 없습니다.");
+  assert.equal(noOpportunity.answer, "조건에 맞는 추천 항목이 없습니다.");
+});
+
+test("answerContextQuestion은 오늘 일정과 추천 질문을 종류별로 답한다", async () => {
+  const todayEvent = taskItem({
+    id: "ctx-today-event", kind: "event", title: "팀 회의", deadline: undefined,
+    startAt: "2026-07-18T15:00:00+09:00",
+  });
+  const tomorrowEvent = taskItem({
+    id: "ctx-tomorrow-event", kind: "event", title: "저녁 약속", deadline: undefined,
+    startAt: "2026-07-19T18:00:00+09:00",
+  });
+  const opportunity = taskItem({
+    id: "ctx-opportunity", kind: "opportunity", title: "AI 해커톤", deadline: undefined,
+  });
+
+  const scheduleAnswer = await answerContextQuestion("오늘 일정 알려줘", [todayEvent, tomorrowEvent], NOW);
+  const recommendationAnswer = await answerContextQuestion("추천할 만한 공모전 있어?", [todayEvent, opportunity], NOW);
+
+  assert.match(scheduleAnswer.answer, /팀 회의/);
+  assert.doesNotMatch(scheduleAnswer.answer, /저녁 약속/);
+  assert.match(recommendationAnswer.answer, /AI 해커톤/);
 });
 
 test("answerContextQuestion은 Privacy Gateway를 거친 질문과 Context만 Provider에 전달한다", async () => {

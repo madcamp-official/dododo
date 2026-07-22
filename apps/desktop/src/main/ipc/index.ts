@@ -108,7 +108,17 @@ export function registerIpcHandlers(container: CliContainer): void {
   ipcMain.handle(IPC_CHANNELS.todayGet, () => handleToday(container));
   ipcMain.handle(IPC_CHANNELS.calendarGet, () => handleCalendar(container));
   ipcMain.handle(IPC_CHANNELS.inboxGet, () => handleInbox(container));
-  ipcMain.handle(IPC_CHANNELS.askAsk, (_event, input: unknown) => handleAsk(container, input));
+  ipcMain.handle(IPC_CHANNELS.askAsk, async (_event, input: unknown) => {
+    const result = await handleAsk(container, input);
+    if (result.ok) {
+      broadcastNotification({
+        kind: "answer",
+        message: result.data.answer,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return result;
+  });
   ipcMain.handle(IPC_CHANNELS.addSubmit, (_event, input: unknown) => handleAddSubmit(container, input));
   ipcMain.handle(IPC_CHANNELS.taskDetail, (_event, input: unknown) => handleTaskDetail(container, input));
   ipcMain.handle(IPC_CHANNELS.taskComplete, (_event, input: unknown) => handleTaskComplete(container, input));

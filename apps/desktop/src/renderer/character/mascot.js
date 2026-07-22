@@ -556,7 +556,10 @@ function showNextNotification() {
   notificationDetail.hidden = next.contextItemId === undefined && next.targetView === undefined;
   notificationDetail.textContent = next.targetView === "today" ? "오늘 보기" : "자세히 보기";
   notificationBubble.hidden = false;
-  notificationTimer = window.setTimeout(dismissActiveNotification, NOTIFICATION_DISPLAY_MS);
+  notificationTimer = window.setTimeout(
+    dismissActiveNotification,
+    next.kind === "answer" ? 15_000 : NOTIFICATION_DISPLAY_MS,
+  );
 }
 
 function dismissActiveNotification() {

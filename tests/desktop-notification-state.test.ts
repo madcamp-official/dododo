@@ -7,7 +7,7 @@ import { createNotificationStore, normalizeNotification, notificationKindLabel, 
 const createdAt = "2026-07-21T15:00:00.000Z";
 
 test("알림 종류를 즉시 알림과 조용한 알림으로 분류한다", () => {
-  for (const kind of ["priority", "conflict", "reminder", "advice", "distraction"]) {
+  for (const kind of ["priority", "conflict", "reminder", "advice", "distraction", "answer"]) {
     assert.equal(notificationMode(kind), "immediate");
   }
   for (const kind of ["opportunity", "sync-complete"]) {
@@ -74,5 +74,6 @@ test("조용한 알림은 unread 배지를 올리고 확인 후 목록은 보존
 test("알림 종류를 사용자용 짧은 문구로 표시한다", () => {
   assert.equal(notificationKindLabel("conflict"), "일정 충돌");
   assert.equal(notificationKindLabel("sync-complete"), "동기화 완료");
+  assert.equal(notificationKindLabel("answer"), "답변");
   assert.equal(notificationKindLabel("unknown"), "알림");
 });
