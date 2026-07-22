@@ -39,6 +39,9 @@ export function profileFromFormData(data) {
     preferredLocations: splitList(read("preferredLocations")),
     explicitConstraints: splitList(read("explicitConstraints")),
   };
+  if (profile.school === "" || profile.major === "" || profile.year === "") {
+    throw new Error("학교, 전공, 학년은 모두 입력해주세요.");
+  }
 
   if (data.get("quietHoursEnabled") !== null) {
     const start = read("quietHoursStart");

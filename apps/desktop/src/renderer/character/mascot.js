@@ -606,6 +606,7 @@ async function renderProfileSettings(notice) {
     panelContent.innerHTML = `
       ${notice === undefined ? "" : `<p class="restart-notice">${escapeHtml(notice)}</p>`}
       <form class="profile-form" data-profile-form>
+        <p class="state-message error compact" data-profile-error hidden></p>
         <div class="form-row">
           <div class="form-field"><label for="profile-school">학교</label><input id="profile-school" name="school" value="${escapeHtml(profile.school)}" required /></div>
           <div class="form-field"><label for="profile-major">전공</label><input id="profile-major" name="major" value="${escapeHtml(profile.major)}" required /></div>
@@ -657,7 +658,11 @@ async function runProfileSave(event) {
     unwrapResult(await desktopApi.profileSave(profile));
     await renderProfileSettings("프로필을 저장했습니다.");
   } catch (error) {
-    renderError(error);
+    const target = form.querySelector("[data-profile-error]");
+    if (target instanceof HTMLElement) {
+      target.textContent = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
+      target.hidden = false;
+    }
   } finally {
     if (submit instanceof HTMLButtonElement && submit.isConnected) submit.disabled = false;
   }

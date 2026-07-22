@@ -200,6 +200,8 @@ test("desktop mascot settings connects profile fields and Quiet Hours", async ()
   assert.match(renderer, /desktopApi\.profileGet/);
   assert.match(renderer, /desktopApi\.profileSave/);
   assert.match(renderer, /data-quiet-hours-toggle/);
+  assert.match(renderer, /data-profile-error/);
+  assert.match(renderer, /프로필을 저장하지 못했습니다/);
   assert.match(style, /\.profile-form\s*\{/);
   assert.match(style, /\.quiet-hours-field\s*\{/);
 });
