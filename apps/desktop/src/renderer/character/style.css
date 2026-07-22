@@ -303,12 +303,14 @@ body[data-character-placement^="top"] .popup-menu { top: auto; bottom: 12px; }
 }
 
 .panel {
-  inset: 8px 200px 8px 8px;
+  top: 0;
+  bottom: 0;
+  width: 460px;
   overflow: hidden;
 }
 
-body[data-character-placement$="left"] .panel { right: 8px; left: 200px; }
-body[data-character-placement$="right"] .panel { right: 200px; left: 8px; }
+body[data-character-placement$="left"] .panel { right: 26px; left: auto; }
+body[data-character-placement$="right"] .panel { right: auto; left: 26px; }
 
 .panel-header {
   display: flex;

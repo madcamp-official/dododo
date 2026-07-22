@@ -99,14 +99,16 @@ test("desktop mascot은 확장된 메뉴와 패널 영역에 겹치지 않는다
   assert.doesNotMatch(preload, /desktop:set-surface-expanded/);
   assert.doesNotMatch(renderer, /setSurfaceExpanded/);
   assert.match(style, /\.popup-menu\s*\{[^}]*right:\s*200px;/s);
-  assert.match(style, /\.panel\s*\{[^}]*inset:\s*8px 200px 8px 8px;/s);
+  assert.match(style, /\.panel\s*\{[^}]*width:\s*460px;/s);
+  assert.match(style, /body\[data-character-placement\$="left"\] \.panel \{ right: 26px; left: auto; \}/);
+  assert.match(style, /body\[data-character-placement\$="right"\] \.panel \{ right: auto; left: 26px; \}/);
   assert.doesNotMatch(main, /characterWindow\.setBounds/);
 });
 
 test("desktop mascot의 추가·같이 공부하기 패널은 캐릭터 위치와 무관하게 전체 창 높이를 사용한다", async () => {
   const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
 
-  assert.match(style, /\.panel\s*\{[^}]*inset:\s*8px 200px 8px 8px;/s);
+  assert.match(style, /\.panel\s*\{[^}]*top:\s*0;[^}]*bottom:\s*0;[^}]*width:\s*460px;/s);
   assert.doesNotMatch(style, /body\[data-character-placement\^="top"\]\s+\.panel\s*\{/);
   assert.doesNotMatch(style, /body\[data-character-placement\^="bottom"\]\s+\.panel\s*\{/);
 });
@@ -265,6 +267,12 @@ test("desktop mascot provides study consent, start, end, and summary flow", asyn
   assert.match(renderer, /data-study-elapsed/);
   assert.match(renderer, /data-study-status aria-live="polite"/);
   assert.doesNotMatch(renderer, /study-progress" aria-live/);
+});
+
+test("추가와 같이 공부하기 내부 패널도 독립 패널과 같은 크기를 사용한다", async () => {
+  const style = await readFile("apps/desktop/src/renderer/character/style.css", "utf8");
+  assert.match(style, /\.panel\s*\{[\s\S]*?width:\s*460px/);
+  assert.match(style, /\.panel\s*\{[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*0/);
 });
 
 test("desktop mascot changes expression for notifications and restores its activity state", async () => {

@@ -1,4 +1,4 @@
-import type { Point } from "../dragGeometry.ts";
+import type { Point, Size } from "../dragGeometry.ts";
 import type { PanelRoute } from "./panelPayload.ts";
 
 // docs/frontend-plan.md 6.8.2: 결과 패널도 설정 창처럼 앱 전체에서 하나만 유지하지만,
@@ -9,7 +9,7 @@ export interface PanelWindowHandle {
   isDestroyed(): boolean;
   show(): void;
   focus(): void;
-  setPosition(position: Point): void;
+  setBounds(position: Point, size: Size): void;
   navigate(route: PanelRoute): void;
   onClosed(listener: () => void): void;
 }
@@ -20,16 +20,16 @@ export interface PanelWindowCoordinator {
   // 만든다. createWindow를 호출 시점에 받는 이유는 캐릭터 위치·workArea 기준
   // 배치가 매번 달라질 수 있어(사용자가 캐릭터를 옮긴 뒤 패널을 처음 여는 경우)
   // 생성 시점의 최신 배치 정보로 만들어야 하기 때문이다.
-  open(route: PanelRoute, position: Point, createWindow: (route: PanelRoute) => PanelWindowHandle): void;
+  open(route: PanelRoute, position: Point, size: Size, createWindow: (route: PanelRoute) => PanelWindowHandle): void;
 }
 
 export function createPanelWindowCoordinator(): PanelWindowCoordinator {
   let current: PanelWindowHandle | undefined;
 
   return {
-    open(route, position, createWindow): void {
+    open(route, position, size, createWindow): void {
       if (current !== undefined && !current.isDestroyed()) {
-        current.setPosition(position);
+        current.setBounds(position, size);
         current.navigate(route);
         current.show();
         current.focus();
@@ -37,7 +37,7 @@ export function createPanelWindowCoordinator(): PanelWindowCoordinator {
       }
 
       const window = createWindow(route);
-      window.setPosition(position);
+      window.setBounds(position, size);
       window.onClosed(() => {
         if (current === window) current = undefined;
       });

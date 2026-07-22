@@ -19,6 +19,8 @@ test("패널 창은 전용 Renderer 경로를 로드하고 배치 계산·coordi
 
   assert.match(panelWindow, /createPanelWindowCoordinator/);
   assert.match(panelWindow, /layoutPanelWindow\(layout\.characterBounds/);
+  assert.match(panelWindow, /coordinator\.open\(route, position, PANEL_SIZE/);
+  assert.match(panelWindow, /window\.setBounds/);
   assert.match(panelWindow, /window\.loadFile\(rendererPath\)/);
   assert.match(panelWindow, /did-finish-load/);
 });
