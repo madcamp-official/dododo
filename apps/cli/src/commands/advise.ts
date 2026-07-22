@@ -51,6 +51,16 @@ function renderDecision(decision: ScreenAdviceDecision): string {
 // 그 뒤로는 어떤 변수에도 저장하지 않는다 — 이 함수가 반환하는 순간 스코프를
 // 벗어나 GC 대상이 된다(AGENTS.md: 화면 캡처 원본은 영구 저장하지 않는다).
 async function runLiveCapture(container: CliContainer, focusMode: boolean, now: Date): Promise<string> {
+  // 집중 모드는 조언뿐 아니라 그 조언을 위한 화면 수집 자체를 중단한다.
+  // 원격 Provider에는 이미지 Privacy Gateway가 준비될 때까지 원본 화면을 보내지
+  // 않는다. sensitiveContentDetected는 모델 응답이라 전송 전 보호 수단이 아니다.
+  if (focusMode) {
+    return "조언하지 않습니다.\n이유: 집중 모드에서는 화면을 캡처하지 않습니다.";
+  }
+  if (container.llmConfig?.provider === "remote-job") {
+    return "원격 화면 분석은 개인정보 보호 처리가 준비되지 않아 사용할 수 없습니다. 로컬 Ollama를 사용하세요.";
+  }
+
   let capture: Awaited<ReturnType<CliContainer["captureLiveScreen"]>>;
   try {
     capture = await container.captureLiveScreen();

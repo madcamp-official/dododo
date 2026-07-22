@@ -134,6 +134,49 @@ test("runAdvise --screen --live는 LLM이 설정되지 않았으면 캡처 완�
   assert.doesNotMatch(output, /fake/);
 });
 
+test("runAdvise --screen --live --focus는 화면 캡처와 Vision 호출을 건너뛴다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  let captureCount = 0;
+  let providerCallCount = 0;
+  container.captureLiveScreen = async () => {
+    captureCount += 1;
+    throw new Error("호출되면 안 됨");
+  };
+  container.llmProvider = {
+    async completeJSON() {
+      providerCallCount += 1;
+      throw new Error("호출되면 안 됨");
+    },
+  };
+
+  const output = await runAdvise(container, ["--screen", "--live", "--focus"]);
+
+  assert.match(output, /집중 모드에서는 화면을 캡처하지 않습니다/);
+  assert.equal(captureCount, 0);
+  assert.equal(providerCallCount, 0);
+});
+
+test("runAdvise --screen --live는 remote-job Provider일 때 화면을 캡처하거나 전송하지 않는다", async () => {
+  const container = createCliContainer({
+    databasePath: ":memory:",
+    env: {
+      DODODO_LLM_PROVIDER: "remote-job",
+      DODODO_LLM_BASE_URL: "https://gateway.example.test",
+      DODODO_LLM_TOKEN: "test-token",
+    },
+  });
+  let captureCount = 0;
+  container.captureLiveScreen = async () => {
+    captureCount += 1;
+    throw new Error("호출되면 안 됨");
+  };
+
+  const output = await runAdvise(container, ["--screen", "--live"]);
+
+  assert.match(output, /원격 화면 분석은 개인정보 보호 처리가 준비되지 않아/);
+  assert.equal(captureCount, 0);
+});
+
 test("runAdvise --screen --live는 Vision이 관련 Task를 찾으면 조언 문구를 반환한다", async () => {
   const container = createCliContainer({ databasePath: ":memory:" });
   await container.repository.saveContextItems([taskItem()]);

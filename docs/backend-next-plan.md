@@ -81,11 +81,12 @@ P0 스택에 없는 것만 남는다.
    (`apps/cli/src/commands/advise.ts`의 `advise --screen --live`)가 곧바로
    버린다. 남은 건 3분 폴링이 아닌 Trigger 기반 자동 캡처와 데스크톱 "같이
    공부하기" 세션 UI(프론트엔드 몫).
-3. **Privacy Gateway의 이미지 미대응** — 부분 완화됨. `extractScreenActivity`의
-   `sensitiveContentDetected` 자기 보고가 1차 방어선 역할을 하지만(민감해
-   보이면 RawItem을 아예 안 만듦), Privacy Gateway 자체가 이미지를 마스킹·
-   검토하는 건 아니다. 세션 시작 시 1회 동의(frontend-plan 방향)와 원격
-   Provider 고지 문구는 여전히 프론트엔드와 조율 필요.
+3. **Privacy Gateway의 이미지 미대응** — `sensitiveContentDetected`는 모델이
+   이미지를 받은 뒤의 자기 보고라 전송 전 방어선이 아니며, 민감한 결과의
+   RawItem 생성만 막는다. 따라서 이미지 Privacy Gateway가 준비될 때까지
+   `advise --screen --live`는 로컬 Ollama에서만 동작하고 remote-job 설정에서는
+   캡처·전송 전에 거절한다. 세션 시작 시 1회 동의(frontend-plan 방향)는 여전히
+   프론트엔드와 조율이 필요하다.
 
 ## P2 — Data Ingestion 영역 문서·코드 정리
 
