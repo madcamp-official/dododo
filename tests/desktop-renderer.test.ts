@@ -12,7 +12,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
     "deleteTask", "setReminderOffset", "listSources", "registerSource",
     "removeSource", "getProfile", "saveProfile", "getUiState", "setUiState", "sync",
-    "startStudy", "endStudy",
+    "startStudy", "endStudy", "getStudySession",
   ].map((method) => [method, (...args: unknown[]) => {
     calls.push({ method, args });
     return Promise.resolve(result);
@@ -42,6 +42,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.sync();
   await api.studyStart(true);
   await api.studyEnd("session-1");
+  await api.studyGet();
 
   assert.deepEqual(calls, [
     { method: "getToday", args: [] },
@@ -65,6 +66,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "sync", args: [] },
     { method: "startStudy", args: [true] },
     { method: "endStudy", args: ["session-1"] },
+    { method: "getStudySession", args: [] },
   ]);
 });
 

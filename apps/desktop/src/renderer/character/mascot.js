@@ -38,6 +38,11 @@ const notificationStore = createNotificationStore();
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
+const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => {
+  if (["top-left", "top-right", "bottom-left", "bottom-right"].includes(placement)) {
+    document.body.dataset.characterPlacement = placement;
+  }
+});
 let activeStudySessionId;
 let notificationSubscriptionRetry;
 let unsubscribeNotifications;
@@ -152,11 +157,13 @@ notificationDetail?.addEventListener("click", () => {
 
 subscribeToNotifications();
 void showDailySummaryOnFirstLaunch();
+void restoreStudySession();
 window.addEventListener("beforeunload", () => {
   if (notificationTimer !== undefined) window.clearTimeout(notificationTimer);
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
   unsubscribeNotifications?.();
+  unsubscribePlacement?.();
 }, { once: true });
 
 document.querySelector("[data-close-panel]")?.addEventListener("click", closePanel);
@@ -186,6 +193,15 @@ async function openStudySession() {
       <p>도토리와 같이 공부하는 중입니다.</p>
       <button class="danger-button" type="button" data-study-end>세션 종료</button>`;
     panelContent.querySelector("[data-study-end]")?.addEventListener("click", endStudySession);
+  }
+}
+
+async function restoreStudySession() {
+  try {
+    const active = unwrapResult(await desktopApi.studyGet());
+    activeStudySessionId = active?.sessionId;
+  } catch {
+    // 세션 복원 실패는 다른 메뉴와 알림 사용을 막지 않는다.
   }
 }
 

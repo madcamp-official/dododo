@@ -5,7 +5,7 @@ import path from "node:path";
 import { closeDesktopContainer, getDesktopContainer } from "./container.ts";
 import { registerIpcHandlers } from "./ipc/index.ts";
 import { startDesktopWatch } from "./watch/desktopWatch.ts";
-import { clampPositionToWorkArea } from "./dragGeometry.ts";
+import { layoutWindowForCharacter } from "./dragGeometry.ts";
 import { NOTIFICATION_CHANNEL } from "./notifier/notificationEvent.ts";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -17,8 +17,11 @@ const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
 const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
+const CHARACTER_PLACEMENT = "desktop:character-placement";
 const characterDragOrigins = new WeakMap();
+const characterPlacements = new WeakMap();
 const EXPANDED_SIZE = { width: 680, height: 420 };
+const CHARACTER_SIZE = { width: 174, height: 174 };
 
 // Renderer가 mouse-ignore 초기 상태의 단독 소유자다(위 mousemove 주석 참고). Renderer
 // 스크립트가 실패하거나 아직 SET_MOUSE_PASSTHROUGH를 한 번도 못 보낸 상태로 남으면
@@ -55,7 +58,15 @@ ipcMain.on(START_CHARACTER_DRAG, (event, pointer) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
   if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
   const [windowX, windowY] = characterWindow.getPosition();
-  characterDragOrigins.set(characterWindow, { pointerX: pointer.x, pointerY: pointer.y, windowX, windowY });
+  const placement = characterPlacements.get(characterWindow) ?? "bottom-right";
+  const offsetX = placement.endsWith("left") ? 4 : EXPANDED_SIZE.width - CHARACTER_SIZE.width - 4;
+  const offsetY = placement.startsWith("top") ? 4 : EXPANDED_SIZE.height - CHARACTER_SIZE.height - 4;
+  characterDragOrigins.set(characterWindow, {
+    pointerX: pointer.x,
+    pointerY: pointer.y,
+    characterX: windowX + offsetX,
+    characterY: windowY + offsetY,
+  });
   characterWindow.setIgnoreMouseEvents(false);
 });
 
@@ -64,21 +75,41 @@ ipcMain.on(MOVE_CHARACTER_DRAG, (event, pointer) => {
   if (characterWindow === null || !characterWindows.has(characterWindow) || !isScreenPoint(pointer)) return;
   const origin = characterDragOrigins.get(characterWindow);
   if (origin === undefined) return;
-  const desiredX = Math.round(origin.windowX + pointer.x - origin.pointerX);
-  const desiredY = Math.round(origin.windowY + pointer.y - origin.pointerY);
+  const desiredX = Math.round(origin.characterX + pointer.x - origin.pointerX);
+  const desiredY = Math.round(origin.characterY + pointer.y - origin.pointerY);
   const workArea = screen.getDisplayNearestPoint(pointer).workArea;
-  const [windowWidth, windowHeight] = characterWindow.getSize();
-  const clamped = clampPositionToWorkArea(
+  const layout = layoutWindowForCharacter(
     { x: desiredX, y: desiredY },
-    { width: windowWidth, height: windowHeight },
+    EXPANDED_SIZE,
+    CHARACTER_SIZE,
     workArea,
+    4,
+    characterPlacements.get(characterWindow),
+    Number.POSITIVE_INFINITY,
   );
-  characterWindow.setPosition(clamped.x, clamped.y);
+  characterWindow.setPosition(layout.windowPosition.x, layout.windowPosition.y);
+  origin.lastCharacterPosition = layout.characterPosition;
+  origin.lastWorkArea = workArea;
 });
 
 ipcMain.on(END_CHARACTER_DRAG, (event) => {
   const characterWindow = BrowserWindow.fromWebContents(event.sender);
-  if (characterWindow !== null) characterDragOrigins.delete(characterWindow);
+  if (characterWindow === null) return;
+  const origin = characterDragOrigins.get(characterWindow);
+  characterDragOrigins.delete(characterWindow);
+  if (origin?.lastCharacterPosition === undefined || origin.lastWorkArea === undefined) return;
+
+  // 드래그 중에는 placement를 고정해 기준점 변경으로 캐릭터가 튀지 않게 한다.
+  // 포인터를 놓은 뒤 최종 사분면을 한 번만 계산해 주변 UI 방향을 갱신한다.
+  const finalLayout = layoutWindowForCharacter(
+    origin.lastCharacterPosition,
+    EXPANDED_SIZE,
+    CHARACTER_SIZE,
+    origin.lastWorkArea,
+  );
+  characterPlacements.set(characterWindow, finalLayout.placement);
+  characterWindow.setPosition(finalLayout.windowPosition.x, finalLayout.windowPosition.y);
+  characterWindow.webContents.send(CHARACTER_PLACEMENT, finalLayout.placement);
 });
 
 function isScreenPoint(value) {
@@ -108,13 +139,16 @@ function createCharacterWindow() {
 
   characterWindow.setMenuBarVisibility(false);
   characterWindows.add(characterWindow);
+  characterPlacements.set(characterWindow, "bottom-right");
   schedulePassthroughFallback(characterWindow);
   characterWindow.on("closed", () => {
     cancelPassthroughFallback(characterWindow);
     characterDragOrigins.delete(characterWindow);
     characterWindows.delete(characterWindow);
+    characterPlacements.delete(characterWindow);
   });
   void characterWindow.loadFile(rendererPath).then(() => {
+    characterWindow.webContents.send(CHARACTER_PLACEMENT, characterPlacements.get(characterWindow));
     if (process.env.DODODO_NOTIFICATION_PREVIEW === "1") {
       characterWindow.webContents.send(NOTIFICATION_CHANNEL, {
         kind: "sync-complete",

@@ -182,12 +182,21 @@ export function handleStudyStart(manager: StudySessionManager, input: unknown) {
   if (!isRecord(input) || typeof input.screenCaptureConsent !== "boolean") {
     return Promise.resolve(fail("validation", "screenCaptureConsent는 boolean이어야 합니다."));
   }
-  return Promise.resolve(manager.start(input.screenCaptureConsent));
+  return manager.start(input.screenCaptureConsent).catch(toStudyStorageFailure);
 }
 
 export function handleStudyEnd(manager: StudySessionManager, input: unknown) {
   if (!isRecord(input) || !isNonEmptyString(input.sessionId)) {
     return Promise.resolve(fail("validation", "sessionId는 문자열이어야 합니다."));
   }
-  return Promise.resolve(manager.end(input.sessionId));
+  return manager.end(input.sessionId).catch(toStudyStorageFailure);
+}
+
+export function handleStudyGet(manager: StudySessionManager) {
+  return manager.getActive().catch(toStudyStorageFailure);
+}
+
+function toStudyStorageFailure(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return fail("unknown", `같이 공부하기 세션 상태를 저장하거나 불러오지 못했습니다: ${detail}`);
 }

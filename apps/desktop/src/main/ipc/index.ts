@@ -21,6 +21,7 @@ import {
   handleTaskUpdate,
   handleToday,
   handleStudyEnd,
+  handleStudyGet,
   handleStudyStart,
   handleUiStateGet,
   handleUiStateSet,
@@ -52,6 +53,7 @@ export const IPC_CHANNELS = {
   uiStateSet: "ui-state:set",
   studyStart: "study:start",
   studyEnd: "study:end",
+  studyGet: "study:get",
 } as const;
 
 // payload 검증과 실제 처리는 handlers.ts(electron 미의존, node --test로 검증)에 있다 —
@@ -59,7 +61,8 @@ export const IPC_CHANNELS = {
 // 이미 생겨 있어야 등록할 수 있다 — index.mjs가 app.whenReady() 이후 container를
 // 만든 뒤 이 함수를 한 번만 호출한다.
 export function registerIpcHandlers(container: CliContainer): void {
-  const studySessions = new StudySessionManager();
+  const userDataPath = app.getPath("userData");
+  const studySessions = new StudySessionManager(join(userDataPath, "active-study-session.json"));
   ipcMain.handle(IPC_CHANNELS.todayGet, () => handleToday(container));
   ipcMain.handle(IPC_CHANNELS.calendarGet, () => handleCalendar(container));
   ipcMain.handle(IPC_CHANNELS.inboxGet, () => handleInbox(container));
@@ -82,11 +85,12 @@ export function registerIpcHandlers(container: CliContainer): void {
   ipcMain.handle(IPC_CHANNELS.profileSave, (_event, input: unknown) => handleProfileSave(container, input));
   ipcMain.handle(IPC_CHANNELS.studyStart, (_event, input: unknown) => handleStudyStart(studySessions, input));
   ipcMain.handle(IPC_CHANNELS.studyEnd, (_event, input: unknown) => handleStudyEnd(studySessions, input));
+  ipcMain.handle(IPC_CHANNELS.studyGet, () => handleStudyGet(studySessions));
 
   // app.getPath("userData")는 app.whenReady() 이전엔 일부 플랫폼에서 값이 없을 수 있어
   // (Electron 문서 권고), 이미 whenReady 이후에만 호출되는 registerIpcHandlers 안에서 계산한다.
   // handlers.ts는 electron을 import하지 않으므로 이 경로는 여기서 만들어 인자로 넘긴다.
-  const uiStatePath = join(app.getPath("userData"), "ui-state.json");
+  const uiStatePath = join(userDataPath, "ui-state.json");
   ipcMain.handle(IPC_CHANNELS.uiStateGet, (_event, input: unknown) => handleUiStateGet(uiStatePath, input));
   ipcMain.handle(IPC_CHANNELS.uiStateSet, (_event, input: unknown) => handleUiStateSet(uiStatePath, input));
 }

@@ -48,8 +48,17 @@ button {
   touch-action: none;
 }
 
+body[data-character-placement^="top"] .character-button { top: 4px; bottom: auto; }
+body[data-character-placement^="bottom"] .character-button { top: auto; bottom: 4px; }
+body[data-character-placement$="left"] .character-button { left: 4px; right: auto; }
+body[data-character-placement$="right"] .character-button { left: auto; right: 4px; }
+
 .character-button.is-dragging {
   cursor: grabbing;
+}
+
+.character-button.is-dragging .character {
+  animation: none;
 }
 
 .character {
@@ -115,11 +124,32 @@ button {
   -webkit-app-region: no-drag;
 }
 
+body[data-character-placement$="left"] .notification-bubble { right: auto; left: 190px; }
+body[data-character-placement^="top"] .notification-bubble { top: 190px; bottom: auto; }
+
 /* 패널이 열린 동안에는 말풍선을 오른쪽 여백으로 옮겨 내용을 가리지 않는다. */
 .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
-  right: 8px;
-  bottom: 190px;
   width: 190px;
+}
+
+body[data-character-placement$="left"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: auto;
+  left: 8px;
+}
+
+body[data-character-placement$="right"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: 8px;
+  left: auto;
+}
+
+body[data-character-placement^="top"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: 8px;
+  bottom: auto;
+}
+
+body[data-character-placement^="bottom"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: auto;
+  bottom: 8px;
 }
 
 .notification-bubble::after {
@@ -132,6 +162,9 @@ button {
   content: "";
   transform: rotate(45deg);
 }
+
+body[data-character-placement$="left"] .notification-bubble::after { right: auto; left: -12px; }
+body[data-character-placement^="top"] .notification-bubble::after { top: 28px; bottom: auto; }
 
 .notification-bubble-header {
   position: relative;
@@ -220,6 +253,9 @@ button {
   overflow: hidden;
 }
 
+body[data-character-placement$="left"] .popup-menu { right: auto; left: 200px; }
+body[data-character-placement^="top"] .popup-menu { top: auto; bottom: 12px; }
+
 .popup-menu button,
 .settings-list button {
   display: flex;
@@ -251,6 +287,11 @@ button {
   inset: 8px 200px 8px 8px;
   overflow: hidden;
 }
+
+body[data-character-placement$="left"] .panel { right: 8px; left: 200px; }
+body[data-character-placement$="right"] .panel { right: 200px; left: 8px; }
+body[data-character-placement^="top"] .panel { top: 180px; bottom: 8px; }
+body[data-character-placement^="bottom"] .panel { top: 8px; bottom: 180px; }
 
 .panel-header {
   display: flex;
