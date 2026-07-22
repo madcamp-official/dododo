@@ -266,6 +266,7 @@ test("desktop calendar renders schedules as day and time groups", async () => {
   assert.match(renderer, /class="weekly-calendar"/);
   assert.match(renderer, /class="calendar-day"/);
   assert.match(renderer, /class="calendar-entry \$\{item\.kind === "event" \? "event" : "deadline"\}"/);
+  assert.match(renderer, /<time datetime="\$\{escapeHtml\(at\)\}">\$\{escapeHtml\(timeLabel\)\}<\/time>/);
   assert.match(renderer, /data-item-id/);
   assert.match(style, /\.calendar-day\s*\{/);
   assert.match(style, /\.calendar-entry\.deadline\s*\{/);

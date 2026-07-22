@@ -285,9 +285,9 @@ function renderScheduledItems(entries) {
   panelContent.innerHTML = `<div class="weekly-calendar" aria-label="이번 주 일정">${days.map((day) => `
     <section class="calendar-day">
       <header><time datetime="${escapeHtml(day.key)}">${escapeHtml(day.label)}</time><span>${day.entries.length}개</span></header>
-      <div class="calendar-day-items">${day.entries.map(({ item, timeLabel }) => `
+      <div class="calendar-day-items">${day.entries.map(({ item, at, timeLabel }) => `
         <button class="calendar-entry ${item.kind === "event" ? "event" : "deadline"}" type="button" data-item-id="${escapeHtml(item.id)}">
-          <time>${escapeHtml(timeLabel)}</time>
+          <time datetime="${escapeHtml(at)}">${escapeHtml(timeLabel)}</time>
           <span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(`${item.kind === "event" ? "일정" : "마감"} · ${statusLabel(item.status)}`)}</small></span>
         </button>`).join("")}</div>
     </section>`).join("")}</div>`;
