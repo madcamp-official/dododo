@@ -19,5 +19,6 @@ test("종료 요약은 시간과 조언 횟수를 읽기 쉬운 문구로 만든
   assert.deepEqual(studySummaryView({ summaryText: "수고했어요.", durationMinutes: 75, adviceCount: 2 }), {
     title: "수고했어요.", durationLabel: "1시간 15분", adviceLabel: "도토리 조언 2회",
   });
+  assert.equal(studySummaryView({ durationMinutes: 65, adviceCount: 0 }).durationLabel, "1시간 05분");
   assert.equal(studySummaryView({ durationMinutes: 10, adviceCount: 0 }).adviceLabel, "방해 없이 집중했어요");
 });

@@ -30,7 +30,7 @@ export function studySummaryView(result) {
     title: typeof result?.summaryText === "string" && result.summaryText.trim() !== ""
       ? result.summaryText.trim() : "같이 공부하기 세션을 마쳤어요.",
     durationLabel: duration >= 60
-      ? `${Math.floor(duration / 60)}시간 ${duration % 60}분`
+      ? `${Math.floor(duration / 60)}시간 ${String(duration % 60).padStart(2, "0")}분`
       : `${duration}분`,
     adviceLabel: adviceCount === 0 ? "방해 없이 집중했어요" : `도토리 조언 ${adviceCount}회`,
   };
