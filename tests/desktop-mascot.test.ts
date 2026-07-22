@@ -8,6 +8,7 @@ const desktopFiles = [
   "apps/desktop/src/preload/index.cjs",
   "apps/desktop/src/renderer/character/mascot.js",
   "apps/desktop/src/renderer/character/notification-state.mjs",
+  "apps/desktop/src/renderer/character/schedule-form.mjs",
 ];
 
 test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한다", () => {
@@ -118,7 +119,8 @@ test("desktop mascot Renderer는 실제 IPC 상세 액션과 일정 추가 화�
   assert.match(renderer, /desktopApi\.complete/);
   assert.match(renderer, /desktopApi\.snooze/);
   assert.match(renderer, /desktopApi\.add/);
-  assert.match(renderer, /closest\("\.action-row"\).*querySelectorAll\("button"\)/);
+  assert.match(renderer, /runExclusivePanelAction/);
+  assert.match(renderer, /panelContent\.querySelectorAll\("button, input, textarea"\)/);
   assert.match(renderer, /createExclusiveActionRunner/);
   assert.match(renderer, /처리는 완료됐지만 목록 갱신에 실패했습니다/);
   assert.match(style, /\.answer\s*\{[^}]*white-space:\s*pre-line;/s);
@@ -148,4 +150,25 @@ test("desktop mascot은 notification 이벤트를 말풍선·배지·상세보�
   assert.match(style, /\.notification-bubble\s*\{/);
   assert.match(style, /\.desktop-shell:has\(\.panel:not\(\[hidden\]\)\) \.notification-bubble/);
   assert.match(style, /\.notification-badge\s*\{/);
+});
+
+test("desktop mascot 상세 패널은 일정 수정·삭제·리마인더 API를 연결한다", async () => {
+  const [renderer, adapter, style] = await Promise.all([
+    readFile("apps/desktop/src/renderer/character/mascot.js", "utf8"),
+    readFile("apps/desktop/src/renderer/character/desktop-api.mjs", "utf8"),
+    readFile("apps/desktop/src/renderer/character/style.css", "utf8"),
+  ]);
+
+  assert.match(adapter, /updateTask/);
+  assert.match(adapter, /deleteTask/);
+  assert.match(adapter, /setReminderOffset/);
+  assert.match(renderer, /data-schedule-edit-form/);
+  assert.match(renderer, /desktopApi\.update/);
+  assert.match(renderer, /window\.confirm/);
+  assert.match(renderer, /desktopApi\.delete/);
+  assert.match(renderer, /desktopApi\.reminder/);
+  assert.equal((renderer.match(/await runExclusivePanelAction/g) ?? []).length, 4);
+  assert.match(renderer, /item\.kind === "event" \? `<div class="form-field">/);
+  assert.match(style, /\.danger-button\s*\{/);
+  assert.match(style, /\.reminder-form\s*\{/);
 });

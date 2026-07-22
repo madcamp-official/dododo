@@ -7,6 +7,9 @@ const API_METHODS = {
   detail: "getTaskDetail",
   complete: "completeTask",
   snooze: "snoozeTask",
+  update: "updateTask",
+  delete: "deleteTask",
+  reminder: "setReminderOffset",
   sync: "sync",
 };
 
@@ -34,6 +37,9 @@ export function createDesktopApi(bridgeOrProvider) {
     detail: (id) => invoke("detail", id),
     complete: (id) => invoke("complete", id),
     snooze: (id, until) => invoke("snooze", id, until),
+    update: (id, input) => invoke("update", id, input),
+    delete: (id) => invoke("delete", id),
+    reminder: (id, offsetMinutes) => invoke("reminder", id, offsetMinutes),
     sync: () => invoke("sync"),
   };
 }
