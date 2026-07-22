@@ -287,5 +287,6 @@ test("desktop mascot changes expression for notifications and restores its activ
   assert.match(renderer, /setCharacterExpression\(notificationExpression\(next\.kind\)\)/);
   assert.match(renderer, /notificationStore\.hasImmediate\(\).*showNextNotification\(\)/s);
   assert.match(renderer, /else updateStudyCharacter\(\)/);
+  assert.match(renderer, /updateStudyCharacter\(\).*activeNotification !== undefined.*return.*restingExpression/s);
   assert.match(renderer, /character\.addEventListener\("load", prepareAlphaMask/);
 });

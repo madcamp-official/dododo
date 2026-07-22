@@ -269,8 +269,9 @@ function stopStudyProgressTimer() {
 }
 
 function updateStudyCharacter() {
-  setCharacterExpression(restingExpression(activeStudySession !== undefined));
   document.body.classList.toggle("is-studying", activeStudySession !== undefined);
+  if (activeNotification !== undefined) return;
+  setCharacterExpression(restingExpression(activeStudySession !== undefined));
 }
 
 function setCharacterExpression(expression) {

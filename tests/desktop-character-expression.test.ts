@@ -5,8 +5,10 @@ import test from "node:test";
 import { notificationExpression, restingExpression } from "../apps/desktop/src/renderer/character/character-expression.mjs";
 
 test("알림 종류에 맞는 캐릭터 표정을 선택한다", () => {
+  assert.equal(notificationExpression("priority").asset, "alert.png");
   assert.equal(notificationExpression("reminder").asset, "alert.png");
   assert.equal(notificationExpression("conflict").asset, "worried.png");
+  assert.equal(notificationExpression("distraction").asset, "worried.png");
   assert.equal(notificationExpression("opportunity").asset, "happy.png");
   assert.equal(notificationExpression("sync-complete").asset, "cheering.png");
   assert.equal(notificationExpression("advice").asset, "point.png");
