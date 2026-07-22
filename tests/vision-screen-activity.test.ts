@@ -115,6 +115,26 @@ test("extractScreenActivity는 Provider 실패 시 failed를 반환한다", asyn
   assert.deepEqual(result, { outcome: "failed" });
 });
 
+test("extractScreenActivity는 원격 Provider의 이미지 요청을 직접 차단한다", async () => {
+  let callCount = 0;
+  const remoteProvider: LLMProvider = {
+    imageDataBoundary: "remote",
+    async completeJSON() {
+      callCount += 1;
+      throw new Error("호출되면 안 됨");
+    },
+  };
+
+  const result = await extractScreenActivity({
+    imageBase64: IMAGE_BASE64,
+    observedAt: OBSERVED_AT,
+    provider: remoteProvider,
+  });
+
+  assert.deepEqual(result, { outcome: "remote_provider_blocked" });
+  assert.equal(callCount, 0);
+});
+
 test("extractScreenActivity는 confidence가 범위를 벗어난 무효 응답이면 failed를 반환한다", async () => {
   const { provider } = recordingProvider({
     application: "VS Code",

@@ -26,6 +26,7 @@ const MAX_POLL_AFTER_MS = 5_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 export class RemoteJobLLMProvider implements LLMProvider {
+  readonly imageDataBoundary = "remote" as const;
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly defaultTimeoutMs: number;

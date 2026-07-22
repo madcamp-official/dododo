@@ -48,8 +48,17 @@ button {
   touch-action: none;
 }
 
+body[data-character-placement^="top"] .character-button { top: 4px; bottom: auto; }
+body[data-character-placement^="bottom"] .character-button { top: auto; bottom: 4px; }
+body[data-character-placement$="left"] .character-button { left: 4px; right: auto; }
+body[data-character-placement$="right"] .character-button { left: auto; right: 4px; }
+
 .character-button.is-dragging {
   cursor: grabbing;
+}
+
+.character-button.is-dragging .character {
+  animation: none;
 }
 
 .character {
@@ -81,6 +90,144 @@ button {
   -webkit-app-region: no-drag;
 }
 
+.notification-badge {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  display: grid;
+  min-width: 27px;
+  height: 27px;
+  padding: 0 7px;
+  place-items: center;
+  border: 3px solid #fff9ed;
+  border-radius: 999px;
+  background: #74502f;
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.notification-bubble {
+  position: absolute;
+  z-index: 12;
+  right: 190px;
+  bottom: 55px;
+  width: 270px;
+  padding: 13px 14px;
+  border: 1px solid rgb(103 77 49 / 14%);
+  border-radius: 18px;
+  background: #fffaf0;
+  box-shadow: 0 16px 36px rgb(66 42 24 / 22%);
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+}
+
+body[data-character-placement$="left"] .notification-bubble { right: auto; left: 190px; }
+body[data-character-placement^="top"] .notification-bubble { top: 190px; bottom: auto; }
+
+/* 패널이 열린 동안에는 말풍선을 오른쪽 여백으로 옮겨 내용을 가리지 않는다. */
+.desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  width: 190px;
+}
+
+body[data-character-placement$="left"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: auto;
+  left: 8px;
+}
+
+body[data-character-placement$="right"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  right: 8px;
+  left: auto;
+}
+
+body[data-character-placement^="top"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: 8px;
+  bottom: auto;
+}
+
+body[data-character-placement^="bottom"] .desktop-shell:has(.panel:not([hidden])) .notification-bubble {
+  top: auto;
+  bottom: 8px;
+}
+
+.notification-bubble::after {
+  position: absolute;
+  right: -12px;
+  bottom: 28px;
+  width: 22px;
+  height: 22px;
+  background: #fffaf0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+body[data-character-placement$="left"] .notification-bubble::after { right: auto; left: -12px; }
+body[data-character-placement^="top"] .notification-bubble::after { top: 28px; bottom: auto; }
+
+.notification-bubble-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8a5d26;
+  font-size: 12px;
+}
+
+.notification-bubble p {
+  position: relative;
+  z-index: 1;
+  margin: 8px 0 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.notification-close {
+  border: 0;
+  background: transparent;
+  color: #746556;
+  cursor: pointer;
+}
+
+.notification-detail {
+  position: relative;
+  z-index: 1;
+  padding: 6px 9px;
+  border: 1px solid #d6c2a1;
+  border-radius: 9px;
+  background: #fffdf8;
+  cursor: pointer;
+}
+
+.notification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notification-list button,
+.notification-list article {
+  display: grid;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e9dcc3;
+  border-radius: 13px;
+  background: #fffdf8;
+  box-sizing: border-box;
+  gap: 4px;
+  text-align: left;
+}
+
+.notification-list button {
+  cursor: pointer;
+}
+
+.notification-list small {
+  color: #746556;
+}
+
 .popup-menu,
 .panel {
   position: absolute;
@@ -105,6 +252,9 @@ button {
   gap: 3px;
   overflow: hidden;
 }
+
+body[data-character-placement$="left"] .popup-menu { right: auto; left: 200px; }
+body[data-character-placement^="top"] .popup-menu { top: auto; bottom: 12px; }
 
 .popup-menu button,
 .settings-list button {
@@ -137,6 +287,11 @@ button {
   inset: 8px 200px 8px 8px;
   overflow: hidden;
 }
+
+body[data-character-placement$="left"] .panel { right: 8px; left: 200px; }
+body[data-character-placement$="right"] .panel { right: 200px; left: 8px; }
+body[data-character-placement^="top"] .panel { top: 180px; bottom: 8px; }
+body[data-character-placement^="bottom"] .panel { top: 8px; bottom: 180px; }
 
 .panel-header {
   display: flex;
@@ -246,6 +401,10 @@ h2 {
   color: #ad4838;
 }
 
+.state-message.compact {
+  padding: 12px;
+}
+
 .ask-form,
 .add-form {
   display: grid;
@@ -282,7 +441,8 @@ h2 {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   padding: 8px 12px;
   border-radius: 11px;
   cursor: pointer;
@@ -297,6 +457,63 @@ h2 {
 .secondary-button {
   border: 1px solid #d6c2a1;
   background: #fffaf0;
+}
+
+.danger-button {
+  border: 1px solid #e4b9ae;
+  background: #fff3ef;
+  color: #a33f32;
+}
+
+.management-actions {
+  display: flex;
+  margin-top: 12px;
+  gap: 7px;
+}
+
+.management-toolbar {
+  display: grid;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.management-toolbar p {
+  margin: 0;
+  color: #746556;
+  font-size: 12px;
+}
+
+.management-toolbar div { display: flex; gap: 7px; }
+.schedule-groups { display: grid; gap: 14px; }
+.schedule-group { display: grid; gap: 7px; }
+.schedule-group h2 { margin: 0; color: #5e4b3a; font-size: 13px; }
+
+.reminder-form {
+  display: grid;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eadfc9;
+  gap: 7px;
+}
+
+.reminder-form label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reminder-form div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.reminder-form input {
+  box-sizing: border-box;
+  width: 90px;
+  padding: 8px;
+  border: 1px solid #d9c9ad;
+  border-radius: 10px;
+  background: #fffdf8;
 }
 
 .answer {
@@ -362,6 +579,48 @@ h2 {
 .settings-list button {
   justify-content: space-between;
   background: #fffdf8;
+}
+
+.source-list { display: grid; margin-bottom: 12px; gap: 7px; }
+
+.source-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid #eadfc9;
+  border-radius: 12px;
+  background: #fffdf8;
+  gap: 10px;
+}
+
+.source-card div, .source-form { display: grid; gap: 5px; }
+.profile-form { display: grid; gap: 9px; }
+.profile-form input { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid #d9c9ad; border-radius: 11px; background: #fffdf8; }
+.quiet-hours-field { display: grid; margin: 3px 0; padding: 10px; border: 1px solid #eadfc9; border-radius: 12px; gap: 8px; }
+.checkbox-label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
+.checkbox-label input { width: auto; }
+.source-card small { overflow-wrap: anywhere; color: #746556; }
+.source-form { padding-top: 12px; border-top: 1px solid #eadfc9; }
+.source-form label { font-size: 13px; font-weight: 700; }
+
+.source-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d9c9ad;
+  border-radius: 12px;
+  background: #fffdf8;
+  color: #2d241d;
+}
+
+.restart-notice {
+  margin: 0 0 10px;
+  padding: 9px;
+  border-radius: 11px;
+  background: #eef4e9;
+  color: #4f7146;
+  font-size: 12px;
 }
 
 @keyframes breathe {

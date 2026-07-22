@@ -86,6 +86,9 @@ async function runLiveCapture(container: CliContainer, focusMode: boolean, now: 
   if (extraction.outcome === "sensitive_content") {
     return "화면에 민감한 내용이 감지되어 조언하지 않습니다.";
   }
+  if (extraction.outcome === "remote_provider_blocked") {
+    return "원격 화면 분석은 개인정보 보호 처리가 준비되지 않아 사용할 수 없습니다. 로컬 Ollama를 사용하세요.";
+  }
   if (extraction.outcome === "failed") {
     return "화면 활동을 인식하지 못했습니다(Vision 분석 실패 또는 낮은 확신도).";
   }

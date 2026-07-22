@@ -44,6 +44,25 @@ function taskDueSoon(id: string, now: Date): ContextItem {
   };
 }
 
+function scheduledEvent(id: string, startAt: string, endAt: string): ContextItem {
+  return {
+    id,
+    kind: "event",
+    title: `일정 ${id}`,
+    status: "confirmed",
+    startAt,
+    endAt,
+    requirements: [],
+    tags: [],
+    priority: 0,
+    confidence: 1,
+    evidenceIds: [],
+    metadata: {},
+    createdAt: startAt,
+    updatedAt: startAt,
+  };
+}
+
 function captureConsoleLog(): { lines: string[]; restore: () => void } {
   const original = console.log;
   const lines: string[] = [];
@@ -370,6 +389,26 @@ test("runWatchTick의 리마인더는 Quiet Hours면 보류되고 발송 완료�
 
   const item = await container.repository.findContextItem("t1");
   assert.equal(item?.metadata.reminderSentForDeadline, undefined, "보류된 리마인더는 발송 완료로 커밋되면 안 됨");
+});
+
+test("runWatchTick의 충돌은 Quiet Hours가 끝날 때까지 알림 완료로 커밋하지 않는다", async () => {
+  const container = createCliContainer({ databasePath: ":memory:" });
+  container.collectors = [];
+  const quietNow = new Date("2026-07-20T10:00:00+09:00");
+  await container.repository.saveContextItems([
+    scheduledEvent("evt-a", "2026-07-20T11:00:00+09:00", "2026-07-20T12:00:00+09:00"),
+    scheduledEvent("evt-b", "2026-07-20T11:30:00+09:00", "2026-07-20T12:30:00+09:00"),
+  ]);
+  await container.profileRepository.save({ ...emptyProfile(), quietHours: { start: "00:00", end: "23:59" } });
+
+  const held = await runWatchTick(container, quietNow);
+  assert.equal(held.withinQuietHours, true);
+  assert.equal(held.newConflicts.length, 1);
+
+  await container.profileRepository.save(emptyProfile());
+  const delivered = await runWatchTick(container, new Date("2026-07-20T10:05:00+09:00"));
+  assert.equal(delivered.withinQuietHours, false);
+  assert.equal(delivered.newConflicts.length, 1, "Quiet Hours 종료 후 같은 충돌을 다시 전달해야 함");
 });
 
 test("runWatchTick의 리마인더는 Quiet Hours가 끝나면 다음 tick에 실제로 전달된다", async () => {

@@ -54,9 +54,11 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 ## P1 — LLM 활용 확대 (llm-architecture §8)
 
-1. `RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
-   호출하는 문제(§4-2) 해소 — 상위 N개만 LLM, 나머지는 템플릿 폴백 또는 병렬화.
-   `today`/`inbox`/`watch` 체감 지연의 직접 원인이라 가장 먼저.
+1. ~~`RuleBasedRecommendationEngine.recommend`가 항목마다 LLM 문장 생성을 순차
+   호출하는 문제(§4-2) 해소~~ — **완료.** 우선순위 상위 `llmPhrasingLimit`(기본 5)개만
+   `Promise.all`로 병렬 LLM 호출, 나머지는 `deterministicPhrasing` 템플릿을 즉시
+   사용하도록 바꿨다. `generateActionAndReason`이 실패 시 이미 내부에서 템플릿으로
+   폴백하므로 병렬 호출 중 하나가 실패해도 나머지를 막지 않는다.
 2. 애매한 병합 LLM 검토 — 40~69점 Candidate에 `same`/`different`/`uncertain` 제안
    추가. Hard Guard(과제 번호 등)는 계속 코드가 최종 결정.
 3. `ask` Local RAG — SQLite 조건 검색으로 상위 Context 5~10개를 고른 뒤 LLM에
@@ -67,9 +69,10 @@ Job Queue 자체(큐 테이블·`watch` 루프 배선)는 이제 전부 내 영�
 
 P0 스택에 없는 것만 남는다.
 
-1. **우선순위 역전 감지**(frontend-plan 2.1): `priority.ts`가 이미 계산하는 전체
-   순위와 현재 세션/화면이 다루는 Task를 비교하는 순수 함수. P0 스택 포함 여부
-   확인 후 없으면 착수.
+1. ~~**우선순위 역전 감지**(frontend-plan 2.1)~~ — **완료.**
+   `apps/cli/src/runtime/priorityInversion.ts`의 `findPriorityInversion`이 순수 비교를,
+   `checkPriorityInversion`이 실제 task+event 순위 계산을 담당한다. 현재 Task를
+   결정하는 세션/Activity 연결과 IPC 채널은 프론트엔드 연결 범위로 남아 있다.
 2. ~~**Vision 파이프라인 실제 호출**(frontend-plan 2.5)~~ — **완료.**
    `packages/context-engine/src/activity/visionExtraction.ts`의
    `extractScreenActivity(imageBase64, observedAt, provider)`가 `LLMProvider.completeJSON({
@@ -86,7 +89,9 @@ P0 스택에 없는 것만 남는다.
    RawItem 생성만 막는다. 따라서 이미지 Privacy Gateway가 준비될 때까지
    `advise --screen --live`는 로컬 Ollama에서만 동작하고 remote-job 설정에서는
    캡처·전송 전에 거절한다. 세션 시작 시 1회 동의(frontend-plan 방향)는 여전히
-   프론트엔드와 조율이 필요하다.
+   프론트엔드와 조율이 필요하다. 방어를 호출부에만 맡기지 않도록 `LLMProvider`의
+   `imageDataBoundary`를 원격 Provider가 명시하고 `extractScreenActivity`도 직접
+   원격 이미지 요청을 거절한다.
 
 ## P2 — Data Ingestion 영역 문서·코드 정리
 
@@ -129,6 +134,7 @@ P0 스택에 없는 것만 남는다.
 
 1. P0 — 이미 구현된 PR 스택(`#61`~`#67`) 순서대로 rebase·리뷰·병합. 새로 만들
    필요 없는 기능을 또 계획하지 않기 위한 선행 작업.
-2. P1 — Job Queue Worker 경계 정리, `today`/`inbox`/`watch` 문장 생성 지연 해소.
+2. ~~P1 — `today`/`inbox`/`watch` 문장 생성 지연 해소~~ — 완료.
 3. ~~P1 — 우선순위 역전·Vision 파이프라인~~ — 완료. 남은 건 프론트엔드 연결.
-4. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.
+4. P1 — Job Queue Worker 경계 정리.
+5. P2 — Data Ingestion 문서 정리, Provider 보강, 평가 확장.

@@ -68,6 +68,7 @@ export interface ExtractScreenActivityOptions {
 export type ScreenActivityExtraction =
   | { outcome: "extracted"; activity: RawItem }
   | { outcome: "sensitive_content" }
+  | { outcome: "remote_provider_blocked" }
   | { outcome: "failed" };
 
 // docs/frontend-plan.md 2.5: 화면 캡처 → Vision LLM → 구조화 Activity. 결과 RawItem은
@@ -79,6 +80,12 @@ export async function extractScreenActivity(
   options: ExtractScreenActivityOptions,
 ): Promise<ScreenActivityExtraction> {
   const { imageBase64, observedAt, provider, sourceId = "screen-live" } = options;
+
+  // 호출부가 가드를 빠뜨려도 원본 이미지가 원격 Gateway로 나가지 않게 추출
+  // 경계에서 다시 차단한다. 이미지 Privacy Gateway가 생기기 전까지 유지한다.
+  if (provider.imageDataBoundary === "remote") {
+    return { outcome: "remote_provider_blocked" };
+  }
 
   let activity: VisionScreenActivity;
   try {

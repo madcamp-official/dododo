@@ -23,15 +23,23 @@ export interface RecommendationHistoryProvider {
 export interface RuleBasedRecommendationEngineOptions {
   llmProvider?: LLMProvider;
   history?: RecommendationHistoryProvider;
+  // llm-architecture.md §4-2: today/inbox/watch가 항목마다 LLM 문장 생성을 순차
+  // 호출해 항목 수만큼 지연이 늘어난다. 우선순위가 가장 높은 상위 N개만 LLM으로
+  // 문구를 생성하고 나머지는 결정론적 템플릿을 쓴다.
+  llmPhrasingLimit?: number;
 }
+
+const DEFAULT_LLM_PHRASING_LIMIT = 5;
 
 export class RuleBasedRecommendationEngine implements RecommendationEngine {
   private readonly llmProvider: LLMProvider | undefined;
   private readonly history: RecommendationHistoryProvider | undefined;
+  private readonly llmPhrasingLimit: number;
 
   constructor(options: RuleBasedRecommendationEngineOptions = {}) {
     this.llmProvider = options.llmProvider;
     this.history = options.history;
+    this.llmPhrasingLimit = Math.max(0, options.llmPhrasingLimit ?? DEFAULT_LLM_PHRASING_LIMIT);
   }
 
   async recommend(items: ContextItem[], profile: UserProfile, now: Date): Promise<Recommendation[]> {
@@ -53,13 +61,20 @@ export class RuleBasedRecommendationEngine implements RecommendationEngine {
 
     scored.sort((a, b) => b.breakdown.total - a.breakdown.total);
 
-    const recommendations: Recommendation[] = [];
-    for (const { item, breakdown } of scored) {
-      const phrasing = this.llmProvider === undefined
-        ? deterministicPhrasing(item)
-        : await generateActionAndReason(item, breakdown, this.llmProvider);
+    // 우선순위 상위 llmPhrasingLimit개만 LLM 문구를 병렬로 생성한다 — 나머지는
+    // 순위가 낮아 사용자가 먼저 볼 가능성이 낮으므로 지연 없는 템플릿으로 채운다.
+    // generateActionAndReason은 실패 시 이미 내부에서 deterministicPhrasing으로
+    // 폴백하므로(phrasing.ts) Promise.all 중 하나가 거부되어 나머지를 막는 일은 없다.
+    const phrasings = await Promise.all(scored.map(({ item, breakdown }, index) => {
+      if (this.llmProvider === undefined || index >= this.llmPhrasingLimit) {
+        return deterministicPhrasing(item);
+      }
+      return generateActionAndReason(item, breakdown, this.llmProvider);
+    }));
 
-      recommendations.push({
+    return scored.map(({ item, breakdown }, index) => {
+      const phrasing = phrasings[index];
+      return {
         id: `rec-${item.id}-${now.getTime()}`,
         contextItemId: item.id,
         action: phrasing.action,
@@ -67,9 +82,7 @@ export class RuleBasedRecommendationEngine implements RecommendationEngine {
         score: breakdown.total,
         evidenceIds: item.evidenceIds,
         createdAt: now.toISOString(),
-      });
-    }
-
-    return recommendations;
+      };
+    });
   }
 }

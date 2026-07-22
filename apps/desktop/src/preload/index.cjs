@@ -4,6 +4,7 @@ const SET_MOUSE_PASSTHROUGH = "desktop:set-mouse-passthrough";
 const START_CHARACTER_DRAG = "desktop:start-character-drag";
 const MOVE_CHARACTER_DRAG = "desktop:move-character-drag";
 const END_CHARACTER_DRAG = "desktop:end-character-drag";
+const CHARACTER_PLACEMENT = "desktop:character-placement";
 
 contextBridge.exposeInMainWorld("desktopMascot", {
   setMousePassthrough(shouldIgnore) {
@@ -19,6 +20,11 @@ contextBridge.exposeInMainWorld("desktopMascot", {
   },
   endDrag() {
     ipcRenderer.send(END_CHARACTER_DRAG);
+  },
+  onPlacement(callback) {
+    const listener = (_event, placement) => callback(placement);
+    ipcRenderer.on(CHARACTER_PLACEMENT, listener);
+    return () => ipcRenderer.removeListener(CHARACTER_PLACEMENT, listener);
   },
 });
 
@@ -46,6 +52,9 @@ const CHANNELS = {
   profileSave: "profile:save",
   uiStateGet: "ui-state:get",
   uiStateSet: "ui-state:set",
+  studyStart: "study:start",
+  studyEnd: "study:end",
+  studyGet: "study:get",
 };
 
 // Result<T>({ ok, data } | { ok, error })를 그대로 돌려준다 — Renderer가 .ok로 분기한다
@@ -71,6 +80,9 @@ contextBridge.exposeInMainWorld("desktopApi", {
   saveProfile: (profile) => ipcRenderer.invoke(CHANNELS.profileSave, profile),
   getUiState: (key) => ipcRenderer.invoke(CHANNELS.uiStateGet, { key }),
   setUiState: (key, value) => ipcRenderer.invoke(CHANNELS.uiStateSet, { key, value }),
+  startStudy: (screenCaptureConsent) => ipcRenderer.invoke(CHANNELS.studyStart, { screenCaptureConsent }),
+  endStudy: (sessionId) => ipcRenderer.invoke(CHANNELS.studyEnd, { sessionId }),
+  getStudySession: () => ipcRenderer.invoke(CHANNELS.studyGet),
 });
 
 // apps/desktop/src/main/notifier/notificationEvent.ts의 NOTIFICATION_CHANNEL과 같은
