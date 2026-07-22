@@ -48,8 +48,17 @@ button {
   touch-action: none;
 }
 
+body[data-character-placement^="top"] .character-button { top: 4px; bottom: auto; }
+body[data-character-placement^="bottom"] .character-button { top: auto; bottom: 4px; }
+body[data-character-placement$="left"] .character-button { left: 4px; right: auto; }
+body[data-character-placement$="right"] .character-button { left: auto; right: 4px; }
+
 .character-button.is-dragging {
   cursor: grabbing;
+}
+
+.character-button.is-dragging .character {
+  animation: none;
 }
 
 .character {
@@ -122,6 +131,9 @@ button {
   width: 190px;
 }
 
+body[data-character-placement$="left"] .notification-bubble { right: auto; left: 190px; }
+body[data-character-placement^="top"] .notification-bubble { top: 190px; bottom: auto; }
+
 .notification-bubble::after {
   position: absolute;
   right: -12px;
@@ -132,6 +144,9 @@ button {
   content: "";
   transform: rotate(45deg);
 }
+
+body[data-character-placement$="left"] .notification-bubble::after { right: auto; left: -12px; }
+body[data-character-placement^="top"] .notification-bubble::after { top: 28px; bottom: auto; }
 
 .notification-bubble-header {
   position: relative;
@@ -220,6 +235,9 @@ button {
   overflow: hidden;
 }
 
+body[data-character-placement$="left"] .popup-menu { right: auto; left: 200px; }
+body[data-character-placement^="top"] .popup-menu { top: auto; bottom: 12px; }
+
 .popup-menu button,
 .settings-list button {
   display: flex;
@@ -251,6 +269,11 @@ button {
   inset: 8px 200px 8px 8px;
   overflow: hidden;
 }
+
+body[data-character-placement$="left"] .panel { right: 8px; left: 200px; }
+body[data-character-placement$="right"] .panel { right: 200px; left: 8px; }
+body[data-character-placement^="top"] .panel { top: 180px; bottom: 8px; }
+body[data-character-placement^="bottom"] .panel { top: 8px; bottom: 180px; }
 
 .panel-header {
   display: flex;

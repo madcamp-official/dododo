@@ -38,6 +38,11 @@ const notificationStore = createNotificationStore();
 const NOTIFICATION_DISPLAY_MS = 6_000;
 let activeNotification;
 let notificationTimer;
+const unsubscribePlacement = window.desktopMascot?.onPlacement?.((placement) => {
+  if (["top-left", "top-right", "bottom-left", "bottom-right"].includes(placement)) {
+    document.body.dataset.characterPlacement = placement;
+  }
+});
 let activeStudySessionId;
 let notificationSubscriptionRetry;
 let unsubscribeNotifications;
@@ -157,6 +162,7 @@ window.addEventListener("beforeunload", () => {
   if (notificationSubscriptionRetry !== undefined) window.clearTimeout(notificationSubscriptionRetry);
   if (dailySummaryRetryTimer !== undefined) window.clearTimeout(dailySummaryRetryTimer);
   unsubscribeNotifications?.();
+  unsubscribePlacement?.();
 }, { once: true });
 
 document.querySelector("[data-close-panel]")?.addEventListener("click", closePanel);
