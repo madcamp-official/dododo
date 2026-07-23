@@ -128,9 +128,14 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 |---|---|---|
 | Windows | [DoToRi Setup 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.Setup.0.1.1.exe) | 배포 완료 |
 | Windows Portable | [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe) | 배포 완료 |
-| macOS | DMG·ZIP 빌드 설정 | 공개 릴리스 미배포 |
+| macOS (Apple Silicon) | [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg) | 배포 완료 |
 
 > 현재 Windows 실행 파일에는 상용 코드 서명이 없어 SmartScreen 경고가 표시될 수 있다.
+> macOS DMG도 Apple 공증(Notarization) 없이 빌드되어 Gatekeeper가 "확인되지 않은
+> 개발자" 또는 "손상됨" 경고를 표시할 수 있다. 이 경우 앱을 `Applications`에 옮긴 뒤
+> 터미널에서 `xattr -cr /Applications/DoToRi.app`을 실행하거나, Finder에서 앱 아이콘을
+> 우클릭한 뒤 "열기"를 선택해 최초 1회 실행한다. 현재 DMG는 Apple Silicon(arm64)
+> 전용이며 Intel Mac은 지원하지 않는다.
 
 ---
 
@@ -230,7 +235,7 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 - **GitHub:** [madcamp-official/dododo](https://github.com/madcamp-official/dododo)
 - **Windows 설치 파일:** [DoToRi v0.1.1](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)
 - **Windows Portable:** [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe)
-- **macOS 설치 파일:** 빌드 설정 완료, 공개 릴리스 미배포
+- **macOS 설치 파일:** [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg)(Apple Silicon 전용, 미서명)
 - **데모 영상:** 별도 공개 URL 없음
 - **실행 방법:** [Getting Started](#getting-started) 참고
 
