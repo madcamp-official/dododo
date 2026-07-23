@@ -137,9 +137,9 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 | 운영체제 | 파일 | 상태 |
 |---|---|---|
-| Windows | [DoToRi Setup 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.Setup.0.1.1.exe) | 배포 완료 |
-| Windows Portable | [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe) | 배포 완료 |
-| macOS (Apple Silicon) | [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg) | 배포 완료 |
+| Windows | [DoToRi Setup 0.1.2.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.2/DoToRi.Setup.0.1.2.exe) | 릴리스 예정 |
+| Windows Portable | [DoToRi 0.1.2.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.2/DoToRi.0.1.2.exe) | 릴리스 예정 |
+| macOS (Apple Silicon) | [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg) | 배포 완료(0.1.1) |
 
 > 현재 Windows 실행 파일에는 상용 코드 서명이 없어 SmartScreen 경고가 표시될 수 있다.
 > macOS DMG도 Apple 공증(Notarization) 없이 빌드되어 Gatekeeper가 "확인되지 않은
@@ -244,9 +244,9 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 ## 배포 결과물
 
 - **GitHub:** [madcamp-official/dododo](https://github.com/madcamp-official/dododo)
-- **Windows 설치 파일:** [DoToRi v0.1.1](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)
-- **Windows Portable:** [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe)
-- **macOS 설치 파일:** [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg)(Apple Silicon 전용, 미서명)
+- **Windows 설치 파일:** [DoToRi v0.1.2](https://github.com/madcamp-official/dododo/releases/tag/v0.1.2)(릴리스 예정)
+- **Windows Portable:** [DoToRi 0.1.2.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.2/DoToRi.0.1.2.exe)(릴리스 예정)
+- **macOS 설치 파일:** [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg)(Apple Silicon 전용, 미서명, 0.1.1)
 - **데모 영상:** 별도 공개 URL 없음
 - **실행 방법:** [Getting Started](#getting-started) 참고
 

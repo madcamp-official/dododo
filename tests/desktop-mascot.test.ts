@@ -31,7 +31,7 @@ test("desktop 배포 이름·아이콘·Fixture 제외 설정은 DoToRi 기준�
   const manifest = JSON.parse(packageJson);
 
   assert.equal(manifest.name, "dotori");
-  assert.equal(manifest.version, "0.1.1");
+  assert.equal(manifest.version, "0.1.2");
   assert.equal(manifest.build.productName, "DoToRi");
   assert.equal(manifest.build.appId, "dev.dotori.desktop");
   assert.equal(manifest.build.icon, "apps/desktop/resources/character/idle.png");
