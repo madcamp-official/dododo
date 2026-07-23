@@ -3,7 +3,7 @@
 // 직접 검증할 수 있다(doyeonid 리뷰, PR #60: "Electron 등록 코드와 분리된 payload
 // parser/handler를 export해 테스트"). 각 함수는 실제 ipcMain.handle 콜백과 정확히
 // 같은 동작을 한다 — index.ts는 이 함수들을 채널에 연결하기만 한다.
-import { submitAdd, type AddSubmitInput } from "./add.ts";
+import { parseNaturalLanguageSchedule, submitAdd, type AddSubmitInput } from "./add.ts";
 import { askQuestion } from "./ask.ts";
 import { getCalendar, getInbox, getToday } from "./context.ts";
 import { getProfile, saveProfile } from "./profile.ts";
@@ -66,6 +66,13 @@ export function handleAddSubmit(container: CliContainer, input: unknown) {
     reminderOffsetMinutes: input.reminderOffsetMinutes,
   };
   return submitAdd(container, addInput);
+}
+
+export function handleAddParse(container: CliContainer, input: unknown) {
+  if (!isRecord(input) || typeof input.utterance !== "string") {
+    return Promise.resolve(fail("validation", "utterance는 문자열이어야 합니다."));
+  }
+  return parseNaturalLanguageSchedule(container, input.utterance);
 }
 
 export function handleTaskDetail(container: CliContainer, input: unknown) {

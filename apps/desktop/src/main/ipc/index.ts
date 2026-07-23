@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
 import {
+  handleAddParse,
   handleAddSubmit,
   handleAsk,
   handleCalendar,
@@ -43,6 +44,7 @@ export const IPC_CHANNELS = {
   inboxGet: "inbox:get",
   askAsk: "ask:ask",
   addSubmit: "add:submit",
+  addParse: "add:parse",
   taskDetail: "task:detail",
   taskComplete: "task:complete",
   taskSnooze: "task:snooze",
@@ -134,6 +136,7 @@ export function registerIpcHandlers(container: CliContainer): void {
     return result;
   });
   ipcMain.handle(IPC_CHANNELS.addSubmit, (_event, input: unknown) => handleAddSubmit(container, input));
+  ipcMain.handle(IPC_CHANNELS.addParse, (_event, input: unknown) => handleAddParse(container, input));
   ipcMain.handle(IPC_CHANNELS.taskDetail, (_event, input: unknown) => handleTaskDetail(container, input));
   ipcMain.handle(IPC_CHANNELS.taskComplete, (_event, input: unknown) => handleTaskComplete(container, input));
   ipcMain.handle(IPC_CHANNELS.taskSnooze, (_event, input: unknown) => handleTaskSnooze(container, input));

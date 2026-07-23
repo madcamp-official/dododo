@@ -503,6 +503,19 @@ h2 {
   gap: 8px;
 }
 
+.nl-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.nl-input-row input {
+  flex: 1;
+}
+
+.hint.error {
+  color: #ad4838;
+}
+
 .form-field {
   display: grid;
   gap: 5px;
