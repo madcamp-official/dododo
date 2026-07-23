@@ -24,9 +24,10 @@ test("desktop mascot JavaScript 진입점은 모두 구문 검사를 통과한�
 });
 
 test("desktop 배포 이름·아이콘·Fixture 제외 설정은 DoToRi 기준이다", async () => {
-  const [packageJson, desktopContainer] = await Promise.all([
+  const [packageJson, desktopContainer, desktopMain] = await Promise.all([
     readFile("package.json", "utf8"),
     readFile("apps/desktop/src/main/container.ts", "utf8"),
+    readFile("apps/desktop/src/main/index.mjs", "utf8"),
   ]);
   const manifest = JSON.parse(packageJson);
 
@@ -38,6 +39,12 @@ test("desktop 배포 이름·아이콘·Fixture 제외 설정은 DoToRi 기준�
   assert.equal(manifest.build.files.includes("fixtures/**/*"), false);
   assert.match(desktopContainer, /useFixtureFallback:\s*false/);
   assert.match(desktopContainer, /"dotori\.db"/);
+  assert.match(desktopMain, /app\.setName\("DoToRi"\)/);
+  assert.match(desktopMain, /app\.setPath\("userData", path\.join\(app\.getPath\("appData"\), "DoToRi"\)\)/);
+  assert.ok(
+    desktopMain.indexOf('app.setPath("userData"') < desktopMain.indexOf("app.whenReady()"),
+    "userData 경로는 container와 IPC를 만드는 whenReady 이전에 고정해야 한다",
+  );
 });
 
 test("desktop mascot Renderer가 기본 idle 에셋과 preload를 함께 배포한다", async () => {
