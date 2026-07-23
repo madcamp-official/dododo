@@ -121,6 +121,28 @@ test("listRegisteredSources는 등록된 schoolSite를 반환한다", async () =
   }
 });
 
+test("listRegisteredSources는 예전 형식(단일 객체) schoolSite도 읽고, 등록으로 두 번째 항목을 추가할 수 있다", async () => {
+  const { env, cleanup } = await tempConfigEnv();
+  try {
+    await writeFile(env.DODODO_SOURCE_CONFIG as string, JSON.stringify({
+      schoolSite: { url: "https://old-format.example" },
+    }), "utf8");
+
+    assert.deepEqual(
+      listRegisteredSources(env),
+      [{ id: "school-site", type: "school-site", value: "https://old-format.example" }],
+    );
+
+    registerSchoolSiteSource("https://new.example", env);
+    assert.deepEqual(listRegisteredSources(env), [
+      { id: "school-site", type: "school-site", value: "https://old-format.example" },
+      { id: "school-site-new.example", type: "school-site", value: "https://new.example" },
+    ]);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("listRegisteredSources는 등록된 schoolSite 여러 개를 각각 고유 id로 반환한다", async () => {
   const { env, cleanup } = await tempConfigEnv();
   try {

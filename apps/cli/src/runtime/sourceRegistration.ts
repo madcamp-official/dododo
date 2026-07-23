@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import {
+  normalizeSourceInputConfig,
   validateSourceInputConfig,
   type SchoolSiteSourceConfig,
   type SourceInputConfig,
@@ -55,7 +56,7 @@ function readConfigFileOrEmpty(env: NodeJS.ProcessEnv): SourceInputConfig {
   // createSourceCollectors()가 실제로 쓰는 것과 같은 validateSourceInputConfig로
   // 구조를 검증한다(중복 구현하지 않음). enabled:false인 항목은 검증에서 빠지는데,
   // listRegisteredSources도 enabled:false는 목록에서 제외해 짝을 맞춘다.
-  const config = parsed as SourceInputConfig;
+  const config = normalizeSourceInputConfig(parsed as SourceInputConfig);
   validateSourceInputConfig(config);
   return config;
 }
