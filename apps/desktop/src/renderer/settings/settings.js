@@ -210,16 +210,17 @@ async function renderSources(message) {
     desktopApi.sourceList().then(unwrapResult),
     desktopApi.sourceItems().then(unwrapResult),
   ]);
-  const schoolSite = sources.find((source) => source.id === "school-site");
   const list = sources.length === 0 ? '<div class="state-card compact">등록된 Source가 없습니다.</div>'
-    : `<div class="source-list">${sources.map((source) => `<article><div><strong>${escapeHtml(sourceTypeLabel(source.id))}</strong><small>${escapeHtml(source.value)}</small></div><button class="danger" type="button" data-source-remove="${escapeHtml(source.id)}">삭제</button></article>`).join("")}</div>`;
+    : `<div class="source-list">${sources.map((source) => `<article><div><strong>${escapeHtml(sourceTypeLabel(source.type))}</strong><small>${escapeHtml(source.value)}</small></div><button class="danger" type="button" data-source-remove="${escapeHtml(source.id)}" data-source-type="${escapeHtml(source.type)}">삭제</button></article>`).join("")}</div>`;
   const collectedItems = items.length === 0
     ? '<div class="state-card compact">아직 저장된 학교 사이트 수집 항목이 없습니다. URL 등록 후 앱을 재시작하고 동기화해 주세요.</div>'
     : `<div class="source-item-list">${items.map((item) => `<details class="source-item"><summary><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(formatDateTime(item.observedAt))}</small></span></summary><div class="source-item-body"><p class="source-uri">${escapeHtml(item.uri)}</p><pre>${escapeHtml(item.content)}</pre>${item.truncated ? '<p class="hint">내용이 길어 앞부분 4,000자만 표시합니다.</p>' : ""}</div></details>`).join("")}</div>`;
-  content.innerHTML = `${notice(message)}${list}<form class="settings-form source-form" data-source-form data-existing-value="${escapeHtml(schoolSite?.value ?? "")}"><label for="settings-source-url">학교 사이트 URL</label><input id="settings-source-url" name="value" type="url" value="${escapeHtml(schoolSite?.value ?? "")}" placeholder="https://school.example/notices" required /><button class="primary" type="submit">학교 사이트 ${schoolSite === undefined ? "등록" : "변경"}</button></form><p class="hint">학교 이메일과 LMS 등록은 필수 설정값이 확정되지 않아 아직 지원하지 않습니다.</p><section class="collected-section"><div class="toolbar"><div><h2>최근 수집 항목</h2><p>등록 URL에서 가져와 로컬에 저장한 최근 항목 ${items.length}개입니다.</p></div><button class="secondary" type="button" data-source-refresh>지금 동기화</button></div>${collectedItems}</section>`;
+  // 학교 사이트는 여러 개를 동시에 등록할 수 있다 — 폼은 항상 "추가"이고 기존 값을
+  // 대체하지 않는다(같은 URL을 다시 넣으면 sourceRegistration.ts가 중복 없이 무시한다).
+  content.innerHTML = `${notice(message)}${list}<form class="settings-form source-form" data-source-form><label for="settings-source-url">학교 사이트 URL</label><input id="settings-source-url" name="value" type="url" value="" placeholder="https://school.example/notices" required /><button class="primary" type="submit">학교 사이트 추가</button></form><p class="hint">학교 이메일과 LMS 등록은 필수 설정값이 확정되지 않아 아직 지원하지 않습니다.</p><section class="collected-section"><div class="toolbar"><div><h2>최근 수집 항목</h2><p>등록 URL에서 가져와 로컬에 저장한 최근 항목 ${items.length}개입니다.</p></div><button class="secondary" type="button" data-source-refresh>지금 동기화</button></div>${collectedItems}</section>`;
   content.querySelector("[data-source-form]")?.addEventListener("submit", (event) => void runSourceSave(event));
   content.querySelector("[data-source-refresh]")?.addEventListener("click", () => void runSourceRefresh());
-  content.querySelectorAll("[data-source-remove]").forEach((button) => button.addEventListener("click", () => void runSourceRemove(button.dataset.sourceRemove)));
+  content.querySelectorAll("[data-source-remove]").forEach((button) => button.addEventListener("click", () => void runSourceRemove(button.dataset.sourceRemove, button.dataset.sourceType)));
 }
 
 async function runSourceRefresh() {
@@ -234,16 +235,14 @@ async function runSourceSave(event) {
   const form = event.currentTarget;
   if (!(form instanceof HTMLFormElement)) return;
   const value = new FormData(form).get("value")?.toString().trim() ?? "";
-  const previous = form.dataset.existingValue;
-  if (previous !== "" && previous !== value && !window.confirm("기존 학교 사이트 URL을 새 주소로 대체할까요? 앱을 재시작한 뒤 적용됩니다.")) return;
   await withBusy(async () => {
     unwrapResult(await desktopApi.sourceRegister("school-site", value));
     await renderSources("등록했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");
   });
 }
 
-async function runSourceRemove(id) {
-  if (id === undefined || !window.confirm(`${sourceTypeLabel(id)} Source를 삭제할까요?`)) return;
+async function runSourceRemove(id, type) {
+  if (id === undefined || !window.confirm(`${sourceTypeLabel(type)} Source를 삭제할까요?`)) return;
   await withBusy(async () => {
     unwrapResult(await desktopApi.sourceRemove(id));
     await renderSources("삭제했습니다. 앱을 재시작하면 Source 설정이 적용됩니다.");

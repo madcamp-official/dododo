@@ -34,7 +34,35 @@ test("registerSource는 school-site를 등록하고 restartRequired를 알린다
     const listed = await listSources();
     assert.equal(listed.ok, true);
     if (!listed.ok) return;
-    assert.deepEqual(listed.data.sources, [{ id: "school-site", value: "https://school.example" }]);
+    assert.deepEqual(
+      listed.data.sources,
+      [{ id: "school-site", type: "school-site", value: "https://school.example" }],
+    );
+  });
+});
+
+test("registerSource는 여러 school-site URL을 동시에 등록할 수 있다", async () => {
+  await withTempSourceConfig(async () => {
+    await registerSource({ type: "school-site", value: "https://a.example" });
+    await registerSource({ type: "school-site", value: "https://b.example" });
+
+    const listed = await listSources();
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.deepEqual(listed.data.sources, [
+      { id: "school-site", type: "school-site", value: "https://a.example" },
+      { id: "school-site-b.example", type: "school-site", value: "https://b.example" },
+    ]);
+
+    const removed = await removeSource("school-site-b.example");
+    assert.equal(removed.ok, true);
+    const afterRemove = await listSources();
+    assert.equal(afterRemove.ok, true);
+    if (!afterRemove.ok) return;
+    assert.deepEqual(
+      afterRemove.data.sources,
+      [{ id: "school-site", type: "school-site", value: "https://a.example" }],
+    );
   });
 });
 

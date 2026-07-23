@@ -83,7 +83,7 @@ test("프로필 저장은 입력을 비활성화하기 전에 FormData를 캡처
 test("설정 Renderer는 Source 재시작 안내와 변경·삭제 확인을 제공한다", async () => {
   const renderer = await readFile("apps/desktop/src/renderer/settings/settings.js", "utf8");
   assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);
-  assert.match(renderer, /기존 학교 사이트 URL을 새 주소로 대체할까요/);
+  assert.match(renderer, /학교 사이트 추가/);
   assert.match(renderer, /Source를 삭제할까요/);
   assert.match(renderer, /window\.confirm/);
   assert.match(renderer, /최근 수집 항목/);

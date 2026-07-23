@@ -171,15 +171,15 @@ test("HTTP Loader는 EUC-KR 응답 charset과 Recipe 재정의를 적용한다",
 });
 
 test("잘못된 Recipe 선택자와 ID 정규식을 설정 단계에서 거절한다", () => {
-  assert.throws(() => validateSourceInputConfig({ schoolSite: {
+  assert.throws(() => validateSourceInputConfig({ schoolSite: [{
     url: "https://school.example/notices",
     recipe: { list: {
       item: "",
       title: { selector: "a" },
       link: { selector: "a", attribute: "href" },
     } },
-  } }), /recipe\.list\.item/);
-  assert.throws(() => validateSourceInputConfig({ schoolSite: {
+  }] }), /recipe\.list\.item/);
+  assert.throws(() => validateSourceInputConfig({ schoolSite: [{
     url: "https://school.example/notices",
     recipe: { list: {
       item: ".notice",
@@ -187,5 +187,5 @@ test("잘못된 Recipe 선택자와 ID 정규식을 설정 단계에서 거절�
       link: { selector: "a", attribute: "href" },
       externalId: { strategy: "url-path", pattern: "[" },
     } },
-  } }), /유효한 정규식/);
+  }] }), /유효한 정규식/);
 });

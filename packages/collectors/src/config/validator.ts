@@ -6,14 +6,43 @@ import type {
 } from "./types.ts";
 
 export function validateSourceInputConfig(config: SourceInputConfig): SourceInputConfig {
-  if (config.schoolSite?.enabled !== false) validateSchoolSite(config.schoolSite);
+  validateSchoolSiteList(config.schoolSite);
   if (config.schoolEmail?.enabled !== false) validateSchoolEmail(config.schoolEmail);
   if (config.lms?.enabled !== false) validateLms(config.lms);
   return config;
 }
 
-function validateSchoolSite(config: SchoolSiteSourceConfig | undefined): void {
-  if (config === undefined) return;
+function validateSchoolSiteList(entries: SchoolSiteSourceConfig[] | undefined): void {
+  if (entries === undefined) return;
+  if (!Array.isArray(entries)) {
+    throw new Error(
+      "schoolSite는 배열이어야 합니다(여러 학교 사이트를 등록하려면 [{ \"url\": ... }, ...] 형태로 감싸야 합니다)",
+    );
+  }
+  const active = entries.filter((entry) => entry.enabled !== false);
+  // 항목이 하나뿐이면 sourceId 생략을 허용해 기존 단일 등록 흐름과 호환한다.
+  // 둘 이상이면 RawItem.sourceId·동기화 상태가 모두 sourceId로 구분되므로
+  // 각 항목에 고유한 sourceId가 필수다(비어 있거나 중복이면 등록/수정 단계에서
+  // 조용히 하나가 다른 하나를 덮어써 데이터가 섞인다).
+  if (active.length > 1) {
+    const seen = new Set<string>();
+    for (const entry of active) {
+      const id = entry.sourceId?.trim();
+      if (!id) {
+        throw new Error("schoolSite 항목이 둘 이상이면 각 항목에 sourceId가 필요합니다");
+      }
+      if (seen.has(id)) {
+        throw new Error(`schoolSite.sourceId가 중복됩니다: ${id}`);
+      }
+      seen.add(id);
+    }
+  }
+  for (const entry of entries) {
+    if (entry.enabled !== false) validateSchoolSite(entry);
+  }
+}
+
+function validateSchoolSite(config: SchoolSiteSourceConfig): void {
   let url: URL;
   try {
     url = new URL(config.url);

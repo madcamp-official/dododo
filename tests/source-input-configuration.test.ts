@@ -36,10 +36,10 @@ test("설정으로 학교 사이트, EML 디렉터리와 LMS HTML Collector를 �
     await writeFile(join(emailDirectory, "ignored.txt"), "수집하지 않는 파일", "utf8");
 
     const config: SourceInputConfig = {
-      schoolSite: {
+      schoolSite: [{
         sourceId: "school-site-configured",
         url: "https://school.example/notices",
-      },
+      }],
       schoolEmail: {
         sourceId: "school-email-configured",
         inputDirectory: emailDirectory,
@@ -83,7 +83,7 @@ test("한양대 취업게시판은 URL만 등록해도 내장 Recipe로 목록�
     <td>office</td><td>26.07.22</td><td>5</td>
   </tr></tbody></table>`;
   const collectors = createSourceCollectors({
-    schoolSite: { url: "https://cs.hanyang.ac.kr/board/job_board.php" },
+    schoolSite: [{ url: "https://cs.hanyang.ac.kr/board/job_board.php" }],
   }, {
     now: () => observedAt,
     fetchImplementation: async (input) => new Response(
@@ -102,7 +102,7 @@ test("한양대 취업게시판은 URL만 등록해도 내장 Recipe로 목록�
 
 test("비활성화한 Source는 Collector를 만들거나 설정값을 검증하지 않는다", () => {
   const collectors = createSourceCollectors({
-    schoolSite: { enabled: false, url: "not-a-url" },
+    schoolSite: [{ enabled: false, url: "not-a-url" }],
     schoolEmail: {
       enabled: false,
       inputDirectory: "",
@@ -121,7 +121,7 @@ test("비활성화한 Source는 Collector를 만들거나 설정값을 검증하
 
 test("잘못된 URL, 이메일 도메인과 LMS 입력 확장자를 생성 전에 거부한다", () => {
   assert.throws(
-    () => validateSourceInputConfig({ schoolSite: { url: "file:///school/notices.html" } }),
+    () => validateSourceInputConfig({ schoolSite: [{ url: "file:///school/notices.html" }] }),
     /HTTP 또는 HTTPS/,
   );
   assert.throws(

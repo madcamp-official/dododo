@@ -24,18 +24,18 @@ async function tempConfigEnv(): Promise<{ env: NodeJS.ProcessEnv; cleanup: () =>
   };
 }
 
-test("registerSchoolSiteSource는 빈 설정 파일에 schoolSite를 새로 쓴다", async () => {
+test("registerSchoolSiteSource는 빈 설정 파일에 schoolSite 배열을 새로 쓴다", async () => {
   const { env, cleanup } = await tempConfigEnv();
   try {
     const path = registerSchoolSiteSource("https://school.example/notices", env);
     const written = JSON.parse(await readFile(path, "utf8"));
-    assert.equal(written.schoolSite.url, "https://school.example/notices");
+    assert.deepEqual(written.schoolSite, [{ url: "https://school.example/notices" }]);
   } finally {
     await cleanup();
   }
 });
 
-test("registerSchoolSiteSource는 기존 설정의 다른 타입은 보존하고 schoolSite만 덮어쓴다", async () => {
+test("registerSchoolSiteSource는 기존 설정의 다른 타입은 보존하고 schoolSite에 추가한다", async () => {
   const { env, cleanup } = await tempConfigEnv();
   try {
     // doyeonid 리뷰(PR #67) 지적: "다른 타입 보존" 테스트인데 실제로는 schoolEmail/lms를
@@ -53,10 +53,28 @@ test("registerSchoolSiteSource는 기존 설정의 다른 타입은 보존하고
     const path = registerSchoolSiteSource("https://new.example", env);
     const written = JSON.parse(await readFile(path, "utf8"));
 
-    assert.equal(written.schoolSite.url, "https://new.example");
+    // 여러 학교 사이트를 동시에 등록할 수 있어야 하므로 새 URL이 기존 URL을
+    // 대체하지 않고 배열에 추가된다. 두 번째 항목부터는 URL에서 파생한
+    // sourceId가 자동으로 붙는다.
+    assert.equal(written.schoolSite.length, 2);
+    assert.equal(written.schoolSite[0].url, "https://old.example");
+    assert.equal(written.schoolSite[1].url, "https://new.example");
+    assert.equal(written.schoolSite[1].sourceId, "school-site-new.example");
     assert.equal(written.schoolEmail.inputDirectory, "./mail");
     assert.deepEqual(written.schoolEmail.allowedSenderDomains, ["school.example"]);
     assert.equal(written.lms.baseUrl, "https://lms.example");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("registerSchoolSiteSource는 같은 URL을 다시 등록해도 중복 항목을 만들지 않는다", async () => {
+  const { env, cleanup } = await tempConfigEnv();
+  try {
+    registerSchoolSiteSource("https://school.example", env);
+    const path = registerSchoolSiteSource("https://school.example", env);
+    const written = JSON.parse(await readFile(path, "utf8"));
+    assert.equal(written.schoolSite.length, 1);
   } finally {
     await cleanup();
   }
@@ -94,7 +112,24 @@ test("listRegisteredSources는 등록된 schoolSite를 반환한다", async () =
   const { env, cleanup } = await tempConfigEnv();
   try {
     registerSchoolSiteSource("https://school.example", env);
-    assert.deepEqual(listRegisteredSources(env), [{ id: "school-site", value: "https://school.example" }]);
+    assert.deepEqual(
+      listRegisteredSources(env),
+      [{ id: "school-site", type: "school-site", value: "https://school.example" }],
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("listRegisteredSources는 등록된 schoolSite 여러 개를 각각 고유 id로 반환한다", async () => {
+  const { env, cleanup } = await tempConfigEnv();
+  try {
+    registerSchoolSiteSource("https://a.example", env);
+    registerSchoolSiteSource("https://b.example", env);
+    assert.deepEqual(listRegisteredSources(env), [
+      { id: "school-site", type: "school-site", value: "https://a.example" },
+      { id: "school-site-b.example", type: "school-site", value: "https://b.example" },
+    ]);
   } finally {
     await cleanup();
   }
@@ -107,7 +142,7 @@ test("listRegisteredSources는 enabled:false Source를 목록에서 제외한다
   const { env, cleanup } = await tempConfigEnv();
   try {
     await writeFile(env.DODODO_SOURCE_CONFIG as string, JSON.stringify({
-      schoolSite: { enabled: false }, // url 없음 — enabled:false라 검증도 건너뜀
+      schoolSite: [{ enabled: false }], // url 없음 — enabled:false라 검증도 건너뜀
     }), "utf8");
 
     assert.deepEqual(listRegisteredSources(env), []);
@@ -122,7 +157,7 @@ test("listRegisteredSources는 필수 필드가 빠진 활성 Source가 있으�
   const { env, cleanup } = await tempConfigEnv();
   try {
     await writeFile(env.DODODO_SOURCE_CONFIG as string, JSON.stringify({
-      schoolSite: {}, // enabled 명시 안 함(기본 활성) + url 없음
+      schoolSite: [{}], // enabled 명시 안 함(기본 활성) + url 없음
     }), "utf8");
 
     assert.throws(() => listRegisteredSources(env), /schoolSite\.url/);
@@ -138,6 +173,23 @@ test("removeRegisteredSource는 등록된 항목을 지우고 true를 반환한�
     const removed = removeRegisteredSource("school-site", env);
     assert.equal(removed, true);
     assert.deepEqual(listRegisteredSources(env), []);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("removeRegisteredSource는 여러 schoolSite 중 지정한 항목만 지운다", async () => {
+  const { env, cleanup } = await tempConfigEnv();
+  try {
+    registerSchoolSiteSource("https://a.example", env);
+    registerSchoolSiteSource("https://b.example", env);
+
+    const removed = removeRegisteredSource("school-site-b.example", env);
+    assert.equal(removed, true);
+    assert.deepEqual(
+      listRegisteredSources(env),
+      [{ id: "school-site", type: "school-site", value: "https://a.example" }],
+    );
   } finally {
     await cleanup();
   }

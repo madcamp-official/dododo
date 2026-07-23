@@ -37,7 +37,7 @@ export async function registerSource(
   // registerSchoolSiteSource가 내부적으로도 병합된 전체 설정 기준으로 다시 검증하지만,
   // 여기서는 URL 하나만 미리 같은 함수로 형식 확인해 실패 코드가 정확히 나가게 한다.
   try {
-    validateSourceInputConfig({ schoolSite: { url: value } });
+    validateSourceInputConfig({ schoolSite: [{ url: value }] });
   } catch (error) {
     return fail("validation", error instanceof Error ? error.message : String(error));
   }
@@ -48,7 +48,7 @@ export async function registerSource(
   });
 }
 
-export async function removeSource(id: RegisteredSourceType): Promise<Result<{ restartRequired: true }>> {
+export async function removeSource(id: string): Promise<Result<{ restartRequired: true }>> {
   const result = await toResult(async () => removeRegisteredSource(id));
   if (!result.ok) return result;
   if (!result.data) return fail("not-found", `등록된 ${id} Source가 없습니다.`);

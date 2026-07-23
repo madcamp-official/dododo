@@ -160,7 +160,7 @@ test("createSourceCollectors가 통째로 검증에 실패하면(schoolSite는 �
   const configPath = join(directory, "dododo.sources.json");
   try {
     await writeFile(configPath, JSON.stringify({
-      schoolSite: { url: "https://school.example/notices" },
+      schoolSite: [{ url: "https://school.example/notices" }],
       lms: {
         baseUrl: "https://lms.example",
         inputPaths: [],
