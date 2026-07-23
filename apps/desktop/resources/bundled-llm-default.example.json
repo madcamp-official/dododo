@@ -1,0 +1,6 @@
+{
+  "provider": "remote-job",
+  "baseUrl": "https://llm.madcamp-kaist.org",
+  "token": "여기에 팀 Gateway에서 발급받은 기기 Token을 넣는다",
+  "timeoutMs": 1200000
+}

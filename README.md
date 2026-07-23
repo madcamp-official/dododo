@@ -51,13 +51,24 @@
 - Node.js: `22.18 이상`
 - npm: Node.js에 포함된 버전
 - Windows 또는 macOS
-- 팀 Gateway를 사용할 경우 운영진이 발급한 일회용 설치 코드
+- 소스에서 CLI를 직접 실행해 팀 Gateway를 쓸 경우에만 운영진이 발급한 일회용 설치 코드
 - 로컬 Ollama를 직접 사용할 경우에만 별도 Ollama와 모델 설치
 
-### 제3자 설치 및 원격 LLM 연결
+### Desktop 설치 파일: 코드 입력 없이 자동 연결
 
-Windows 사용자는 [DoToRi v0.1.1 설치 파일](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)을
-바로 사용할 수 있다. 소스에서 CLI 또는 Desktop을 실행하려면 아래 순서를 따른다.
+[설치 파일](#설치-파일) 절의 DMG·EXE는 폐쇄된 팀 커뮤니티 배포용으로, 팀 Gateway 기기
+Token을 빌드 시점에 이미 넣어서 패키징했다. 설치 후 별도 설정 없이 바로 원격 LLM에
+연결된다 — 아래 "소스에서 CLI 또는 Desktop 실행" 순서의 3~4번(설치 코드 입력)이
+필요 없다. 이 Token은 배포본 전체가 공유하므로 Gateway의 일일 사용량 한도
+(`GATEWAY_DAILY_JOB_LIMIT`)도 배포본 사용자 전체가 함께 소진한다.
+
+이 방식은 `apps/desktop/resources/bundled-llm-default.json`(Git에서 제외, 형식은
+`bundled-llm-default.example.json` 참고)이 있으면 desktop 앱이 `.env` 없이도 그 값으로
+`DODODO_LLM_*`을 채우는 방식으로 동작한다. 이미 설정된 실제 환경변수가 있으면 그 값이
+항상 우선한다. 이 파일이 없는 빌드(직접 소스 clone 후 패키징 등)는 기존처럼 로컬
+규칙 기반 폴백으로 동작한다.
+
+### 소스에서 CLI 또는 Desktop 실행
 
 ```bash
 # 1. 저장소 복제
