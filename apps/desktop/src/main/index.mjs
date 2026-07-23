@@ -11,6 +11,13 @@ import { createOpenPanel } from "./windows/panelWindow.mjs";
 import { parsePanelRoute } from "./windows/panelPayload.ts";
 import { createOpenSettings } from "./windows/settingsWindow.mjs";
 
+// 개발 실행(`electron ...`)에서는 Electron이 기본 앱 이름을 사용해 userData를
+// AppData/Roaming/Electron으로 잡는다. 배포 앱은 DoToRi를 사용하므로 Source 설정과
+// SQLite가 서로 다른 위치에 저장되던 문제를 막기 위해 두 실행 방식을 같은 경로로
+// 고정한다. container와 IPC가 경로를 읽기 전에 설정해야 한다.
+app.setName("DoToRi");
+app.setPath("userData", path.join(app.getPath("appData"), "DoToRi"));
+
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const rendererPath = path.join(currentDirectory, "../renderer/character/index.html");
 const panelRendererPath = path.join(currentDirectory, "../renderer/panels/index.html");
