@@ -17,8 +17,8 @@ export function createSourceCollectors(
   validateSourceInputConfig(config);
   const collectors: Collector[] = [];
 
-  if (config.schoolSite !== undefined && config.schoolSite.enabled !== false) {
-    const source = config.schoolSite;
+  for (const source of config.schoolSite ?? []) {
+    if (source.enabled === false) continue;
     const recipe = source.recipe ?? resolveBuiltInSchoolSiteRecipe(source.url);
     collectors.push(new SchoolSiteCollector({
       sourceId: source.sourceId,

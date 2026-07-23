@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-import type { SourceInputConfig } from "../../../../packages/collectors/src/index.ts";
+import { normalizeSourceInputConfig, type SourceInputConfig } from "../../../../packages/collectors/src/index.ts";
 
 const DEFAULT_RELATIVE_PATH = "./dododo.sources.json";
 
@@ -68,7 +68,8 @@ export function loadSourceInputConfig(
     throw new Error(`Source 설정 파일의 최상위 값은 객체여야 합니다(${path})`);
   }
 
-  return { config: resolveRelativeInputPaths(config as SourceInputConfig, dirname(path)), path };
+  const normalized = normalizeSourceInputConfig(config as SourceInputConfig);
+  return { config: resolveRelativeInputPaths(normalized, dirname(path)), path };
 }
 
 // schoolEmail.inputDirectory/lms.inputPaths는 설정 파일 안의 상대 경로다. cwd 기준으로

@@ -99,6 +99,24 @@ test("loadSourceInputConfig는 잘못된 JSON이면 경로를 포함한 오류�
   }
 });
 
+// v0.1.2 이전에는 schoolSite가 배열이 아니라 단일 객체였다. 그 시절 만든
+// dododo.sources.json을 그대로 쓰는 사용자가 업그레이드 후에도 에러 없이 계속
+// 동작해야 한다(normalizeSourceInputConfig가 읽는 시점에 배열로 감싼다).
+test("loadSourceInputConfig는 예전 형식(단일 객체) schoolSite를 배열로 자동 변환한다", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dododo-sources-config-"));
+  try {
+    const configPath = join(directory, "dododo.sources.json");
+    await writeFile(configPath, JSON.stringify({
+      schoolSite: { url: "https://school.example/notices" },
+    }));
+
+    const loaded = loadSourceInputConfig({ DODODO_SOURCE_CONFIG: configPath }, directory);
+    assert.deepEqual(loaded?.config.schoolSite, [{ url: "https://school.example/notices" }]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("loadSourceInputConfig는 최상위가 배열이면 거부한다", async () => {
   const directory = await mkdtemp(join(tmpdir(), "dododo-sources-config-"));
   try {

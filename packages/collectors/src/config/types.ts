@@ -30,7 +30,10 @@ export interface LmsSourceConfig {
 }
 
 export interface SourceInputConfig {
-  schoolSite?: SchoolSiteSourceConfig;
+  // 여러 학교 공지 사이트를 동시에 등록할 수 있게 배열이다. sourceId는 항목이
+  // 하나뿐일 때는 생략 가능(기존처럼 "school-site" 기본값)하지만, 둘 이상이면
+  // RawItem.sourceId 충돌을 막기 위해 각 항목마다 고유해야 한다(validator.ts).
+  schoolSite?: SchoolSiteSourceConfig[];
   schoolEmail?: SchoolEmailSourceConfig;
   lms?: LmsSourceConfig;
 }
