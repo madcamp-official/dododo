@@ -56,11 +56,13 @@
 
 ### Desktop 설치 파일: 코드 입력 없이 자동 연결
 
-[설치 파일](#설치-파일) 절의 DMG·EXE는 폐쇄된 팀 커뮤니티 배포용으로, 팀 Gateway 기기
-Token을 빌드 시점에 이미 넣어서 패키징했다. 설치 후 별도 설정 없이 바로 원격 LLM에
-연결된다 — 아래 "소스에서 CLI 또는 Desktop 실행" 순서의 3~4번(설치 코드 입력)이
-필요 없다. 이 Token은 배포본 전체가 공유하므로 Gateway의 일일 사용량 한도
-(`GATEWAY_DAILY_JOB_LIMIT`)도 배포본 사용자 전체가 함께 소진한다.
+v0.1.2부터 [설치 파일](#설치-파일) 절의 macOS DMG는 폐쇄된 팀 커뮤니티 배포용으로,
+팀 Gateway 기기 Token을 빌드 시점에 이미 넣어서 패키징했다. 설치 후 별도 설정 없이
+바로 원격 LLM에 연결된다 — 아래 "소스에서 CLI 또는 Desktop 실행" 순서의
+3~4번(설치 코드 입력)이 필요 없다. 이 Token은 배포본 전체가 공유하므로 Gateway의
+일일 사용량 한도(`GATEWAY_DAILY_JOB_LIMIT`)도 배포본 사용자 전체가 함께 소진한다.
+Windows v0.1.1 실행 파일은 이 기능이 추가되기 전 빌드라 Token이 없고, 지금은 아래
+"소스에서 CLI 또는 Desktop 실행"으로 직접 설치 코드를 활성화해야 원격 LLM이 연결된다.
 
 이 방식은 `apps/desktop/resources/bundled-llm-default.json`(Git에서 제외, 형식은
 `bundled-llm-default.example.json` 참고)이 있으면 desktop 앱이 `.env` 없이도 그 값으로
@@ -137,9 +139,9 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 
 | 운영체제 | 파일 | 상태 |
 |---|---|---|
-| Windows | [DoToRi Setup 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.Setup.0.1.1.exe) | 배포 완료 |
-| Windows Portable | [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe) | 배포 완료 |
-| macOS (Apple Silicon) | [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg) | 배포 완료 |
+| Windows | [DoToRi Setup 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.Setup.0.1.1.exe) | 배포 완료(원격 LLM 자동 연결 없음) |
+| Windows Portable | [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe) | 배포 완료(원격 LLM 자동 연결 없음) |
+| macOS (Apple Silicon) | [DoToRi-0.1.2-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.2/DoToRi-0.1.2-arm64.dmg) | 배포 완료(원격 LLM 자동 연결) |
 
 > 현재 Windows 실행 파일에는 상용 코드 서명이 없어 SmartScreen 경고가 표시될 수 있다.
 > macOS DMG도 Apple 공증(Notarization) 없이 빌드되어 Gatekeeper가 "확인되지 않은
@@ -246,7 +248,7 @@ sudo -u dododo env GATEWAY_DB_PATH=/var/lib/dododo/gateway.db \
 - **GitHub:** [madcamp-official/dododo](https://github.com/madcamp-official/dododo)
 - **Windows 설치 파일:** [DoToRi v0.1.1](https://github.com/madcamp-official/dododo/releases/tag/v0.1.1)
 - **Windows Portable:** [DoToRi 0.1.1.exe](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi.0.1.1.exe)
-- **macOS 설치 파일:** [DoToRi-0.1.1-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.1/DoToRi-0.1.1-arm64.dmg)(Apple Silicon 전용, 미서명)
+- **macOS 설치 파일:** [DoToRi-0.1.2-arm64.dmg](https://github.com/madcamp-official/dododo/releases/download/v0.1.2/DoToRi-0.1.2-arm64.dmg)(Apple Silicon 전용, 미서명, 원격 LLM 자동 연결)
 - **데모 영상:** 별도 공개 URL 없음
 - **실행 방법:** [Getting Started](#getting-started) 참고
 
