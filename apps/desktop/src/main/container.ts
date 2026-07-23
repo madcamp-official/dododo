@@ -2,6 +2,7 @@ import { app } from "electron";
 import { join } from "node:path";
 
 import { createCliContainer, type CliContainer } from "../../../cli/src/runtime/container.ts";
+import { loadBundledLlmDefaults, mergeLlmEnvDefaults } from "./llm/bundledLlmDefaults.ts";
 import { ElectronDesktopNotifier } from "./notifier/electronNotifier.ts";
 
 // Electron Main은 CLI와 달리 프로세스 하나가 앱 실행 내내(여러 창·여러 IPC 호출에
@@ -16,9 +17,13 @@ export function getDesktopContainer(): CliContainer {
     // 실행되어 cwd가 설치 폴더거나 쓰기 권한이 없을 수 있다 — userData 아래 고정
     // 경로를 명시해 실행할 때마다 DB를 못 찾거나 새로 만드는 문제를 막는다
     // (ui-state.json이 이미 이렇게 하는 것과 동일한 이유, apps/desktop/src/main/ipc/index.ts 참고).
+    // 설치 코드 입력 없이 팀 Gateway에 바로 연결되도록, .env가 없어도 빌드에 번들된
+    // 기본값(bundledLlmDefaults.ts 참고)으로 DODODO_LLM_*의 빈 자리를 채운다.
+    const bundledLlmDefaults = loadBundledLlmDefaults(app.getAppPath());
     container = createCliContainer({
       databasePath: join(app.getPath("userData"), "dotori.db"),
       useFixtureFallback: false,
+      env: mergeLlmEnvDefaults(process.env, bundledLlmDefaults),
     });
     // createCliContainer는 기본으로 ConsoleNotifier를 쓴다(CLI 전용) — 데스크톱은
     // 캐릭터 말풍선 IPC push로 갈아 끼운다. notifier는 CliContainer에서

@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 dododo.sources.json
+apps/desktop/resources/bundled-llm-default.json
 /data/
 /.dododo/
 *.db

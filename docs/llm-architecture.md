@@ -52,6 +52,15 @@
   취소한다. DB에는 코드 원문 대신 Hash와 만료·사용 상태만 저장하며 기본 유효기간은 7일이다.
 - Ollama의 실제 모델명은 Gateway 환경변수로만 정하며 클라이언트는 `text` 또는 `vision`만
   요청한다.
+- 패키징된 Desktop 앱은 `.env`를 전혀 로드하지 않으므로 위 설치 코드 흐름을 GUI로
+  거칠 방법이 없었다. 폐쇄된 팀 커뮤니티 배포라는 전제로, 빌드 시점에만 로컬에
+  두는(Git 제외) `apps/desktop/resources/bundled-llm-default.json`으로 기기 Token을
+  패키징에 포함해 설치 직후 바로 원격 LLM에 연결되게 한다
+  (`apps/desktop/src/main/llm/bundledLlmDefaults.ts`). 이미 설정된 환경변수가 있으면
+  항상 그 값이 우선하고, 파일이 없으면 기존처럼 로컬 폴백으로 동작해 회귀가 없다.
+  배포본 사용자 전체가 이 Token 하나를 공유하므로 Gateway의
+  `GATEWAY_DAILY_JOB_LIMIT`/`GATEWAY_MAX_CONCURRENT_JOBS`도 사실상 배포본 전체 공용
+  한도가 된다 — 사용자가 늘면 운영자가 상향을 검토해야 한다.
 
 현재 Prompt와 Schema는 Context Engine이 소유하므로 인증된 클라이언트가 Gateway로 전달한다.
 이는 기존 Provider 계약을 유지하기 위한 MVP 결정이다. 공개 토큰이 유출되면 제한 범위 안에서
