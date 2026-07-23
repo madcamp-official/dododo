@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import { parseScheduleIntentWithLlmFallback } from "../../../../../packages/context-engine/src/index.ts";
 import type { ContextItem } from "../../../../../packages/shared/src/index.ts";
 import type { CliContainer } from "../../../../cli/src/runtime/container.ts";
-import { fail, toResult, type Result } from "./result.ts";
+import { fail, ok, toResult, type Result } from "./result.ts";
 import { isValidOffsetMinutes } from "./validate.ts";
 
 export interface AddSubmitInput {
@@ -12,6 +13,74 @@ export interface AddSubmitInput {
   endTime?: string; // HH:mm
   location?: string;
   reminderOffsetMinutes?: number;
+}
+
+export interface ParsedScheduleDraft {
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  endTime?: string; // HH:mm
+  // 확신도가 낮은 시각(예: "저녁", "이따")이나 이미 지난 시각으로 해석된 경우에만
+  // 채워진다 — Renderer가 폼을 채운 뒤에도 "확인 후 저장하라"는 안내를 보여줄 수 있게.
+  ambiguousNote?: string;
+}
+
+// 자연어 문장을 CLI add.ts와 같은 parseScheduleIntentWithLlmFallback으로 해석해
+// 폼 필드(date/time/endTime)로 변환한다. 여기서 바로 저장하지 않고 draft만 돌려주는
+// 이유: AGENTS.md는 모호한 일정을 사용자 확인 없이 확정하지 않는다 — CLI는
+// [y/N/edit] 프롬프트로 확인받지만, Desktop은 이미 있는 구조화 폼(submitAdd)에
+// 값을 채워 넣어 사용자가 그대로 보고 수정한 뒤 제출하게 하는 방식으로 같은
+// 확인 절차를 만족시킨다(별도 저장 경로를 새로 만들지 않는다).
+export async function parseNaturalLanguageSchedule(
+  container: CliContainer,
+  utterance: string,
+  now: Date = new Date(),
+): Promise<Result<ParsedScheduleDraft>> {
+  const trimmed = utterance.trim();
+  if (trimmed === "") return fail("validation", "일정 내용을 입력해주세요.");
+
+  let intent;
+  try {
+    intent = await parseScheduleIntentWithLlmFallback(
+      trimmed,
+      now,
+      container.llmProvider,
+      container.privacyGateway,
+    );
+  } catch (error) {
+    return fail("unknown", error instanceof Error ? error.message : String(error));
+  }
+
+  if (intent.kind === "unrecognized") {
+    return fail(
+      "unrecognized",
+      "일정 내용을 이해하지 못했습니다. 날짜와 시각을 더 구체적으로 적어주세요. 예: \"이번 주 금요일 저녁에 민수랑 저녁 약속\"",
+    );
+  }
+
+  const start = isoToFormParts(intent.startAt);
+  if (start === undefined) return fail("unknown", "파싱된 일정의 날짜·시각 형식이 올바르지 않습니다.");
+  const end = intent.endAt === undefined ? undefined : isoToFormParts(intent.endAt)?.time;
+
+  return ok({
+    title: intent.title,
+    date: start.date,
+    time: start.time,
+    ...(end === undefined ? {} : { endTime: end }),
+    ...(intent.ambiguousField === undefined
+      ? {}
+      : { ambiguousNote: "시각이 정확하지 않을 수 있어요. 아래 값을 확인한 뒤 저장해주세요." }),
+  });
+}
+
+// combineDateTime/toLocalIso(scheduleIntent.ts)가 만드는 형식(YYYY-MM-DDTHH:mm:00±HH:MM)을
+// 그대로 앞부분만 잘라 쓴다 — 데스크톱 앱은 Asia/Seoul 하나만 다루므로(add.ts
+// FIXED_TIME_ZONE_OFFSET과 동일 전제) 타임존 변환 없이 문자열 그대로가 곧 폼이
+// 기대하는 로컬 날짜·시각이다.
+function isoToFormParts(iso: string): { date: string; time: string } | undefined {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso);
+  if (match === null) return undefined;
+  return { date: match[1]!, time: match[2]! };
 }
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;

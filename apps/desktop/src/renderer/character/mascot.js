@@ -562,6 +562,14 @@ function renderAdd() {
   panelContent.innerHTML = `
     <form class="add-form" data-add-form>
       <div class="form-field">
+        <label for="add-nl">자연어로 입력(선택)</label>
+        <div class="nl-input-row">
+          <input id="add-nl" type="text" placeholder="예: 다음 주 금요일 저녁 7시에 스터디" />
+          <button class="secondary-button" type="button" data-add-parse>분석</button>
+        </div>
+        <p class="hint" data-add-note hidden></p>
+      </div>
+      <div class="form-field">
         <label for="add-title">일정 내용</label>
         <input id="add-title" name="title" type="text" placeholder="예: 도현님들과 저녁 약속" required />
       </div>
@@ -587,6 +595,42 @@ function renderAdd() {
       </div>
       <button class="primary-button" type="submit">일정 추가</button>
     </form>`;
+
+  const note = panelContent.querySelector("[data-add-note]");
+  const showAddNote = (message, isError) => {
+    if (!(note instanceof HTMLElement)) return;
+    note.textContent = message;
+    note.hidden = false;
+    note.classList.toggle("error", Boolean(isError));
+  };
+
+  // 자연어 분석은 저장하지 않고 아래 구조화 필드를 채우기만 한다 — 사용자가 값을
+  // 확인·수정한 뒤 기존 "일정 추가" 제출로 저장한다(모호한 일정을 확인 없이 확정하지
+  // 않는다는 AGENTS.md 원칙을 별도 저장 경로 없이 그대로 만족시킨다).
+  panelContent.querySelector("[data-add-parse]")?.addEventListener("click", async () => {
+    const nlInput = panelContent.querySelector("#add-nl");
+    const utterance = nlInput instanceof HTMLInputElement ? nlInput.value.trim() : "";
+    if (utterance === "") return;
+
+    const button = panelContent.querySelector("[data-add-parse]");
+    if (button instanceof HTMLButtonElement) button.disabled = true;
+    try {
+      const draft = unwrapResult(await desktopApi.addParse(utterance));
+      const title = panelContent.querySelector("#add-title");
+      const date = panelContent.querySelector("#add-date");
+      const time = panelContent.querySelector("#add-time");
+      const endTime = panelContent.querySelector("#add-end-time");
+      if (title instanceof HTMLInputElement) title.value = draft.title;
+      if (date instanceof HTMLInputElement) date.value = draft.date;
+      if (time instanceof HTMLInputElement) time.value = draft.time;
+      if (endTime instanceof HTMLInputElement) endTime.value = draft.endTime ?? "";
+      showAddNote(draft.ambiguousNote ?? "분석한 내용을 아래에서 확인한 뒤 저장해주세요.");
+    } catch (error) {
+      showAddNote(error instanceof Error ? error.message : "분석하지 못했습니다.", true);
+    } finally {
+      if (button instanceof HTMLButtonElement) button.disabled = false;
+    }
+  });
 
   panelContent.querySelector("[data-add-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();

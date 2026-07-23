@@ -8,7 +8,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const result = { ok: true, data: {} };
   const bridge = Object.fromEntries([
-    "getToday", "getCalendar", "getInbox", "ask", "addSubmit",
+    "getToday", "getCalendar", "getInbox", "ask", "addSubmit", "addParse",
     "getTaskDetail", "completeTask", "snoozeTask", "updateTask",
     "deleteTask", "setReminderOffset", "listSources", "listSourceItems", "registerSource",
     "removeSource", "getProfile", "saveProfile", "getUiState", "setUiState", "sync",
@@ -25,6 +25,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
   await api.inbox();
   await api.ask("이번 주 마감은?");
   await api.add(addInput);
+  await api.addParse("다음 주 금요일 저녁 7시에 스터디");
   await api.detail("task-1");
   await api.complete("task-1");
   await api.snooze("task-1", "2026-07-22T09:00:00.000Z");
@@ -51,6 +52,7 @@ test("desktop Renderer API는 preload 메서드와 인자를 그대로 연결한
     { method: "getInbox", args: [] },
     { method: "ask", args: ["이번 주 마감은?"] },
     { method: "addSubmit", args: [addInput] },
+    { method: "addParse", args: ["다음 주 금요일 저녁 7시에 스터디"] },
     { method: "getTaskDetail", args: ["task-1"] },
     { method: "completeTask", args: ["task-1"] },
     { method: "snoozeTask", args: ["task-1", "2026-07-22T09:00:00.000Z"] },
