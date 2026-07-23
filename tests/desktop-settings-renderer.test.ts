@@ -66,6 +66,20 @@ test("설정 Renderer는 기존 desktopApi와 순수 폼 모듈을 재사용한�
   assert.match(renderer, /class="notice" role="status"/);
 });
 
+test("프로필 저장은 입력을 비활성화하기 전에 FormData를 캡처한다", async () => {
+  const renderer = await readFile("apps/desktop/src/renderer/settings/settings.js", "utf8");
+  const saveStart = renderer.indexOf("async function runProfileSave");
+  const saveEnd = renderer.indexOf("async function renderSchedule", saveStart);
+  const saveHandler = renderer.slice(saveStart, saveEnd);
+
+  const captureIndex = saveHandler.indexOf("const data = new FormData(form)");
+  const busyIndex = saveHandler.indexOf("await withBusy(");
+  assert.ok(captureIndex >= 0, "프로필 입력값을 FormData로 캡처해야 한다");
+  assert.ok(busyIndex >= 0, "저장 중 중복 실행을 막아야 한다");
+  assert.ok(captureIndex < busyIndex, "컨트롤을 disabled로 바꾸기 전에 FormData를 만들어야 한다");
+  assert.match(saveHandler, /profileFromFormData\(data\)/);
+});
+
 test("설정 Renderer는 Source 재시작 안내와 변경·삭제 확인을 제공한다", async () => {
   const renderer = await readFile("apps/desktop/src/renderer/settings/settings.js", "utf8");
   assert.match(renderer, /앱을 재시작하면 Source 설정이 적용됩니다/);

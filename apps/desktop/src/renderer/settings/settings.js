@@ -95,8 +95,11 @@ async function runProfileSave(event) {
   event.preventDefault();
   const form = event.currentTarget;
   if (!(form instanceof HTMLFormElement)) return;
+  // disabled 상태의 input은 FormData에서 제외된다. withBusy가 컨트롤을 잠그기 전에
+  // 현재 입력값을 캡처해야 필수 프로필 값이 빈 문자열로 사라지지 않는다.
+  const data = new FormData(form);
   await withBusy(async () => {
-    const profile = profileFromFormData(new FormData(form));
+    const profile = profileFromFormData(data);
     unwrapResult(await desktopApi.profileSave(profile));
     await renderProfile("프로필을 저장했습니다.");
   });
